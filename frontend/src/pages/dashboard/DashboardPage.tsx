@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { PayBadge } from '@/components/shared/PayBadge'
 import { useAuthStore } from '@/stores/auth'
 import { useDashboard, useOrders, useBranches } from '@/lib/queries'
-import { BRANCHES, RECENT_TRANSACTIONS, fmtKES } from '@/lib/data'
+import { fmtKES } from '@/lib/data'
 
 function StatCard({ label, value, sub, icon: Icon, accent = '#111827' }: {
   label: string; value: string | number; sub?: string; icon: React.ElementType; accent?: string
@@ -34,27 +34,21 @@ export function DashboardPage() {
   const navigate = useNavigate()
   const isAdmin = user?.role === 'admin'
   const userBranchId = user?.branch ? (Number(user.branch) || undefined) : undefined
-  // Non-admins are scoped server-side, but we pass branchId so the query key reflects the scope
   const { data: dashData } = useDashboard(isAdmin ? undefined : userBranchId)
-  const { data: orders, isError: ordersError } = useOrders(6)
-  const { data: apiBranches, isError: branchesError } = useBranches()
+  const { data: orders } = useOrders(6)
+  const { data: apiBranches } = useBranches()
 
-  const usingApi = !ordersError && orders !== undefined
-  const branches = (!branchesError && apiBranches !== undefined) ? apiBranches : BRANCHES
+  const branches = apiBranches ?? []
   const isMultiBranch = branches.length > 1
-  const todayRevenue = dashData?.today_revenue ?? (usingApi ? 0 : RECENT_TRANSACTIONS.reduce((s, t) => s + t.total, 0))
-  const todayTxCount = dashData?.today_transactions ?? (usingApi ? 0 : RECENT_TRANSACTIONS.length)
+
+  const todayRevenue = dashData?.today_revenue ?? 0
+  const todayTxCount = dashData?.today_transactions ?? 0
   const lowStockCount = dashData?.low_stock_count ?? 0
+  const itemsSold = orders?.reduce((s, o) => s + o.items.reduce((si, i) => si + i.quantity, 0), 0) ?? 0
 
   const payBreak = dashData?.payment_breakdown
     ? Object.entries(dashData.payment_breakdown).map(([m, v]) => ({ m, ...v }))
-    : usingApi
-      ? []
-      : (['mpesa', 'cash', 'split', 'credit'] as const).map((m) => ({
-          m,
-          count: RECENT_TRANSACTIONS.filter((t) => t.payment === m).length,
-          total: RECENT_TRANSACTIONS.filter((t) => t.payment === m).reduce((s, t) => s + t.total, 0),
-        }))
+    : []
 
   const greeting = new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening'
 
@@ -73,10 +67,10 @@ export function DashboardPage() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-3.5 mb-6 sm:mb-7">
         <StatCard label="Today's Revenue" value={fmtKES(todayRevenue)} sub={`${todayTxCount} transactions`} icon={Receipt} accent="#3B82F6" />
-        <StatCard label="Items Sold" value={usingApi ? orders.reduce((s, o) => s + o.items.reduce((si, i) => si + i.quantity, 0), 0) : RECENT_TRANSACTIONS.reduce((s, t) => s + t.items, 0)} sub="today" icon={Package} accent="#8B5CF6" />
+        <StatCard label="Items Sold" value={itemsSold} sub="today" icon={Package} accent="#8B5CF6" />
         <StatCard label="Low Stock" value={lowStockCount} sub="need attention" icon={AlertTriangle} accent="#EF4444" />
         {isMultiBranch
-          ? <StatCard label="Active Branches" value={branches.filter((b) => (b as { is_active?: boolean }).is_active !== false).length} sub="locations" icon={Building2} accent="#059669" />
+          ? <StatCard label="Active Branches" value={branches.filter((b) => b.is_active !== false).length} sub="locations" icon={Building2} accent="#059669" />
           : <StatCard label="Customers Served" value={todayTxCount} sub="today" icon={Building2} accent="#059669" />
         }
       </div>
@@ -105,18 +99,11 @@ export function DashboardPage() {
                     </div>
                   </div>
                 ))
-              : RECENT_TRANSACTIONS.map((t) => (
-                  <div key={t.id} className="flex justify-between items-center px-[18px] py-2.5 border-b border-gray-50 text-sm last:border-0">
-                    <div>
-                      <div className="font-semibold font-mono text-xs">#{t.id}</div>
-                      <div className="text-[11px] text-gray-400">{t.cashier} · {t.time}</div>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <PayBadge method={t.payment} />
-                      <span className="font-bold min-w-[70px] text-right">{fmtKES(t.total)}</span>
-                    </div>
-                  </div>
-                ))
+              : (
+                <div className="px-[18px] py-8 text-center text-sm text-gray-400">
+                  No transactions today yet
+                </div>
+              )
             }
           </div>
         </Card>
@@ -125,15 +112,18 @@ export function DashboardPage() {
           <Card>
             <CardContent className="p-5">
               <div className="font-bold text-sm mb-3.5">Payment Methods</div>
-              {payBreak.filter((p) => p.count > 0).map((p) => (
-                <div key={p.m} className="flex justify-between items-center mb-2.5 last:mb-0">
-                  <div className="flex items-center gap-2">
-                    <PayBadge method={p.m as 'cash' | 'mpesa' | 'credit' | 'split' | 'other'} />
-                    <span className="text-sm text-gray-500">{p.count} tx</span>
-                  </div>
-                  <span className="font-semibold text-sm">{fmtKES(p.total)}</span>
-                </div>
-              ))}
+              {payBreak.filter((p) => p.count > 0).length > 0
+                ? payBreak.filter((p) => p.count > 0).map((p) => (
+                    <div key={p.m} className="flex justify-between items-center mb-2.5 last:mb-0">
+                      <div className="flex items-center gap-2">
+                        <PayBadge method={p.m as 'cash' | 'mpesa' | 'credit' | 'split' | 'other'} />
+                        <span className="text-sm text-gray-500">{p.count} tx</span>
+                      </div>
+                      <span className="font-semibold text-sm">{fmtKES(p.total)}</span>
+                    </div>
+                  ))
+                : <div className="text-sm text-gray-400">No sales recorded today</div>
+              }
             </CardContent>
           </Card>
 

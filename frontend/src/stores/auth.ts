@@ -23,7 +23,7 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       accessToken: null,
       refreshToken: null,
-      orgSlug: 'demo',
+      orgSlug: '',
       lastLogin: {},
       attendanceId: null,
       clockInTime: null,

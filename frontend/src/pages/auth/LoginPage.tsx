@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
-import { Monitor, ChevronLeft, Building2, Lock } from 'lucide-react'
+import { Monitor, ChevronLeft, Building2, Lock, AlertCircle, Loader2 } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { RoleBadge } from '@/components/shared/RoleBadge'
 import { useAuthStore } from '@/stores/auth'
 import { useOrgUsers, usePinLogin, useClockIn } from '@/lib/queries'
-import { BRANCHES, USERS } from '@/lib/data'
 import type { ApiUser } from '@/types/api'
 import type { User } from '@/types'
 
@@ -18,8 +17,7 @@ type SelectableUser = {
   branch_id: number | null
   branch_name: string | null
   avatar: string
-  pin?: string
-  _api?: ApiUser
+  _api: ApiUser
 }
 
 function getInitials(name: string) {
@@ -53,13 +51,11 @@ export function LoginPage() {
   const { login, orgSlug, setOrgSlug, lastLogin, setClockedIn } = useAuthStore()
   const navigate = useNavigate()
 
-  const { data: apiUsers, isError: usersError } = useOrgUsers(orgSlug)
+  const { data: apiUsers, isError: usersError, isLoading: usersLoading } = useOrgUsers(orgSlug)
   const pinLogin = usePinLogin()
   const clockIn = useClockIn()
 
-  const useApi = !usersError && apiUsers !== undefined
-
-  const allUsers: SelectableUser[] = useApi
+  const allUsers: SelectableUser[] = apiUsers
     ? apiUsers.map((u) => ({
         id: u.id,
         name: u.name,
@@ -69,17 +65,9 @@ export function LoginPage() {
         avatar: u.avatar ?? getInitials(u.name),
         _api: u,
       }))
-    : USERS.map((u) => ({
-        id: u.id,
-        name: u.name,
-        role: u.role,
-        branch_id: null,
-        branch_name: BRANCHES.find((b) => b.id === u.branch)?.name ?? null,
-        avatar: u.avatar,
-        pin: u.pin,
-      }))
+    : []
 
-  const branches: { id: string | number; name: string }[] = useApi
+  const branches: { id: string | number; name: string }[] = apiUsers
     ? [
         ...new Map(
           apiUsers
@@ -134,66 +122,45 @@ export function LoginPage() {
   }
 
   const handlePinKey = (k: string) => {
-    if (pinLocked) return
+    if (pinLocked || !selectedUser) return
     if (k === 'del') { setPin((p) => p.slice(0, -1)); setError(''); return }
     if (pin.length >= 4) return
     const next = pin + k
     setPin(next)
     if (next.length < 4) return
 
-    if (selectedUser?._api) {
-      pinLogin.mutate(
-        { org_slug: orgSlug, user_id: Number(selectedUser.id), pin: next },
-        {
-          onSuccess: (data) => {
-            const user: User = {
-              id: String(data.user.id),
-              name: data.user.name,
-              role: data.user.role as User['role'],
-              branch: String(data.user.branch_id ?? ''),
-              branch_name: data.user.branch_name ?? undefined,
-              avatar: data.user.avatar ?? getInitials(data.user.name),
-              pin: '',
-            }
-            setTimeout(() => doSuccessLogin(user, data.access_token, data.refresh_token), 200)
-          },
-          onError: () => {
-            setTimeout(() => {
-              setPin('')
-              const attempts = pinAttempts + 1
-              setPinAttempts(attempts)
-              setShakeKey((k) => k + 1)
-              if (attempts >= MAX_ATTEMPTS) {
-                setPinLocked(true)
-                setError('')
-              } else {
-                const rem = MAX_ATTEMPTS - attempts
-                setError(`Incorrect PIN · ${rem} attempt${rem === 1 ? '' : 's'} remaining`)
-              }
-            }, 300)
-          },
-        }
-      )
-    } else {
-      if (next === selectedUser?.pin) {
-        const found = USERS.find((u) => u.id === selectedUser.id)
-        if (found) setTimeout(() => { login(found); navigate(roleHome(found.role)) }, 200)
-      } else {
-        setTimeout(() => {
-          setPin('')
-          const attempts = pinAttempts + 1
-          setPinAttempts(attempts)
-          setShakeKey((k) => k + 1)
-          if (attempts >= MAX_ATTEMPTS) {
-            setPinLocked(true)
-            setError('')
-          } else {
-            const rem = MAX_ATTEMPTS - attempts
-            setError(`Incorrect PIN · ${rem} attempt${rem === 1 ? '' : 's'} remaining`)
+    pinLogin.mutate(
+      { org_slug: orgSlug, user_id: Number(selectedUser.id), pin: next },
+      {
+        onSuccess: (data) => {
+          const user: User = {
+            id: String(data.user.id),
+            name: data.user.name,
+            role: data.user.role as User['role'],
+            branch: String(data.user.branch_id ?? ''),
+            branch_name: data.user.branch_name ?? undefined,
+            avatar: data.user.avatar ?? getInitials(data.user.name),
+            pin: '',
           }
-        }, 300)
+          setTimeout(() => doSuccessLogin(user, data.access_token, data.refresh_token), 200)
+        },
+        onError: () => {
+          setTimeout(() => {
+            setPin('')
+            const attempts = pinAttempts + 1
+            setPinAttempts(attempts)
+            setShakeKey((k) => k + 1)
+            if (attempts >= MAX_ATTEMPTS) {
+              setPinLocked(true)
+              setError('')
+            } else {
+              const rem = MAX_ATTEMPTS - attempts
+              setError(`Incorrect PIN · ${rem} attempt${rem === 1 ? '' : 's'} remaining`)
+            }
+          }, 300)
+        },
       }
-    }
+    )
   }
 
   // ── Shared elements ────────────────────────────────────────────────────
@@ -217,7 +184,7 @@ export function LoginPage() {
         onSubmit={(e) => {
           e.preventDefault()
           const s = slugInput.trim()
-          if (s) setOrgSlug(s)
+          if (s) { setOrgSlug(s); setSelectedBranch(null); setSelectedUser(null) }
           setEditingSlug(false)
           setSlugInput('')
         }}
@@ -242,6 +209,40 @@ export function LoginPage() {
         <span className="text-gray-400">· Switch Business</span>
       </button>
     )
+
+  // ── No slug yet ────────────────────────────────────────────────────────
+  if (!orgSlug || editingSlug) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6">
+        <Logo />
+        <div className="bg-white border border-gray-200 rounded-2xl p-8 w-full max-w-sm shadow-sm">
+          <h2 className="font-bold text-lg mb-1">Welcome to Fazi POS</h2>
+          <p className="text-sm text-gray-400 mb-5">Enter your business slug to continue</p>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              const s = slugInput.trim()
+              if (s) { setOrgSlug(s); setEditingSlug(false); setSlugInput('') }
+            }}
+          >
+            <input
+              autoFocus
+              className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2.5 outline-none focus:border-gray-900 mb-3"
+              placeholder="your-business-slug"
+              value={slugInput}
+              onChange={(e) => setSlugInput(e.target.value)}
+            />
+            <button
+              type="submit"
+              className="w-full text-sm font-semibold px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+            >
+              Continue
+            </button>
+          </form>
+        </div>
+      </div>
+    )
+  }
 
   // ── PIN screen ─────────────────────────────────────────────────────────
   if (selectedUser) {
@@ -328,9 +329,6 @@ export function LoginPage() {
                   Attempt {pinAttempts} of {MAX_ATTEMPTS}
                 </div>
               )}
-              {!selectedUser._api && (
-                <div className="text-center text-xs text-gray-400 mt-1.5">Demo PIN: {selectedUser.pin}</div>
-              )}
             </>
           )}
         </div>
@@ -358,62 +356,92 @@ export function LoginPage() {
         {/* Slug switcher */}
         {!selectedBranch && !overrideMode && <SlugSwitcher />}
 
-        {showBranchScreen ? (
-          <>
-            <h2 className="font-bold text-lg mb-1">Select your branch</h2>
-            <p className="text-sm text-gray-400 mb-5">Choose the location you're working at</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {branches.map((b) => (
-                <button
-                  key={b.id}
-                  onClick={() => setSelectedBranch(b)}
-                  className="flex flex-col items-center gap-3 p-5 border border-gray-200 rounded-xl bg-gray-50 hover:border-gray-900 hover:bg-white transition-colors text-center"
-                >
-                  <div className="w-11 h-11 bg-gray-200 rounded-xl flex items-center justify-center">
-                    <Building2 size={18} className="text-gray-600" />
-                  </div>
-                  <span className="text-sm font-semibold text-gray-900 leading-snug">{b.name}</span>
-                </button>
-              ))}
-            </div>
-          </>
-        ) : (
-          <>
-            <h2 className="font-bold text-lg mb-1">
-              {overrideMode ? 'Admin Override' : "Who's working today?"}
-            </h2>
-            <p className="text-sm text-gray-400 mb-5">
-              {overrideMode
-                ? 'Select an admin or manager to continue'
-                : 'Select your profile to continue'}
-            </p>
+        {/* Loading state */}
+        {usersLoading && (
+          <div className="flex flex-col items-center py-10 text-gray-400">
+            <Loader2 size={28} className="animate-spin mb-3" />
+            <span className="text-sm">Connecting to {orgSlug}…</span>
+          </div>
+        )}
 
-            <div className="flex flex-col gap-2">
-              {visibleUsers.map((u) => {
-                const lastSeen = formatLastLogin(lastLogin[String(u.id)])
-                return (
-                  <button
-                    key={u.id}
-                    onClick={() => handleSelectUser(u)}
-                    className="flex items-center gap-4 p-4 border border-gray-200 rounded-xl bg-gray-50 text-left hover:border-gray-900 hover:bg-white transition-colors"
-                  >
-                    <Avatar className="w-12 h-12 flex-shrink-0">
-                      <AvatarFallback className="bg-gray-200 text-gray-700 text-base font-bold">
-                        {u.avatar}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-gray-900 text-sm">{u.name}</div>
-                      {lastSeen && (
-                        <div className="text-xs text-gray-400 mt-0.5">{lastSeen}</div>
-                      )}
-                    </div>
-                    <RoleBadge role={u.role} />
-                  </button>
-                )
-              })}
+        {/* Error state */}
+        {!usersLoading && usersError && (
+          <div className="flex flex-col items-center py-8 text-center">
+            <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mb-3">
+              <AlertCircle size={22} className="text-red-500" />
             </div>
-          </>
+            <div className="font-semibold text-gray-900 mb-1">Can't reach "{orgSlug}"</div>
+            <div className="text-sm text-gray-500 mb-5">
+              Check the business slug or try again.
+            </div>
+            <button
+              onClick={() => { setEditingSlug(true); setSlugInput(orgSlug) }}
+              className="text-sm font-semibold px-5 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+            >
+              Change Slug
+            </button>
+          </div>
+        )}
+
+        {/* Branch / user grid */}
+        {!usersLoading && !usersError && apiUsers && (
+          showBranchScreen ? (
+            <>
+              <h2 className="font-bold text-lg mb-1">Select your branch</h2>
+              <p className="text-sm text-gray-400 mb-5">Choose the location you're working at</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {branches.map((b) => (
+                  <button
+                    key={b.id}
+                    onClick={() => setSelectedBranch(b)}
+                    className="flex flex-col items-center gap-3 p-5 border border-gray-200 rounded-xl bg-gray-50 hover:border-gray-900 hover:bg-white transition-colors text-center"
+                  >
+                    <div className="w-11 h-11 bg-gray-200 rounded-xl flex items-center justify-center">
+                      <Building2 size={18} className="text-gray-600" />
+                    </div>
+                    <span className="text-sm font-semibold text-gray-900 leading-snug">{b.name}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <h2 className="font-bold text-lg mb-1">
+                {overrideMode ? 'Admin Override' : "Who's working today?"}
+              </h2>
+              <p className="text-sm text-gray-400 mb-5">
+                {overrideMode
+                  ? 'Select an admin or manager to continue'
+                  : 'Select your profile to continue'}
+              </p>
+
+              <div className="flex flex-col gap-2">
+                {visibleUsers.map((u) => {
+                  const lastSeen = formatLastLogin(lastLogin[String(u.id)])
+                  return (
+                    <button
+                      key={u.id}
+                      onClick={() => handleSelectUser(u)}
+                      className="flex items-center gap-4 p-4 border border-gray-200 rounded-xl bg-gray-50 text-left hover:border-gray-900 hover:bg-white transition-colors"
+                    >
+                      <Avatar className="w-12 h-12 flex-shrink-0">
+                        <AvatarFallback className="bg-gray-200 text-gray-700 text-base font-bold">
+                          {u.avatar}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-gray-900 text-sm">{u.name}</div>
+                        {lastSeen && (
+                          <div className="text-xs text-gray-400 mt-0.5">{lastSeen}</div>
+                        )}
+                      </div>
+                      <RoleBadge role={u.role} />
+                    </button>
+                  )
+                })}
+              </div>
+            </>
+          )
         )}
       </div>
     </div>

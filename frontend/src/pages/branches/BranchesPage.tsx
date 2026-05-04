@@ -8,7 +8,6 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { LimitReachedDialog, parseLimitError, type LimitError } from '@/components/shared/LimitReachedDialog'
 import { useBranches, useCreateBranch, useOrgInfo } from '@/lib/queries'
-import { BRANCHES } from '@/lib/data'
 import type { ApiBranch } from '@/types/api'
 
 function StatCard({ label, value, icon: Icon, accent = '#111827' }: { label: string; value: string | number; icon: React.ElementType; accent?: string }) {
@@ -37,17 +36,7 @@ export function BranchesPage() {
   const [addOpen, setAddOpen] = useState(false)
   const [limitError, setLimitError] = useState<LimitError | null>(null)
 
-  const branches = apiBranches ?? BRANCHES.map((b) => ({
-    id: b.id as unknown as number,
-    org_id: 0,
-    name: b.name,
-    location: b.location,
-    phone: b.phone,
-    manager_name: b.manager,
-    status: b.status,
-    is_active: b.status === 'active',
-    created_at: '',
-  } satisfies ApiBranch))
+  const branches: ApiBranch[] = apiBranches ?? []
   const atLimit = orgInfo ? branches.filter((b) => b.is_active).length >= orgInfo.max_branches : false
 
   return (
