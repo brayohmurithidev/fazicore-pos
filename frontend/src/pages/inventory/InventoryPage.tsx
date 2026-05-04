@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import {
   Search, Plus, ArrowLeftRight, Truck, Package, AlertTriangle, Loader2,
   CheckCircle2, Download, Printer, Pencil, Trash2, SlidersHorizontal,
-  TrendingDown, BarChart3, X, XCircle, ChevronRight, Barcode,
+  TrendingDown, BarChart3, X, XCircle, ChevronRight, Barcode, Wand2,
   ShoppingCart,
 } from 'lucide-react'
 import JsBarcode from 'jsbarcode'
@@ -485,7 +485,33 @@ function ProductFormModal({ open, onClose, initial, categories, allProducts, isP
           </div>
           <div>
             <Label className="mb-1.5 block text-xs text-gray-500">Barcode</Label>
-            <Input value={form.barcode} onChange={(e) => set('barcode', e.target.value)} placeholder="e.g. 6001234567890" />
+            <div className="flex gap-2">
+              <Input
+                value={form.barcode}
+                onChange={(e) => set('barcode', e.target.value)}
+                placeholder="e.g. 6001234567890"
+                className="font-mono"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="flex-shrink-0 px-2.5"
+                title="Generate barcode"
+                onClick={() => {
+                  // 12-digit numeric → will render as EAN-13 (check digit appended by JsBarcode)
+                  const code = String(Date.now()).slice(-12).padStart(12, '0')
+                  set('barcode', code)
+                }}
+              >
+                <Wand2 size={14} />
+              </Button>
+            </div>
+            {form.barcode && (
+              <div className="mt-2 flex justify-center bg-white border border-gray-100 rounded-md py-2">
+                <BarcodeDisplay value={form.barcode} height={40} />
+              </div>
+            )}
           </div>
           {!initial && (
             <div>
