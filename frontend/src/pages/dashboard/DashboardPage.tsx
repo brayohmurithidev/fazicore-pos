@@ -1,5 +1,8 @@
 import { useNavigate } from 'react-router'
-import { Receipt, Package, AlertTriangle, Building2, AlertCircle } from 'lucide-react'
+import {
+  Receipt, Package, AlertTriangle, Building2, AlertCircle,
+  Monitor, BarChart3, UserCheck, Plus, ArrowRight,
+} from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -7,6 +10,7 @@ import { PayBadge } from '@/components/shared/PayBadge'
 import { useAuthStore } from '@/stores/auth'
 import { useDashboard, useOrders, useBranches } from '@/lib/queries'
 import { fmtKES } from '@/lib/data'
+import type { Role } from '@/types'
 
 function StatCard({ label, value, sub, icon: Icon, accent = '#111827' }: {
   label: string; value: string | number; sub?: string; icon: React.ElementType; accent?: string
@@ -28,6 +32,22 @@ function StatCard({ label, value, sub, icon: Icon, accent = '#111827' }: {
     </Card>
   )
 }
+
+interface QuickAction {
+  label: string
+  description: string
+  icon: React.ElementType
+  path: string
+  accent: string
+  roles: Role[]
+}
+
+const QUICK_ACTIONS: QuickAction[] = [
+  { label: 'New Sale',       description: 'Open POS register',       icon: Monitor,   path: '/pos',       accent: '#111827', roles: ['admin', 'manager', 'cashier'] },
+  { label: 'Add Product',    description: 'Stock a new item',         icon: Plus,      path: '/inventory', accent: '#8B5CF6', roles: ['admin', 'manager', 'stock'] },
+  { label: 'View Reports',   description: 'Sales & analytics',        icon: BarChart3, path: '/reports',   accent: '#3B82F6', roles: ['admin', 'manager'] },
+  { label: 'Customers',      description: 'Manage credit accounts',   icon: UserCheck, path: '/customers', accent: '#059669', roles: ['admin', 'manager', 'cashier'] },
+]
 
 export function DashboardPage() {
   const { user } = useAuthStore()
@@ -52,6 +72,8 @@ export function DashboardPage() {
 
   const greeting = new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening'
 
+  const quickActions = QUICK_ACTIONS.filter((a) => user?.role && a.roles.includes(user.role as Role))
+
   return (
     <div className="p-4 sm:p-6 overflow-y-auto h-full">
       <div className="mb-5 sm:mb-6">
@@ -65,7 +87,8 @@ export function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-3.5 mb-6 sm:mb-7">
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-3.5 mb-5 sm:mb-6">
         <StatCard label="Today's Revenue" value={fmtKES(todayRevenue)} sub={`${todayTxCount} transactions`} icon={Receipt} accent="#3B82F6" />
         <StatCard label="Items Sold" value={itemsSold} sub="today" icon={Package} accent="#8B5CF6" />
         <StatCard label="Low Stock" value={lowStockCount} sub="need attention" icon={AlertTriangle} accent="#EF4444" />
@@ -75,6 +98,38 @@ export function DashboardPage() {
         }
       </div>
 
+      {/* Quick Actions */}
+      {quickActions.length > 0 && (
+        <div className="mb-6">
+          <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2.5">Quick Actions</div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {quickActions.map((action) => {
+              const Icon = action.icon
+              return (
+                <button
+                  key={action.path}
+                  onClick={() => navigate(action.path)}
+                  className="group flex items-center gap-3 p-4 bg-white border border-gray-200 rounded-xl text-left hover:border-gray-400 hover:shadow-sm transition-all"
+                >
+                  <div
+                    className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110"
+                    style={{ background: action.accent + '15' }}
+                  >
+                    <Icon size={18} style={{ color: action.accent }} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold text-gray-900 leading-none mb-0.5">{action.label}</div>
+                    <div className="text-[11px] text-gray-400 truncate">{action.description}</div>
+                  </div>
+                  <ArrowRight size={14} className="text-gray-300 group-hover:text-gray-500 flex-shrink-0 transition-colors" />
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Transactions + right column */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 mb-6">
         <Card className="p-0 overflow-hidden">
           <CardHeader className="px-[18px] py-3.5 border-b border-gray-100">

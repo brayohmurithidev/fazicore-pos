@@ -110,17 +110,17 @@ export function AppShell() {
           'bg-gray-900 flex flex-col flex-shrink-0 transition-all duration-200 overflow-hidden',
           'fixed inset-y-0 left-0 z-50 md:relative md:z-auto md:translate-x-0',
           mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
-          collapsed ? 'w-56 md:w-16' : 'w-56'
+          collapsed ? 'w-64 md:w-[68px]' : 'w-64'
         )}
       >
         {/* Logo */}
-        <div className="px-4 py-4 border-b border-white/10 flex items-center gap-2.5 overflow-hidden">
-          <div className="w-8 h-8 bg-white rounded-md flex items-center justify-center flex-shrink-0">
-            <Monitor size={16} className="text-gray-900" />
+        <div className="px-4 py-4 border-b border-white/10 flex items-center gap-3 overflow-hidden">
+          <div className="w-9 h-9 bg-white rounded-lg flex items-center justify-center flex-shrink-0">
+            <Monitor size={18} className="text-gray-900" />
           </div>
           {!collapsed && (
             <div className="flex-1">
-              <div className="text-sm font-extrabold text-white tracking-tight">Fazi POS</div>
+              <div className="text-[15px] font-extrabold text-white tracking-tight">Fazi POS</div>
               <div className="text-xs text-white/40">Fazilabs</div>
             </div>
           )}
@@ -133,7 +133,7 @@ export function AppShell() {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-2 py-2.5 overflow-y-auto">
+        <nav className="flex-1 px-2.5 py-3 overflow-y-auto">
           {allowedNav.map((item) => {
             const Icon = item.icon
             const showBadge = item.id === 'inventory' && lowStockCount > 0
@@ -144,7 +144,7 @@ export function AppShell() {
                 onClick={() => setMobileOpen(false)}
                 className={({ isActive }) =>
                   cn(
-                    'w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg mb-0.5 text-sm font-semibold transition-colors',
+                    'relative w-full flex items-center gap-3 px-3 py-3 rounded-xl mb-1 text-[15px] font-semibold transition-colors',
                     collapsed ? 'justify-center' : '',
                     isActive
                       ? 'bg-white/12 text-white'
@@ -152,7 +152,7 @@ export function AppShell() {
                   )
                 }
               >
-                <Icon size={18} className="flex-shrink-0" />
+                <Icon size={21} className="flex-shrink-0" />
                 {!collapsed && <span className="flex-1 whitespace-nowrap">{item.label}</span>}
                 {showBadge && !collapsed && (
                   <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-px rounded-full">
