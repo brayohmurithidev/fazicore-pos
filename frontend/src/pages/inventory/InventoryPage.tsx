@@ -87,17 +87,24 @@ function BarcodeDisplay({ value, format = 'auto', height = 50, className = '' }:
 
   useEffect(() => {
     if (!ref.current || !value) return
-    const fmt = format === 'auto'
-      ? (/^\d{13}$/.test(value) ? 'EAN13' : /^\d{12}$/.test(value) ? 'UPC' : /^\d{8}$/.test(value) ? 'EAN8' : 'CODE128')
-      : format
-    try {
-      JsBarcode(ref.current, value, {
-        format: fmt, height, displayValue: true,
-        fontSize: 10, margin: 4, background: 'transparent',
-      })
-    } catch {
-      // invalid barcode value — render nothing
+    const autoFmt = /^\d{13}$/.test(value) ? 'EAN13'
+      : /^\d{12}$/.test(value) ? 'UPC'
+      : /^\d{8}$/.test(value) ? 'EAN8'
+      : 'CODE128'
+    const fmt = format === 'auto' ? autoFmt : format
+
+    const tryRender = (f: string) => {
+      try {
+        JsBarcode(ref.current!, value, {
+          format: f, height, displayValue: true,
+          fontSize: 10, margin: 4, background: 'transparent',
+        })
+        return true
+      } catch { return false }
     }
+
+    // If auto-detected format fails (e.g. bad check digit), fall back to CODE128
+    if (!tryRender(fmt) && fmt !== 'CODE128') tryRender('CODE128')
   }, [value, format, height])
 
   if (!value) return null
@@ -499,9 +506,11 @@ function ProductFormModal({ open, onClose, initial, categories, allProducts, isP
                 className="flex-shrink-0 px-2.5"
                 title="Generate barcode"
                 onClick={() => {
-                  // 12-digit numeric → will render as EAN-13 (check digit appended by JsBarcode)
-                  const code = String(Date.now()).slice(-12).padStart(12, '0')
-                  set('barcode', code)
+                  const base = String(Date.now()).slice(-12).padStart(12, '0')
+                  let sum = 0
+                  for (let i = 0; i < 12; i++) sum += parseInt(base[i]) * (i % 2 === 0 ? 1 : 3)
+                  const check = (10 - (sum % 10)) % 10
+                  set('barcode', base + check)
                 }}
               >
                 <Wand2 size={14} />
