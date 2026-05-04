@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { RoleBadge } from '@/components/shared/RoleBadge'
 import { LimitReachedDialog, parseLimitError, type LimitError } from '@/components/shared/LimitReachedDialog'
@@ -313,7 +313,7 @@ function UserForm({ initial, branches, isPending, onClose, onSave }: {
 
       <div className="mb-3.5">
         <Label className="mb-1.5 block">Assigned Branch</Label>
-        <Select value={form.branch_id} onValueChange={(v) => set('branch_id', v)}>
+        <Select value={form.branch_id} onValueChange={(v) => set('branch_id', v ?? '')}>
           <SelectTrigger>
             <span className={form.branch_id ? undefined : 'text-muted-foreground'}>
               {form.branch_id

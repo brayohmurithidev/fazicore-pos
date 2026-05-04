@@ -122,7 +122,7 @@ function BusinessInfoSection() {
               const knownType = BUSINESS_TYPES.includes(f('businessType')) ? f('businessType') : 'Other'
               return (
                 <div className="flex flex-col gap-2">
-                  <Select value={knownType} onValueChange={(v) => { if (v !== 'Other') setF('businessType')(v); else setF('businessType')('') }}>
+                  <Select value={knownType} onValueChange={(v) => { if (v && v !== 'Other') setF('businessType')(v); else setF('businessType')('') }}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>{BUSINESS_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
                   </Select>
@@ -135,7 +135,7 @@ function BusinessInfoSection() {
           </div>
           <div>
             <Label className="text-xs text-gray-500 mb-1.5 block">Currency</Label>
-            <Select value={f('currency')} onValueChange={setF('currency')}>
+            <Select value={f('currency')} onValueChange={(v) => setF('currency')(v ?? '')}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>{CURRENCIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
             </Select>
@@ -528,14 +528,14 @@ export function SettingsPage() {
 
   const isAdmin = user?.role === 'admin'
 
-  const TABS: { id: TabId; label: string; icon: React.ElementType; adminOnly?: boolean; hidden?: boolean }[] = [
+  const TABS = ([
     { id: 'general',     label: 'General',      icon: Settings },
     { id: 'payments',    label: 'Payments',     icon: CreditCard },
     { id: 'users',       label: 'Users',        icon: Users,        adminOnly: true },
     { id: 'permissions', label: 'Permissions',  icon: Shield,       adminOnly: true },
     { id: 'audit',       label: 'Audit Log',    icon: ClipboardList, adminOnly: true, hidden: flags.audit_logs === false },
     { id: 'plan',        label: 'Plan & Billing', icon: Sparkles },
-  ].filter((t) => !t.hidden && (!t.adminOnly || isAdmin))
+  ] as { id: TabId; label: string; icon: React.ElementType; adminOnly?: boolean; hidden?: boolean }[]).filter((t) => !t.hidden && (!t.adminOnly || isAdmin))
 
   return (
     <div className="h-full flex flex-col overflow-hidden">

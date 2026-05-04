@@ -267,7 +267,7 @@ export function SalesPage() {
             className="border border-gray-200 rounded-md px-2.5 py-1.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-gray-300"
           />
         </div>
-        <Select value={paymentMethod || '__all__'} onValueChange={(v) => setPaymentMethod(v === '__all__' ? '' : v)}>
+        <Select value={paymentMethod || '__all__'} onValueChange={(v) => setPaymentMethod(!v || v === '__all__' ? '' : v)}>
           <SelectTrigger className="w-36 h-9 text-sm">
             <SelectValue placeholder="All methods" />
           </SelectTrigger>
