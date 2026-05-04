@@ -1157,12 +1157,12 @@ function ProductsTab({ branchId }: { branchId?: number }) {
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-0.5">
                           {canManage && (
-                            <button title="Edit (E)" onClick={() => { setEditProduct(p); setAddOpen(true) }}
+                            <button title="Edit (E)" onClick={(e) => { e.currentTarget.blur(); setEditProduct(p); setAddOpen(true) }}
                               className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"><Pencil size={13} /></button>
                           )}
-                          <button title="Adjust stock (A)" onClick={() => setAdjustProduct(p)}
+                          <button title="Adjust stock (A)" onClick={(e) => { e.currentTarget.blur(); setAdjustProduct(p) }}
                             className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"><SlidersHorizontal size={13} /></button>
-                          <button title="Open detail" onClick={() => setSelectedProduct(isSelected ? null : p)}
+                          <button title="Open detail" onClick={(e) => { e.currentTarget.blur(); setSelectedProduct(isSelected ? null : p) }}
                             className={`p-1.5 rounded hover:bg-gray-100 transition-colors ${isSelected ? 'text-blue-600' : 'text-gray-400 hover:text-gray-700'}`}><ChevronRight size={13} /></button>
                         </div>
                       </TableCell>
