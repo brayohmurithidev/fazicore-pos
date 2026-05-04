@@ -1,7 +1,7 @@
 """add trial_days to subscription_plans
 
-Revision ID: a1b2c3d4e5f6
-Revises: f2a3b4c5d6e7
+Revision ID: d1e2f3a4b5c6
+Revises: a1b2c3d4e5f6
 Create Date: 2026-05-01
 
 """
@@ -10,8 +10,8 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-revision: str = "a1b2c3d4e5f6"
-down_revision: Union[str, None] = "f2a3b4c5d6e7"
+revision: str = "d1e2f3a4b5c6"
+down_revision: Union[str, None] = "a1b2c3d4e5f6"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
