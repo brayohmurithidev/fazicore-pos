@@ -332,6 +332,13 @@ export interface ApiAnalyticsSummary {
   period: string
 }
 
+export interface ApiAnalyticsDailyItem {
+  date: string
+  revenue: number
+  transactions: number
+  discount_total: number
+}
+
 export interface ApiPlanInfo {
   slug: string
   name: string

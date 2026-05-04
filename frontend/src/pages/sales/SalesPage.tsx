@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react'
 import { Receipt, Download, Search, X, TrendingUp, ShoppingCart, CreditCard } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -174,8 +173,6 @@ function downloadCSV(orders: ApiOrder[]) {
 export function SalesPage() {
   const { user } = useAuthStore()
   const isAdmin = user?.role === 'admin'
-  const userBranchId = user?.branch ? (Number(user.branch) || null) : null
-
   const [dateFrom, setDateFrom] = useState(todayISO())
   const [dateTo, setDateTo] = useState(todayISO())
   const [paymentMethod, setPaymentMethod] = useState('')

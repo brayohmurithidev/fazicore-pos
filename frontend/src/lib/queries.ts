@@ -4,7 +4,7 @@ import type {
   ApiBranch, ApiAttendance, ApiCategory, ApiCustomer, ApiCreditInvoice, ApiCreditPayment, ApiAuditLog,
   ApiInventoryItem, ApiInventoryTransaction, ApiOrder, ApiProduct,
   ApiPurchaseOrder, ApiUser, ApiOrgInfo, ApiSubscriptionInfo, ApiSupplier, ApiStockTransfer,
-  ApiPermissions, ApiNotifications, ApiAnalyticsSummary, ReorderSuggestion, AgingItem, DashboardData, TokenResponse,
+  ApiPermissions, ApiNotifications, ApiAnalyticsSummary, ApiAnalyticsDailyItem, ReorderSuggestion, AgingItem, DashboardData, TokenResponse,
 } from '@/types/api'
 
 export const FEATURE_CATALOG = [
@@ -596,7 +596,7 @@ export function useAnalyticsSummary(params: {
   date_to?: string
   branch_id?: number
 }) {
-  return useQuery<ApiAnalyticsSummary>({
+  return useQuery<ApiAnalyticsDailyItem[]>({
     queryKey: ['analytics-summary', params],
     queryFn: () => api.get('/analytics/summary', { params }).then((r) => r.data),
     staleTime: 30_000,

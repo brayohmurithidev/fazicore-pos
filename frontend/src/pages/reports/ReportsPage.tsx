@@ -177,7 +177,7 @@ function InventoryTab() {
                     <td className="py-2 pr-4 text-gray-500">{r.min_stock}</td>
                     <td className="py-2 pr-4 font-semibold">{r.suggested_reorder_qty}</td>
                     <td className="py-2">
-                      <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-bold uppercase', { critical: 'bg-red-100 text-red-700', warning: 'bg-amber-100 text-amber-700', watch: 'bg-yellow-100 text-yellow-700' }[r.urgency] || 'bg-gray-100 text-gray-600')}>{r.urgency}</span>
+                      <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-bold uppercase', { critical: 'bg-red-100 text-red-700', warning: 'bg-amber-100 text-amber-700', watch: 'bg-yellow-100 text-yellow-700', no_sales: 'bg-gray-100 text-gray-600', ok: 'bg-green-100 text-green-700' }[r.urgency] || 'bg-gray-100 text-gray-600')}>{r.urgency}</span>
                     </td>
                   </tr>
                 ))}
@@ -221,8 +221,6 @@ function InventoryTab() {
 function ProductsTab({ period }: { period: Period }) {
   const [sortBy, setSortBy] = useState<'revenue' | 'profit' | 'qty'>('revenue')
   const { data: products = [], isLoading } = useAnalyticsProducts({ period, sort_by: sortBy })
-
-  const topRevenue = products[0]
 
   return (
     <div id="print-area" className="space-y-5">
@@ -321,8 +319,19 @@ function CreditTab() {
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 
+interface AnalyticsProductItem {
+  product_id: number
+  product_name: string
+  sku?: string
+  qty_sold: number
+  revenue: number
+  cost: number
+  profit: number
+  profit_margin: number
+}
+
 function useAnalyticsProducts(params: { period?: string; sort_by?: string }) {
-  return useQuery({
+  return useQuery<AnalyticsProductItem[]>({
     queryKey: ['analytics-products', params],
     queryFn: () => api.get('/analytics/products', { params }).then(r => r.data),
     staleTime: 30_000,
