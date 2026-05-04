@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router'
 import { Monitor, ChevronLeft, Building2, Lock, AlertCircle, Loader2 } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -163,6 +163,18 @@ export function LoginPage() {
     )
   }
 
+  // ── Desktop keyboard capture ───────────────────────────────────────────
+  useEffect(() => {
+    if (!selectedUser || pinLocked) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key >= '0' && e.key <= '9') handlePinKey(e.key)
+      else if (e.key === 'Backspace') handlePinKey('del')
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedUser, pinLocked, pin, pinAttempts, pinLogin.isPending])
+
   // ── Shared elements ────────────────────────────────────────────────────
 
   const Logo = () => (
@@ -305,7 +317,8 @@ export function LoginPage() {
                 {error && <p className="text-xs text-red-600 text-center">{error}</p>}
               </div>
 
-              <div className="grid grid-cols-3 gap-2.5">
+              {/* On-screen numpad — touch/tablet only */}
+              <div className="grid grid-cols-3 gap-2.5 md:hidden">
                 {['1','2','3','4','5','6','7','8','9','','0','del'].map((k, i) =>
                   k === '' ? <div key={i} /> : (
                     <button
@@ -323,6 +336,11 @@ export function LoginPage() {
                   )
                 )}
               </div>
+
+              {/* Desktop keyboard hint */}
+              <p className="hidden md:block text-xs text-gray-400 text-center mt-1">
+                Type your PIN using the keyboard
+              </p>
 
               {pinAttempts > 0 && (
                 <div className="text-center text-xs text-gray-400 mt-4">
