@@ -15,6 +15,7 @@ import { useCategories, useProducts, useCreateOrder, useBranches, usePermissions
 import { useFeatureFlags } from '@/hooks/useFeature'
 import { useBarcodeScanner } from '@/hooks/useBarcodeScanner'
 import { printReceipt } from '@/lib/print'
+import { printESCPOS } from '@/lib/escpos'
 import type { CartItem, Product, SaleInfo } from '@/types'
 
 // ── Kbd hint badge ────────────────────────────────────────────────────────────
@@ -604,7 +605,10 @@ export function POSPage() {
     setOrderNotes('')
     // Auto-print receipt if enabled
     if (settings.autoPrint) {
-      setTimeout(() => printReceipt(sale, settings), 400)
+      setTimeout(async () => {
+        const ok = await printESCPOS(sale, settings)
+        if (!ok) printReceipt(sale, settings)
+      }, 400)
     }
   }
 

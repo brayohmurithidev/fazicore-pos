@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Printer, MessageSquare } from 'lucide-react'
+import { Printer, MessageSquare, Loader2 } from 'lucide-react'
 import { useSettingsStore } from '@/stores/settings'
 import { printReceipt } from '@/lib/print'
+import { printESCPOS } from '@/lib/escpos'
 import type { SaleInfo } from '@/types'
 
 interface Props {
@@ -13,6 +15,18 @@ interface Props {
 
 export function ReceiptModal({ open, onClose, sale }: Props) {
   const { settings } = useSettingsStore()
+  const [printing, setPrinting] = useState(false)
+
+  async function handlePrint() {
+    if (!sale) return
+    setPrinting(true)
+    try {
+      const ok = await printESCPOS(sale, settings)
+      if (!ok) printReceipt(sale, settings) // fall back to popup HTML
+    } finally {
+      setPrinting(false)
+    }
+  }
   if (!sale) return null
 
   const biz = {
@@ -111,8 +125,8 @@ export function ReceiptModal({ open, onClose, sale }: Props) {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="flex-1" onClick={() => printReceipt(sale, settings)}>
-            <Printer size={14} className="mr-2" /> Print Invoice
+          <Button variant="outline" className="flex-1" onClick={handlePrint} disabled={printing}>
+            {printing ? <Loader2 size={14} className="mr-2 animate-spin" /> : <Printer size={14} className="mr-2" />} Print Invoice
           </Button>
           {showSms && (
             <Button variant="outline" className="flex-1" onClick={() => alert('SMS receipt feature coming soon')}>
@@ -206,8 +220,8 @@ export function ReceiptModal({ open, onClose, sale }: Props) {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="flex-1" onClick={() => printReceipt(sale, settings)}>
-            <Printer size={14} className="mr-2" /> Print Receipt
+          <Button variant="outline" className="flex-1" onClick={handlePrint} disabled={printing}>
+            {printing ? <Loader2 size={14} className="mr-2 animate-spin" /> : <Printer size={14} className="mr-2" />} Print Receipt
           </Button>
           {showSms && (
             <Button variant="outline" className="flex-1" onClick={() => alert('SMS receipt feature coming soon')}>
