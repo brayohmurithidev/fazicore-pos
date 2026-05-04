@@ -32,8 +32,8 @@ venv/
 .DS_Store
 Thumbs.db
 
-# Docker override is local-only on server; keep it in repo for dev
-# (intentionally not ignored)
+# Docker dev override — local only, never deploy to server
+backend/docker-compose.override.yml
 
 # Logs
 *.log
