@@ -111,6 +111,7 @@ export interface Settings {
   expiryTracking: boolean
   barcodeMode: boolean
   // Receipt
+  receiptPaper: '58mm' | '80mm' | 'a4'
   showVat: boolean
   showLogo: boolean
   smsReceipt: boolean

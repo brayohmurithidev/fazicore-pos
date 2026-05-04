@@ -193,6 +193,21 @@ function GeneralTab() {
         <Toggle label="Barcode Scanner Mode" sub="Enable barcode input field on POS screen" value={settings.barcodeMode} onChange={(v) => patch('barcodeMode', v)} locked={flags.barcode_mode === false} />
       </Section>
       <Section title="Receipt Settings">
+        <div className="flex items-center justify-between py-2">
+          <div>
+            <div className="text-sm font-medium text-gray-900">Receipt Paper</div>
+            <div className="text-xs text-gray-400 mt-0.5">Match your printer's paper size</div>
+          </div>
+          <select
+            value={settings.receiptPaper ?? '80mm'}
+            onChange={(e) => patch('receiptPaper', e.target.value as SettingsType['receiptPaper'])}
+            className="text-sm border border-gray-200 rounded-md px-2.5 py-1.5 bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-300"
+          >
+            <option value="58mm">58mm Thermal</option>
+            <option value="80mm">80mm Thermal</option>
+            <option value="a4">A4 / Letter</option>
+          </select>
+        </div>
         <Toggle label="Show VAT Breakdown" sub="Print VAT amounts on receipt" value={settings.showVat} onChange={(v) => patch('showVat', v)} />
         <Toggle label="Show Business Logo" sub="Include logo on printed receipts" value={settings.showLogo} onChange={(v) => patch('showLogo', v)} />
         <Toggle label="Digital Receipt (SMS)" sub="Send receipt via SMS to customer" value={settings.smsReceipt} onChange={(v) => patch('smsReceipt', v)} locked={flags.sms_receipts === false} />

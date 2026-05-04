@@ -73,8 +73,8 @@ export const DEFAULT_SETTINGS: Settings = {
   businessPhone: '',
   cash: true, mpesa: true, credit: true, other: true,
   requirePin: true, autoPrint: false, lowStockAlerts: true,
-  expiryTracking: true, barcodeMode: true, showVat: true,
-  showLogo: true, smsReceipt: false, branchInventory: true,
+  expiryTracking: true, barcodeMode: true, receiptPaper: '80mm',
+  showVat: true, showLogo: true, smsReceipt: false, branchInventory: true,
   consolidatedReports: true, stockTransfer: true,
 }
 
