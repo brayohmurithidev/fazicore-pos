@@ -604,7 +604,7 @@ export default function OrgDetailPage() {
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mt-5 sm:mt-6 pt-4 sm:pt-5 border-t border-slate-100">
             <Stat label="Users"    value={`${org.user_count} / ${org.max_users}`} />
-            <Stat label="Branches" value={`${org.branch_count} / ${org.max_branches}`} />
+            <Stat label="Branches" value={org.max_branches === 1 ? "Single" : `${org.branch_count} / ${org.max_branches}`} />
             <Stat label="Products" value={`${org.active_product_count} / ${org.max_products}`} />
             <Stat label="Status"   value={cfg.label} />
             <Stat label="Joined"   value={fmtDate(org.created_at)} />
@@ -666,7 +666,10 @@ export default function OrgDetailPage() {
                 </button>
               </div>
               <div className="space-y-3">
-                <UsageBar label="Branches" used={org.branch_count} max={org.max_branches} icon={Building2} />
+                {org.max_branches === 1
+                  ? <div className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 text-slate-500"><Building2 className="h-3 w-3" />Branches</span><span className="font-medium text-slate-700">Single business</span></div>
+                  : <UsageBar label="Branches" used={org.branch_count} max={org.max_branches} icon={Building2} />
+                }
                 <UsageBar label="Users"    used={org.user_count}   max={org.max_users}    icon={Users} />
                 <UsageBar label="Products" used={org.active_product_count} max={org.max_products} icon={Package} />
               </div>

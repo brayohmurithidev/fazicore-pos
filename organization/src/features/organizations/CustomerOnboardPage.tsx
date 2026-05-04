@@ -258,7 +258,7 @@ function StepPlan({ form, onChange, plans }: {
                   <div className="flex flex-wrap gap-x-3 gap-y-1 mb-2">
                     <span className="text-[11px] text-slate-500 flex items-center gap-1">
                       <GitBranch className="h-2.5 w-2.5 text-slate-400 shrink-0" />
-                      {plan.max_branches != null ? `${plan.max_branches} branches` : "Unlimited branches"}
+                      {plan.max_branches === 1 ? "Single business" : plan.max_branches != null ? `${plan.max_branches} branches` : "Unlimited branches"}
                     </span>
                     <span className="text-[11px] text-slate-500 flex items-center gap-1">
                       <Users className="h-2.5 w-2.5 text-slate-400 shrink-0" />

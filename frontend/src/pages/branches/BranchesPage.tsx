@@ -49,8 +49,10 @@ export function BranchesPage() {
         <div className="flex items-center gap-3">
           {orgInfo && (
             <span className={`text-xs font-medium ${atLimit ? 'text-amber-600' : 'text-gray-400'}`}>
-              {branches.filter((b) => b.is_active).length}/{orgInfo.max_branches} branches
-              {atLimit && ' — limit reached'}
+              {orgInfo.max_branches === 1
+                ? `Single business${atLimit ? ' — limit reached' : ''}`
+                : `${branches.filter((b) => b.is_active).length}/${orgInfo.max_branches} branches${atLimit ? ' — limit reached' : ''}`
+              }
             </span>
           )}
           <Button

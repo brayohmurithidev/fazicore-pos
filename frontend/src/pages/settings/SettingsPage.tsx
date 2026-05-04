@@ -408,8 +408,16 @@ function PlanCard({ plan, isCurrent }: { plan: ApiPlanInfo; isCurrent: boolean }
       <div className="grid grid-cols-3 gap-1 py-2 border-y border-gray-100">
         {[{ label: 'Branches', value: plan.max_branches }, { label: 'Users', value: plan.max_users }, { label: 'Products', value: plan.max_products }].map(({ label, value }) => (
           <div key={label} className="text-center">
-            <div className="text-sm font-bold text-gray-900">{value < 0 ? '∞' : value.toLocaleString()}</div>
-            <div className="text-[10px] text-gray-400">{label}</div>
+            {label === 'Branches' && value === 1
+              ? <>
+                  <div className="text-sm font-bold text-gray-900">Single</div>
+                  <div className="text-[10px] text-gray-400">Business</div>
+                </>
+              : <>
+                  <div className="text-sm font-bold text-gray-900">{value < 0 ? '∞' : value.toLocaleString()}</div>
+                  <div className="text-[10px] text-gray-400">{label}</div>
+                </>
+            }
           </div>
         ))}
       </div>
@@ -479,7 +487,10 @@ function PlanTab() {
           </div>
         </div>
         <div className="text-[11px] font-semibold text-gray-400 mb-3 uppercase tracking-wide">Usage</div>
-        <UsageBar label="Branches" current={sub.branch_count} max={sub.max_branches} />
+        {sub.max_branches === 1
+          ? <div className="mb-3 flex justify-between text-xs"><span className="text-gray-500">Branches</span><span className="font-medium">Single business</span></div>
+          : <UsageBar label="Branches" current={sub.branch_count} max={sub.max_branches} />
+        }
         <UsageBar label="Users" current={sub.user_count} max={sub.max_users} />
         <UsageBar label="Products" current={sub.active_product_count} max={sub.max_products} />
       </Section>

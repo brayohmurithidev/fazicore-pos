@@ -359,7 +359,7 @@ function PlanCard({ plan, onEdit }: { plan: SubscriptionPlan; onEdit: () => void
       <div className="flex flex-wrap gap-3 text-xs text-slate-600">
         <span className="flex items-center gap-1">
           <GitBranch className="h-3.5 w-3.5 text-slate-400" />
-          {plan.max_branches != null ? `${plan.max_branches} branches` : "Unlimited branches"}
+          {plan.max_branches === 1 ? "Single business" : plan.max_branches != null ? `${plan.max_branches} branches` : "Unlimited branches"}
         </span>
         <span className="flex items-center gap-1">
           <Users className="h-3.5 w-3.5 text-slate-400" />

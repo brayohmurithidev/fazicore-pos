@@ -113,7 +113,7 @@ export default function OrganizationsPage() {
           const o = row.original;
           return (
             <div className="flex gap-3 text-xs text-slate-500 tabular-nums">
-              <span>{o.branch_count} / {o.max_branches} br</span>
+              <span>{o.max_branches === 1 ? 'Single' : `${o.branch_count} / ${o.max_branches} br`}</span>
               <span>{o.user_count} / {o.max_users} usr</span>
               <span>{o.active_product_count} / {o.max_products} prod</span>
             </div>
