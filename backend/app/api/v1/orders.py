@@ -60,14 +60,18 @@ async def list_orders(
     date_to: date | None = Query(None),
     search: str | None = Query(None),
     payment_method: str | None = Query(None),
+    cashier_id: int | None = Query(None),
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_active_user),
 ) -> list[OrderOut]:
     repo = OrderRepository(session)
     effective_branch = branch_id if current_user.role == UserRole.ADMIN else current_user.branch_id
+    # Cashiers see only their own orders regardless of any passed cashier_id
+    effective_cashier_id = current_user.id if current_user.role == UserRole.CASHIER else cashier_id
     orders = await repo.get_by_org(
         current_user.org_id, effective_branch, skip, limit,
         date_from=date_from, date_to=date_to, search=search, payment_method=payment_method,
+        cashier_id=effective_cashier_id,
     )
     return [OrderOut.model_validate(o) for o in orders]
 
@@ -83,3 +87,20 @@ async def get_order(
     if not order or order.org_id != current_user.org_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
     return OrderOut.model_validate(order)
+
+
+@router.delete("/{order_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def void_order(
+    order_id: int,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_active_user),
+) -> None:
+    repo = OrderRepository(session)
+    order = await repo.get_with_items(order_id)
+    if not order or order.org_id != current_user.org_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+    # Cashiers can only void their own orders
+    if current_user.role == UserRole.CASHIER and order.cashier_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot void another cashier's order")
+    await session.delete(order)
+    await session.commit()

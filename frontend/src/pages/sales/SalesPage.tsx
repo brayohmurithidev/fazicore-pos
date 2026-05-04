@@ -1,14 +1,16 @@
 import { useState, useMemo } from 'react'
-import { Receipt, Download, Search, X, TrendingUp, ShoppingCart, CreditCard } from 'lucide-react'
+import { Receipt, Download, Search, X, TrendingUp, ShoppingCart, CreditCard, Trash2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { PayBadge } from '@/components/shared/PayBadge'
-import { useOrders, useBranches } from '@/lib/queries'
+import { ManagerApprovalModal } from '@/components/shared/ManagerApprovalModal'
+import { useOrders, useBranches, useDeleteOrder, usePermissions } from '@/lib/queries'
 import { useAuthStore } from '@/stores/auth'
 import { fmtKES } from '@/lib/data'
+import { toast } from '@/lib/toast'
 import type { ApiOrder, ApiPaymentMethod } from '@/types/api'
 
 function todayISO() {
@@ -42,7 +44,19 @@ function StatCard({ label, value, sub, icon: Icon, accent = '#111827' }: {
   )
 }
 
-function OrderDetailDialog({ order, onClose }: { order: ApiOrder | null; onClose: () => void }) {
+function OrderDetailDialog({
+  order,
+  onClose,
+  onVoid,
+  canVoid,
+  isVoiding,
+}: {
+  order: ApiOrder | null
+  onClose: () => void
+  onVoid: () => void
+  canVoid: boolean
+  isVoiding: boolean
+}) {
   if (!order) return null
 
   const isCredit = order.payment_method === 'credit'
@@ -140,6 +154,47 @@ function OrderDetailDialog({ order, onClose }: { order: ApiOrder | null; onClose
             <span className="font-semibold text-gray-700">Note: </span>{order.notes}
           </div>
         )}
+
+        {canVoid && (
+          <DialogFooter className="mt-2">
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={onVoid}
+              disabled={isVoiding}
+              className="gap-1.5"
+            >
+              <Trash2 size={14} />
+              Void Receipt
+            </Button>
+          </DialogFooter>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function VoidConfirmDialog({ order, onConfirm, onClose, isVoiding }: {
+  order: ApiOrder
+  onConfirm: () => void
+  onClose: () => void
+  isVoiding: boolean
+}) {
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Void Receipt #{order.order_number}?</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-gray-500">
+          This will permanently delete this receipt ({fmtKES(order.total)}). This action cannot be undone.
+        </p>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" size="sm" onClick={onClose} disabled={isVoiding}>Cancel</Button>
+          <Button variant="destructive" size="sm" onClick={onConfirm} disabled={isVoiding}>
+            {isVoiding ? 'Voiding…' : 'Void Receipt'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )
@@ -172,17 +227,27 @@ function downloadCSV(orders: ApiOrder[]) {
 
 export function SalesPage() {
   const { user } = useAuthStore()
+  const { data: permsData } = usePermissions()
+  const isCashier = user?.role === 'cashier'
   const isAdmin = user?.role === 'admin'
+  const isManager = user?.role === 'manager'
+
+  // Admins and managers can always void; cashiers only if delete_sales permission is on
+  const canVoid = isAdmin || isManager || (isCashier && permsData?.permissions?.cashier?.delete_sales === true)
+
   const [dateFrom, setDateFrom] = useState(todayISO())
   const [dateTo, setDateTo] = useState(todayISO())
   const [paymentMethod, setPaymentMethod] = useState('')
   const [search, setSearch] = useState('')
   const [branchFilter, setBranchFilter] = useState<number | null>(null)
   const [selected, setSelected] = useState<ApiOrder | null>(null)
+  const [voidTarget, setVoidTarget] = useState<ApiOrder | null>(null)
+  const [showManagerApproval, setShowManagerApproval] = useState(false)
 
   const { data: branches = [] } = useBranches()
+  const deleteOrder = useDeleteOrder()
 
-  // Admins filter by selected branch (or all); non-admins are server-scoped to their branch
+  // Admins filter by selected branch; non-admins are server-scoped to their branch
   const effectiveBranchId = isAdmin ? (branchFilter || undefined) : undefined
 
   const { data: orders = [], isLoading } = useOrders({
@@ -192,6 +257,8 @@ export function SalesPage() {
     payment_method: paymentMethod || undefined,
     search: search || undefined,
     branch_id: effectiveBranchId,
+    // Backend enforces cashier_id for cashier role; this is belt-and-suspenders
+    cashier_id: isCashier && user?.id ? Number(user.id) : undefined,
   })
 
   const stats = useMemo(() => {
@@ -209,6 +276,30 @@ export function SalesPage() {
     setPaymentMethod('')
     setSearch('')
     setBranchFilter(null)
+  }
+
+  function handleVoidClick(order: ApiOrder) {
+    setVoidTarget(order)
+    if (isCashier) {
+      // Cashier needs manager/admin PIN approval
+      setSelected(null)
+      setShowManagerApproval(true)
+    }
+    // Admin/manager flow handled by VoidConfirmDialog rendered below
+  }
+
+  function executeVoid(order: ApiOrder) {
+    deleteOrder.mutate(order.id, {
+      onSuccess: () => {
+        toast.success(`Receipt #${order.order_number} voided`)
+        setVoidTarget(null)
+        setSelected(null)
+        setShowManagerApproval(false)
+      },
+      onError: () => {
+        toast.error('Failed to void receipt')
+      },
+    })
   }
 
   return (
@@ -229,13 +320,18 @@ export function SalesPage() {
         <StatCard label="Avg Order Value" value={fmtKES(stats.avg)} sub="per transaction" icon={CreditCard} accent="#059669" />
       </div>
 
-      {/* Branch context label for non-admins */}
-      {!isAdmin && user?.branch_name && (
+      {/* Branch/cashier context label */}
+      {isCashier ? (
+        <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-3 bg-gray-50 border border-gray-200 rounded-md px-3 py-2 w-fit">
+          <Receipt size={12} />
+          Showing your sales
+        </div>
+      ) : !isAdmin && user?.branch_name ? (
         <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-3 bg-gray-50 border border-gray-200 rounded-md px-3 py-2 w-fit">
           <Receipt size={12} />
           Showing sales for <span className="font-semibold text-gray-700">{user.branch_name}</span>
         </div>
-      )}
+      ) : null}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-4 items-center">
@@ -312,7 +408,7 @@ export function SalesPage() {
               <tr className="border-b border-gray-100 bg-gray-50">
                 <th className="text-left px-4 py-3 font-semibold text-gray-500 text-xs uppercase tracking-wide">Order #</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-500 text-xs uppercase tracking-wide">Date / Time</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-500 text-xs uppercase tracking-wide">Cashier</th>
+                {!isCashier && <th className="text-left px-4 py-3 font-semibold text-gray-500 text-xs uppercase tracking-wide">Cashier</th>}
                 <th className="text-right px-4 py-3 font-semibold text-gray-500 text-xs uppercase tracking-wide">Items</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-500 text-xs uppercase tracking-wide">Payment</th>
                 <th className="text-right px-4 py-3 font-semibold text-gray-500 text-xs uppercase tracking-wide">Total</th>
@@ -321,11 +417,11 @@ export function SalesPage() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="text-center text-gray-400 py-16 text-sm">Loading…</td>
+                  <td colSpan={isCashier ? 5 : 6} className="text-center text-gray-400 py-16 text-sm">Loading…</td>
                 </tr>
               ) : orders.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-16">
+                  <td colSpan={isCashier ? 5 : 6} className="text-center py-16">
                     <Receipt size={32} className="text-gray-200 mx-auto mb-3" />
                     <div className="text-gray-400 text-sm">No transactions found</div>
                     {hasFilters && <div className="text-gray-300 text-xs mt-1">Try adjusting the filters</div>}
@@ -342,7 +438,7 @@ export function SalesPage() {
                       <span className="font-mono text-xs font-semibold text-gray-800">#{order.order_number}</span>
                     </td>
                     <td className="px-4 py-3 text-gray-500 text-xs">{fmtDateTime(order.created_at)}</td>
-                    <td className="px-4 py-3 text-gray-700">{order.cashier_name ?? '—'}</td>
+                    {!isCashier && <td className="px-4 py-3 text-gray-700">{order.cashier_name ?? '—'}</td>}
                     <td className="px-4 py-3 text-right text-gray-600">
                       {order.items.reduce((s, i) => s + i.quantity, 0)}
                     </td>
@@ -357,7 +453,7 @@ export function SalesPage() {
             {orders.length > 0 && (
               <tfoot>
                 <tr className="border-t-2 border-gray-200 bg-gray-50">
-                  <td colSpan={5} className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                  <td colSpan={isCashier ? 4 : 5} className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">
                     {orders.length} transaction{orders.length !== 1 ? 's' : ''}
                   </td>
                   <td className="px-4 py-3 text-right font-extrabold text-gray-900">{fmtKES(stats.revenue)}</td>
@@ -368,7 +464,34 @@ export function SalesPage() {
         </div>
       </Card>
 
-      <OrderDetailDialog order={selected} onClose={() => setSelected(null)} />
+      <OrderDetailDialog
+        order={selected}
+        onClose={() => setSelected(null)}
+        onVoid={() => handleVoidClick(selected!)}
+        canVoid={canVoid}
+        isVoiding={deleteOrder.isPending}
+      />
+
+      {/* Admin/manager void confirmation (cashiers go through ManagerApprovalModal instead) */}
+      {voidTarget && !isCashier && (
+        <VoidConfirmDialog
+          order={voidTarget}
+          onConfirm={() => executeVoid(voidTarget)}
+          onClose={() => setVoidTarget(null)}
+          isVoiding={deleteOrder.isPending}
+        />
+      )}
+
+      {/* Cashier void — requires manager/admin PIN */}
+      {showManagerApproval && voidTarget && (
+        <ManagerApprovalModal
+          open={showManagerApproval}
+          onClose={() => { setShowManagerApproval(false); setVoidTarget(null) }}
+          onApprove={() => executeVoid(voidTarget)}
+          title="Manager Approval Required"
+          description={`Enter a manager or admin PIN to void receipt #${voidTarget.order_number} (${fmtKES(voidTarget.total)}).`}
+        />
+      )}
     </div>
   )
 }

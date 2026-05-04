@@ -261,6 +261,7 @@ export interface OrderFilters {
   search?: string
   payment_method?: string
   branch_id?: number
+  cashier_id?: number
 }
 
 export function useOrders(filters: OrderFilters | number = {}) {
@@ -282,6 +283,17 @@ export function useCreateOrder() {
       qc.invalidateQueries({ queryKey: ['dashboard'] })
       qc.invalidateQueries({ queryKey: ['products'] })
       qc.invalidateQueries({ queryKey: ['inventory'] })
+    },
+  })
+}
+
+export function useDeleteOrder() {
+  const qc = useQueryClient()
+  return useMutation<void, Error, number>({
+    mutationFn: (id) => api.delete(`/orders/${id}`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['orders'] })
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
     },
   })
 }

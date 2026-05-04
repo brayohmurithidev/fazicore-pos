@@ -25,6 +25,7 @@ class OrderRepository(BaseRepository[Order, OrderCreate, OrderOut]):
         date_to: date | None = None,
         search: str | None = None,
         payment_method: str | None = None,
+        cashier_id: int | None = None,
     ) -> list[Order]:
         stmt = (
             select(Order)
@@ -33,6 +34,8 @@ class OrderRepository(BaseRepository[Order, OrderCreate, OrderOut]):
         )
         if branch_id is not None:
             stmt = stmt.where(Order.branch_id == branch_id)
+        if cashier_id is not None:
+            stmt = stmt.where(Order.cashier_id == cashier_id)
         if date_from is not None:
             stmt = stmt.where(Order.created_at >= datetime(date_from.year, date_from.month, date_from.day, tzinfo=timezone.utc))
         if date_to is not None:
