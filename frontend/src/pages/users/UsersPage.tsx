@@ -311,22 +311,24 @@ function UserForm({ initial, branches, isPending, onClose, onSave }: {
         </div>
       </div>
 
-      <div className="mb-3.5">
-        <Label className="mb-1.5 block">Assigned Branch</Label>
-        <Select value={form.branch_id} onValueChange={(v) => set('branch_id', v ?? '')}>
-          <SelectTrigger>
-            <span className={form.branch_id ? undefined : 'text-muted-foreground'}>
-              {form.branch_id
-                ? (() => { const b = branches.find((b) => String(b.id) === form.branch_id); return b ? `${b.name}${b.location ? ` — ${b.location}` : ''}` : form.branch_id })()
-                : '— No branch —'}
-            </span>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="">— No branch —</SelectItem>
-            {branches.map((b) => <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.location ? ` — ${b.location}` : ''}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      </div>
+      {branches.length > 1 ? (
+        <div className="mb-3.5">
+          <Label className="mb-1.5 block">Assigned Branch</Label>
+          <Select value={form.branch_id} onValueChange={(v) => set('branch_id', v ?? '')}>
+            <SelectTrigger>
+              <span className={form.branch_id ? undefined : 'text-muted-foreground'}>
+                {form.branch_id
+                  ? (() => { const b = branches.find((b) => String(b.id) === form.branch_id); return b ? `${b.name}${b.location ? ` — ${b.location}` : ''}` : form.branch_id })()
+                  : '— No branch —'}
+              </span>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">— No branch —</SelectItem>
+              {branches.map((b) => <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.location ? ` — ${b.location}` : ''}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
         <div>

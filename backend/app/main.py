@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.v1 import admin, analytics, attendance, audit, auth, branches, categories, customers, dashboard, inventory, orders, org, platform, products, purchase_orders, seed, stock_transfers, suppliers, uploads, users
 from app.api.v1.analytics import sales_router
@@ -45,6 +46,21 @@ app.include_router(analytics.router, prefix=API_PREFIX)
 app.include_router(audit.router, prefix=API_PREFIX)
 app.include_router(attendance.router, prefix=API_PREFIX)
 app.include_router(sales_router, prefix=API_PREFIX)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Ensure CORS headers are present even when an unhandled exception produces a 500."""
+    origin = request.headers.get("origin", "")
+    headers: dict[str, str] = {}
+    if origin and (origin in settings.CORS_ORIGINS or "*" in settings.CORS_ORIGINS):
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+        headers=headers,
+    )
 
 
 @app.get("/health")

@@ -29,11 +29,12 @@ async def create_user(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_roles(UserRole.ADMIN)),
 ) -> UserOut:
+    repo = UserRepository(session)
     org = await session.get(Organization, current_user.org_id)
     if org:
         user_count = await session.scalar(
             select(func.count(User.id)).where(
-                User.org_id == current_user.org_id, User.is_active == True
+                User.org_id == current_user.org_id, User.is_active == True  # noqa: E712
             )
         ) or 0
         if user_count >= org.max_users:
