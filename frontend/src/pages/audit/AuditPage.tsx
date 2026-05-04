@@ -93,7 +93,7 @@ export function AuditPage() {
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <Input value={actionFilter} onChange={(e) => setActionFilter(e.target.value)} placeholder="Filter by action…" className="pl-8 h-8 text-sm" />
         </div>
-        <Select value={entityFilter} onValueChange={setEntityFilter}>
+        <Select value={entityFilter} onValueChange={(v) => setEntityFilter(v ?? '')}>
           <SelectTrigger className="w-40 h-8 text-sm"><SelectValue placeholder="All entities" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="">All entities</SelectItem>

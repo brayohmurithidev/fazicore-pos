@@ -3,8 +3,6 @@ import { Bell, Package, AlertTriangle, X, ArrowRight } from 'lucide-react'
 import { useNavigate } from 'react-router'
 import { useNotifications } from '@/lib/queries'
 import { useSettingsStore } from '@/stores/settings'
-import { cn } from '@/lib/utils'
-
 export function NotificationBell() {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  Users, Plus, Search, Phone, Mail, CreditCard, X, ChevronRight,
+  Users, Plus, Search, Phone, Mail, X, ChevronRight,
   CheckCircle, AlertCircle, Loader2, ArrowDownLeft, Receipt,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
