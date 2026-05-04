@@ -168,34 +168,34 @@ export function AppShell() {
         </nav>
 
         {/* User + actions */}
-        <div className="px-2 py-2.5 border-t border-white/10">
+        <div className="px-2.5 py-3 border-t border-white/10">
           {!collapsed && (
-            <div className="px-3 py-2 mb-1 overflow-hidden">
-              <div className="flex items-center gap-2.5">
-                <Avatar className="w-7 h-7 flex-shrink-0">
-                  <AvatarFallback className="bg-white/15 text-white text-xs font-bold">
+            <div className="px-3 py-3 mb-1 overflow-hidden">
+              <div className="flex items-center gap-3">
+                <Avatar className="w-9 h-9 flex-shrink-0">
+                  <AvatarFallback className="bg-white/15 text-white text-sm font-bold">
                     {user.avatar}
                   </AvatarFallback>
                 </Avatar>
                 <div className="overflow-hidden flex-1">
-                  <div className="text-xs font-semibold text-white truncate">{user.name}</div>
-                  <div className="text-[10px] text-white/40">{branchName}</div>
+                  <div className="text-sm font-semibold text-white truncate">{user.name}</div>
+                  <div className="text-xs text-white/40 truncate">{branchName ?? user.role}</div>
                 </div>
               </div>
               {isClockedIn && clockDisplay && (
-                <div className="flex items-center justify-between mt-2 px-0.5">
-                  <div className="flex items-center gap-1.5 text-[10px] text-white/50">
-                    <div className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
+                <div className="flex items-center justify-between mt-3 px-0.5">
+                  <div className="flex items-center gap-1.5 text-xs text-white/50">
+                    <div className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" />
                     <span>In since {clockDisplay}</span>
                   </div>
                   <button
                     onClick={handleClockOut}
                     disabled={clockOutMutation.isPending}
                     title="Clock Out"
-                    className="text-[10px] text-white/40 hover:text-orange-400 transition-colors disabled:opacity-50 flex items-center gap-0.5"
+                    className="text-xs text-white/40 hover:text-orange-400 transition-colors disabled:opacity-50 flex items-center gap-1 px-2 py-1 rounded"
                   >
-                    <Clock size={10} />
-                    <span>Out</span>
+                    <Clock size={12} />
+                    <span>Clock Out</span>
                   </button>
                 </div>
               )}
@@ -203,15 +203,15 @@ export function AppShell() {
           )}
           <button
             onClick={() => setCollapsed((c) => !c)}
-            className="hidden md:flex w-full items-center justify-center gap-2 px-3 py-2 rounded-md bg-white/7 text-white/50 hover:text-white/80 text-xs mb-1"
+            className="hidden md:flex w-full items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-white/7 text-white/50 hover:text-white/80 text-sm mb-1.5 transition-colors"
           >
-            {collapsed ? <ChevronRight size={14} /> : <><ChevronLeft size={14} /><span>Collapse</span></>}
+            {collapsed ? <ChevronRight size={16} /> : <><ChevronLeft size={16} /><span>Collapse</span></>}
           </button>
           <button
             onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-white/40 hover:text-white/70 text-xs"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-white/40 hover:bg-white/7 hover:text-white/70 text-sm transition-colors"
           >
-            <LogOut size={14} />
+            <LogOut size={16} />
             {!collapsed && <span>Sign Out</span>}
           </button>
         </div>
