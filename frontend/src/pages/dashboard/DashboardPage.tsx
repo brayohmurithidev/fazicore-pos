@@ -58,10 +58,6 @@ export function DashboardPage() {
           total: RECENT_TRANSACTIONS.filter((t) => t.payment === m).reduce((s, t) => s + t.total, 0),
         }))
 
-  const totalBranchSales = !branchesError && apiBranches !== undefined
-    ? 1
-    : BRANCHES.reduce((s, b) => s + b.monthSales, 0)
-
   const greeting = new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening'
 
   return (
@@ -82,7 +78,7 @@ export function DashboardPage() {
         <StatCard label="Items Sold" value={usingApi ? orders.reduce((s, o) => s + o.items.reduce((si, i) => si + i.quantity, 0), 0) : RECENT_TRANSACTIONS.reduce((s, t) => s + t.items, 0)} sub="today" icon={Package} accent="#8B5CF6" />
         <StatCard label="Low Stock" value={lowStockCount} sub="need attention" icon={AlertTriangle} accent="#EF4444" />
         {isMultiBranch
-          ? <StatCard label="Active Branches" value={branches.filter((b) => b.is_active).length} sub="locations" icon={Building2} accent="#059669" />
+          ? <StatCard label="Active Branches" value={branches.filter((b) => (b as { is_active?: boolean }).is_active !== false).length} sub="locations" icon={Building2} accent="#059669" />
           : <StatCard label="Customers Served" value={todayTxCount} sub="today" icon={Building2} accent="#059669" />
         }
       </div>

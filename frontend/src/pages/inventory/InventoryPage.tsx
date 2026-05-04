@@ -1,8 +1,8 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import {
   Search, Plus, ArrowLeftRight, Truck, Package, AlertTriangle, Loader2,
   CheckCircle2, Download, Printer, Pencil, Trash2, SlidersHorizontal,
-  TrendingDown, BarChart3, X, XCircle, RefreshCw, ChevronRight, Barcode,
+  TrendingDown, BarChart3, X, XCircle, ChevronRight, Barcode,
   ShoppingCart,
 } from 'lucide-react'
 import JsBarcode from 'jsbarcode'
@@ -30,7 +30,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import { fmtKES } from '@/lib/data'
 import { resolveImageUrl } from '@/lib/api'
-import type { ApiProduct, ApiCategory, ApiPurchaseOrder, ApiInventoryItem, ApiSupplier, ApiStockTransfer, TransferStatus, ReorderUrgency, AgingBucket } from '@/types/api'
+import type { ApiProduct, ApiCategory, ApiPurchaseOrder, ApiInventoryItem, ApiSupplier, TransferStatus, ReorderUrgency, AgingBucket } from '@/types/api'
 
 // ── Utilities ─────────────────────────────────────────────────────────────
 
@@ -142,7 +142,6 @@ function BarcodePrintModal({ products, open, onClose }: {
     rows.forEach((row) => {
       win.document.write('<div class="row">')
       row.forEach((p) => {
-        const barcodeVal = p.barcode || p.sku || ''
         win.document.write(`<div class="label">
           <div class="name">${p.name}</div>
           <svg id="bc-${p.id}-${Math.random().toString(36).slice(2)}"></svg>
@@ -323,7 +322,6 @@ function ProductFormModal({ open, onClose, initial, categories, allProducts, isP
   const [saveError, setSaveError] = useState<string | null>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const createCat = useCreateCategory()
-  const uploadImage = useUploadProductImage()
 
   useEffect(() => {
     if (!open) return
@@ -448,7 +446,7 @@ function ProductFormModal({ open, onClose, initial, categories, allProducts, isP
                 <Button size="sm" variant="outline" className="h-9 px-2.5 shrink-0" onClick={() => setCreatingCat(false)}>✕</Button>
               </div>
             ) : (
-              <Select value={form.category_id} onValueChange={(v) => { if (v === '__new__') { setCreatingCat(true); setNewCatName('') } else set('category_id', v) }}>
+              <Select value={form.category_id} onValueChange={(v) => { if (v === '__new__') { setCreatingCat(true); setNewCatName('') } else set('category_id', v ?? '') }}>
                 <SelectTrigger>
                   <SelectValue placeholder="— None —">
                     {form.category_id
@@ -466,7 +464,7 @@ function ProductFormModal({ open, onClose, initial, categories, allProducts, isP
           </div>
           <div>
             <Label className="mb-1.5 block text-xs text-gray-500">Unit</Label>
-            <Select value={form.unit} onValueChange={(v) => set('unit', v)}>
+            <Select value={form.unit} onValueChange={(v) => set('unit', v ?? '')}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>{['piece','bottle','packet','bag','tin','pack','tub','crate','litre','kg','100g','dozen'].map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
             </Select>
@@ -499,7 +497,7 @@ function ProductFormModal({ open, onClose, initial, categories, allProducts, isP
           </div>
           <div>
             <Label className="mb-1.5 block text-xs text-gray-500">VAT Rate</Label>
-            <Select value={form.vat_rate} onValueChange={(v) => set('vat_rate', v)}>
+            <Select value={form.vat_rate} onValueChange={(v) => set('vat_rate', v ?? '')}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="0">0% — Zero-rated</SelectItem>
@@ -1028,7 +1026,7 @@ function ProductsTab({ branchId }: { branchId?: number }) {
             </button>
           )}
         </div>
-        <Select value={catFilter} onValueChange={setCatFilter}>
+        <Select value={catFilter} onValueChange={(v) => setCatFilter(v ?? 'all')}>
           <SelectTrigger className="w-40"><SelectValue placeholder="All Categories" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Categories</SelectItem>
