@@ -603,7 +603,7 @@ export function useAnalyticsSummary(params: {
   })
 }
 
-export function useAnalyticsByPayment(params: { date_from?: string; date_to?: string; branch_id?: number }) {
+export function useAnalyticsByPayment(params: { period?: 'day' | 'week' | 'month'; date_from?: string; date_to?: string; branch_id?: number }) {
   return useQuery({
     queryKey: ['analytics-payment', params],
     queryFn: () => api.get('/analytics/by-payment', { params }).then((r) => r.data),
@@ -611,7 +611,7 @@ export function useAnalyticsByPayment(params: { date_from?: string; date_to?: st
   })
 }
 
-export function useAnalyticsByCashier(params: { date_from?: string; date_to?: string; branch_id?: number }) {
+export function useAnalyticsByCashier(params: { period?: 'day' | 'week' | 'month'; date_from?: string; date_to?: string; branch_id?: number }) {
   return useQuery({
     queryKey: ['analytics-cashier', params],
     queryFn: () => api.get('/analytics/by-cashier', { params }).then((r) => r.data),

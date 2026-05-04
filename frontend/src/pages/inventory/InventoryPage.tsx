@@ -1529,7 +1529,7 @@ function NewTransferModal({ open, onClose, products, branches }: {
             <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-end">
               <div>
                 <Label className="mb-1.5 block text-xs text-gray-500">From Branch</Label>
-                <Select value={fromBranch} onValueChange={setFromBranch}>
+                <Select value={fromBranch} onValueChange={(v) => setFromBranch(v ?? '')}>
                   <SelectTrigger>
                     <span className={fromBranch ? undefined : 'text-muted-foreground'}>
                       {fromBranch ? (branches.find((b) => String(b.id) === fromBranch)?.name ?? fromBranch) : 'Select'}
@@ -1541,7 +1541,7 @@ function NewTransferModal({ open, onClose, products, branches }: {
               <ArrowLeftRight size={18} className="text-gray-400 mb-2.5 flex-shrink-0" />
               <div>
                 <Label className="mb-1.5 block text-xs text-gray-500">To Branch</Label>
-                <Select value={toBranch} onValueChange={setToBranch}>
+                <Select value={toBranch} onValueChange={(v) => setToBranch(v ?? '')}>
                   <SelectTrigger>
                     <span className={toBranch ? undefined : 'text-muted-foreground'}>
                       {toBranch ? (branches.find((b) => String(b.id) === toBranch)?.name ?? toBranch) : 'Select'}
@@ -1553,7 +1553,7 @@ function NewTransferModal({ open, onClose, products, branches }: {
             </div>
             <div>
               <Label className="mb-1.5 block text-xs text-gray-500">Product</Label>
-              <Select value={productId} onValueChange={setProductId}>
+              <Select value={productId} onValueChange={(v) => setProductId(v ?? '')}>
                 <SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger>
                 <SelectContent>{products.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.name} ({p.stock_quantity} {p.unit})</SelectItem>)}</SelectContent>
               </Select>
@@ -2164,7 +2164,6 @@ type Tab = 'products' | 'orders' | 'transfers' | 'suppliers' | 'reports'
 export function InventoryPage() {
   const { user } = useAuthStore()
   const isAdmin = user?.role === 'admin'
-  const userBranchId = user?.branch ? (Number(user.branch) || null) : null
   const [tab, setTab] = useState<Tab>('products')
   const [selectedBranchId, setSelectedBranchId] = useState<number | null>(null)
 

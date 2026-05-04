@@ -508,7 +508,6 @@ export function POSPage() {
     return s + (i.itemDiscount > 0 ? Math.round(line * i.itemDiscount / 100) : 0)
   }, 0)
   const cartDiscountAmt = Math.round(subtotal * discount / 100)
-  const discountAmt = itemDiscountTotal + cartDiscountAmt
   const vatTotal = cart.reduce((s, i) => {
     if (!i.vatRate) return s
     const line = i.price * i.qty
