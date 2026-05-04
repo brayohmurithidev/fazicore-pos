@@ -35,7 +35,7 @@ class Product(Base, TimestampMixin):
     attributes: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     category: Mapped["Category | None"] = relationship("Category", back_populates="products")
-    inventory: Mapped[list["Inventory"]] = relationship("Inventory", back_populates="product")
+    inventory: Mapped[list["Inventory"]] = relationship("Inventory", back_populates="product", cascade="all, delete-orphan", passive_deletes=True)
     order_items: Mapped[list["OrderItem"]] = relationship("OrderItem", back_populates="product")
     variants: Mapped[list["Product"]] = relationship("Product", foreign_keys=[parent_product_id], back_populates="parent")
     parent: Mapped["Product | None"] = relationship("Product", foreign_keys=[parent_product_id], back_populates="variants", remote_side=[id])

@@ -20,7 +20,7 @@ class StockTransfer(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), nullable=False, index=True)
     transfer_number: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
-    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), nullable=False)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
     from_branch_id: Mapped[int] = mapped_column(ForeignKey("branches.id"), nullable=False)
     to_branch_id: Mapped[int] = mapped_column(ForeignKey("branches.id"), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
