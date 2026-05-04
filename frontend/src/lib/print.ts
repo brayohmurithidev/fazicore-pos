@@ -118,15 +118,22 @@ export function printReceipt(sale: SaleInfo, settings: Settings) {
 <meta charset="utf-8">
 <title>Receipt</title>
 <style>
-  @page { size: 58mm auto; margin: 2mm 3mm; }
+  @page { size: 58mm auto; margin: 0; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 58mm;
+    max-width: 58mm;
+  }
   body {
     font-family: 'Courier New', Courier, monospace;
     font-size: 9pt;
     line-height: 1.35;
     color: #000;
     background: #fff;
-    width: 52mm;
+    padding: 2mm 3mm;
+  }
+  @media print {
+    html, body { width: 58mm; max-width: 58mm; }
   }
 </style>
 </head>
@@ -135,5 +142,6 @@ export function printReceipt(sale: SaleInfo, settings: Settings) {
 
   win.document.write(html)
   win.document.close()
-  win.onload = () => { win.focus(); win.print(); win.close() }
+  // Delay print slightly so CSS applies before the dialog opens
+  setTimeout(() => { win.focus(); win.print(); win.onafterprint = () => win.close() }, 250)
 }
