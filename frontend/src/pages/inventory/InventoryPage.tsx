@@ -29,6 +29,7 @@ import {
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import { toast } from '@/lib/toast'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { fmtKES } from '@/lib/data'
 import { resolveImageUrl } from '@/lib/api'
 import type { ApiProduct, ApiCategory, ApiPurchaseOrder, ApiInventoryItem, ApiSupplier, TransferStatus, ReorderUrgency, AgingBucket } from '@/types/api'
@@ -897,6 +898,7 @@ function ProductsTab({ branchId }: { branchId?: number }) {
   }, [products, search, catFilter, stockFilter])
 
   const atLimit = orgInfo ? products.filter((p) => p.is_active).length >= orgInfo.max_products : false
+  const isLargeScreen = useMediaQuery('(min-width: 1024px)')
   const detailOpen = !!currentSelected
 
   // Keyboard navigation
@@ -1193,8 +1195,8 @@ function ProductsTab({ branchId }: { branchId?: number }) {
                 canManage={canManage}
               />
             </div>
-            <Sheet open={detailOpen && !!currentSelected} onOpenChange={(v) => !v && setSelectedProduct(null)}>
-              <SheetContent side="right" className="w-full max-w-sm p-0 lg:hidden">
+            <Sheet open={!isLargeScreen && detailOpen && !!currentSelected} onOpenChange={(v) => !v && setSelectedProduct(null)}>
+              <SheetContent side="right" className="w-full max-w-sm p-0">
                 <ProductDetailPane
                   product={currentSelected}
                   categories={categories}

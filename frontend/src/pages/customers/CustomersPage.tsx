@@ -15,6 +15,7 @@ import {
   useCustomerInvoices, useCustomerPayments, useRecordCreditPayment,
 } from '@/lib/queries'
 import { toast } from '@/lib/toast'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useFeature } from '@/hooks/useFeature'
 import { UpgradeWall } from '@/components/shared/UpgradeWall'
 import type { ApiCustomer, ApiCreditInvoice } from '@/types/api'
@@ -304,6 +305,7 @@ function CustomerDetail({ customer, onClose, onEdit }: {
 
 export function CustomersPage() {
   const hasCreditSystem = useFeature('credit_system')
+  const isMediumScreen = useMediaQuery('(min-width: 768px)')
   const [q, setQ] = useState('')
   const [selected, setSelected] = useState<ApiCustomer | null>(null)
   const [formOpen, setFormOpen] = useState(false)
@@ -401,8 +403,8 @@ export function CustomersPage() {
               onEdit={() => openEdit(selected)}
             />
           </div>
-          <Sheet open={!!selected} onOpenChange={(v) => !v && setSelected(null)}>
-            <SheetContent side="right" className="w-full max-w-sm p-0 md:hidden">
+          <Sheet open={!isMediumScreen && !!selected} onOpenChange={(v) => !v && setSelected(null)}>
+            <SheetContent side="right" className="w-full max-w-sm p-0">
               <CustomerDetail
                 customer={selected}
                 onClose={() => setSelected(null)}
