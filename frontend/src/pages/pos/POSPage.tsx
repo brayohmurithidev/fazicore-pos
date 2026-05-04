@@ -1,5 +1,5 @@
-import { useState, useMemo, useRef, useEffect } from 'react'
-import { Search, Trash2, Minus, Plus, Receipt, SlidersHorizontal, BookmarkCheck, Bookmark, Keyboard, Building2, X as XIcon } from 'lucide-react'
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import { Search, Trash2, Minus, Plus, Receipt, SlidersHorizontal, BookmarkCheck, Bookmark, Keyboard, Building2, X as XIcon, ScanLine } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -13,6 +13,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import { useCategories, useProducts, useCreateOrder, useBranches, usePermissions } from '@/lib/queries'
 import { useFeatureFlags } from '@/hooks/useFeature'
+import { useBarcodeScanner } from '@/hooks/useBarcodeScanner'
 import type { CartItem, Product, SaleInfo } from '@/types'
 
 // ── Kbd hint badge ────────────────────────────────────────────────────────────
@@ -278,6 +279,8 @@ export function POSPage() {
   const [lastSale, setLastSale] = useState<SaleInfo | null>(null)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [mobileCartOpen, setMobileCartOpen] = useState(false)
+  const [scanFeedback, setScanFeedback] = useState<{ ok: boolean; text: string } | null>(null)
+  const scanFeedbackTimer = useRef<ReturnType<typeof setTimeout>>()
 
   const createOrder = useCreateOrder()
   const isAdmin = user?.role === 'admin'
@@ -306,6 +309,9 @@ export function POSPage() {
     pendingApproval.current?.()
     pendingApproval.current = null
   }
+
+  const noModalOpen = !payOpen && !receiptOpen && !approvalOpen && !discountOpen && !shortcutsOpen && !notesOpen
+
   const userBranchId = user?.branch ? (Number(user.branch) || undefined) : undefined
 
   // ── Data ─────────────────────────────────────────────────────────────────
@@ -346,6 +352,33 @@ export function POSPage() {
       })),
     [apiProducts]
   )
+
+  // ── Barcode scanner ──────────────────────────────────────────────────────
+  const showScanFeedback = useCallback((ok: boolean, text: string) => {
+    clearTimeout(scanFeedbackTimer.current)
+    setScanFeedback({ ok, text })
+    scanFeedbackTimer.current = setTimeout(() => setScanFeedback(null), 1800)
+  }, [])
+
+  const handleScan = useCallback((code: string) => {
+    const match = products.find((p) => p.barcode === code || p.sku === code)
+    if (match) {
+      setCart((prev) => {
+        const existing = prev.find((i) => i.id === match.id)
+        const currentQty = existing?.qty ?? 0
+        if (currentQty >= match.stock) return prev
+        if (existing) return prev.map((i) => i.id === match.id ? { ...i, qty: i.qty + 1 } : i)
+        return [...prev, { ...match, qty: 1, itemDiscount: 0 }]
+      })
+      setSearch('')
+      showScanFeedback(true, match.name)
+    } else {
+      setSearch(code)
+      showScanFeedback(false, code)
+    }
+  }, [products, showScanFeedback])
+
+  useBarcodeScanner({ onScan: handleScan, enabled: noModalOpen })
 
   // Client-side filter (no API call per keystroke)
   const filtered = useMemo(() => {
@@ -599,34 +632,29 @@ export function POSPage() {
         )}
 
         {/* Search bar */}
-        <div className="px-4 py-3 bg-white border-b border-gray-200 space-y-2">
+        <div className="px-4 py-3 bg-white border-b border-gray-200">
           <div className="relative">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <Input
               ref={searchRef}
               className="pl-9 pr-4 bg-gray-50 border-gray-200 focus:bg-white"
-              placeholder="Search products…"
+              placeholder="Search or scan barcode…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={handleSearchKeyDown}
             />
           </div>
-          {settings.barcodeMode && flags.barcode_mode !== false && (
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400 uppercase tracking-wide">Scan</span>
-              <Input
-                className="pl-12 pr-4 bg-amber-50 border-amber-200 focus:bg-white font-mono text-sm"
-                placeholder="Scan barcode here…"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    const val = (e.target as HTMLInputElement).value.trim()
-                    if (val) {
-                      const match = products.find((p) => p.barcode === val || p.sku === val)
-                      if (match) { addToCart(match); (e.target as HTMLInputElement).value = '' }
-                    }
-                  }
-                }}
-              />
+
+          {/* Scan feedback — appears briefly after each scan */}
+          {scanFeedback && (
+            <div className={`flex items-center gap-1.5 mt-1.5 text-xs font-medium px-1 ${
+              scanFeedback.ok ? 'text-green-600' : 'text-red-500'
+            }`}>
+              <ScanLine size={12} />
+              {scanFeedback.ok
+                ? <span>Added: <span className="font-semibold">{scanFeedback.text}</span></span>
+                : <span>Not found: <span className="font-mono">{scanFeedback.text}</span></span>
+              }
             </div>
           )}
         </div>
