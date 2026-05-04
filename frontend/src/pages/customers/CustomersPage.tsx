@@ -6,13 +6,12 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
-  useCustomers, useCreateCustomer, useUpdateCustomer, useDeleteCustomer,
+  useCustomers, useCreateCustomer, useUpdateCustomer,
   useCustomerInvoices, useCustomerPayments, useRecordCreditPayment,
 } from '@/lib/queries'
 import { useFeature } from '@/hooks/useFeature'
@@ -142,7 +141,7 @@ function RecordPaymentModal({ open, onClose, customer, preselectedInvoice }: {
           </div>
           <div>
             <Label className="text-xs text-gray-500 mb-1.5 block">Payment Method</Label>
-            <Select value={method} onValueChange={setMethod}>
+            <Select value={method} onValueChange={(v) => setMethod(v ?? 'cash')}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="cash">Cash</SelectItem>
@@ -183,7 +182,6 @@ function CustomerDetail({ customer, onClose, onEdit }: {
   const [selectedInvoice, setSelectedInvoice] = useState<ApiCreditInvoice | null>(null)
   const { data: invoices = [], isLoading: invLoading } = useCustomerInvoices(customer.id)
   const { data: payments = [], isLoading: pmtLoading } = useCustomerPayments(customer.id)
-  const del = useDeleteCustomer()
 
   const openPayment = (inv?: ApiCreditInvoice) => {
     setSelectedInvoice(inv ?? null)

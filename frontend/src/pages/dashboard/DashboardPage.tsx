@@ -42,8 +42,6 @@ export function DashboardPage() {
   const usingApi = !ordersError && orders !== undefined
   const branches = (!branchesError && apiBranches !== undefined) ? apiBranches : BRANCHES
   const isMultiBranch = branches.length > 1
-  const recentTx = usingApi ? orders : RECENT_TRANSACTIONS
-
   const todayRevenue = dashData?.today_revenue ?? (usingApi ? 0 : RECENT_TRANSACTIONS.reduce((s, t) => s + t.total, 0))
   const todayTxCount = dashData?.today_transactions ?? (usingApi ? 0 : RECENT_TRANSACTIONS.length)
   const lowStockCount = dashData?.low_stock_count ?? 0

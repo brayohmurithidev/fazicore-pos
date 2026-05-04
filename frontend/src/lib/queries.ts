@@ -4,7 +4,7 @@ import type {
   ApiBranch, ApiAttendance, ApiCategory, ApiCustomer, ApiCreditInvoice, ApiCreditPayment, ApiAuditLog,
   ApiInventoryItem, ApiInventoryTransaction, ApiOrder, ApiProduct,
   ApiPurchaseOrder, ApiUser, ApiOrgInfo, ApiSubscriptionInfo, ApiSupplier, ApiStockTransfer,
-  ApiPermissions, ApiNotifications, ApiAnalyticsSummary, ApiAnalyticsDailyItem, ReorderSuggestion, AgingItem, DashboardData, TokenResponse,
+  ApiPermissions, ApiNotifications, ApiAnalyticsDailyItem, ReorderSuggestion, AgingItem, DashboardData, TokenResponse,
 } from '@/types/api'
 
 export const FEATURE_CATALOG = [
