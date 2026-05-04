@@ -2,6 +2,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button'
 import { Printer, MessageSquare } from 'lucide-react'
 import { useSettingsStore } from '@/stores/settings'
+import { printReceipt } from '@/lib/print'
 import type { SaleInfo } from '@/types'
 
 interface Props {
@@ -110,7 +111,7 @@ export function ReceiptModal({ open, onClose, sale }: Props) {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="flex-1" onClick={() => window.print()}>
+          <Button variant="outline" className="flex-1" onClick={() => printReceipt(sale, settings)}>
             <Printer size={14} className="mr-2" /> Print Invoice
           </Button>
           {showSms && (
@@ -205,7 +206,7 @@ export function ReceiptModal({ open, onClose, sale }: Props) {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="flex-1" onClick={() => window.print()}>
+          <Button variant="outline" className="flex-1" onClick={() => printReceipt(sale, settings)}>
             <Printer size={14} className="mr-2" /> Print Receipt
           </Button>
           {showSms && (

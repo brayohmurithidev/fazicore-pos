@@ -14,6 +14,7 @@ import { useSettingsStore } from '@/stores/settings'
 import { useCategories, useProducts, useCreateOrder, useBranches, usePermissions } from '@/lib/queries'
 import { useFeatureFlags } from '@/hooks/useFeature'
 import { useBarcodeScanner } from '@/hooks/useBarcodeScanner'
+import { printReceipt } from '@/lib/print'
 import type { CartItem, Product, SaleInfo } from '@/types'
 
 // ── Kbd hint badge ────────────────────────────────────────────────────────────
@@ -603,7 +604,7 @@ export function POSPage() {
     setOrderNotes('')
     // Auto-print receipt if enabled
     if (settings.autoPrint) {
-      setTimeout(() => window.print(), 400)
+      setTimeout(() => printReceipt(sale, settings), 400)
     }
   }
 
