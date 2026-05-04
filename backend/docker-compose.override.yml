@@ -1,0 +1,23 @@
+# Local development override — auto-merged by Docker Compose.
+# Builds the image from source instead of pulling from GHCR.
+# Do NOT copy this file to the production server.
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/app
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile

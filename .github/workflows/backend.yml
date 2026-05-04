@@ -1,0 +1,90 @@
+name: Backend CI/CD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - backend/**
+  workflow_dispatch:
+
+jobs:
+  # ── Build & push image to GHCR ─────────────────────────────────────────────
+  build:
+    name: Build & push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      tag: ${{ github.sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Lowercase image name
+        id: meta
+        run: |
+          IMAGE="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/api"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ github.sha }}
+            ${{ steps.meta.outputs.image }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── Deploy to production server ────────────────────────────────────────────
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        env:
+          API_IMAGE: ${{ needs.build.outputs.image }}:${{ needs.build.outputs.tag }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: 22
+          envs: API_IMAGE,GHCR_USER,GHCR_TOKEN
+          script: |
+            set -e
+            cd ${{ secrets.BACKEND_PATH }}
+
+            # Authenticate to GHCR so the server can pull the private image
+            echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
+
+            # Pull the new image
+            docker pull "${API_IMAGE}"
+
+            # Run migrations against the new image before switching traffic
+            API_IMAGE="${API_IMAGE}" docker compose --profile migrate run --rm migrate
+
+            # Swap api + worker to new image, leave db/redis/minio/nginx untouched
+            API_IMAGE="${API_IMAGE}" docker compose up -d --no-deps --pull never api worker
+
+            # Prune images older than 24h to keep the server clean
+            docker image prune -a --force --filter "until=24h"
