@@ -5,6 +5,7 @@ import {
   ChevronLeft, ChevronRight, LogOut, BarChart3, UserCheck, Menu, X, Clock,
 } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Toaster } from '@/components/ui/Toaster'
 import { RoleBadge } from '@/components/shared/RoleBadge'
 import { NotificationBell } from '@/components/shared/NotificationBell'
 import { useAuthStore } from '@/stores/auth'
@@ -152,7 +153,7 @@ export function AppShell() {
                   )
                 }
               >
-                <Icon size={21} className="flex-shrink-0" />
+                <Icon size={26} className="flex-shrink-0" />
                 {!collapsed && <span className="flex-1 whitespace-nowrap">{item.label}</span>}
                 {showBadge && !collapsed && (
                   <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-px rounded-full">
@@ -258,6 +259,7 @@ export function AppShell() {
           <Outlet />
         </main>
       </div>
+      <Toaster />
     </div>
   )
 }

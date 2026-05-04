@@ -14,6 +14,7 @@ import {
   useCustomers, useCreateCustomer, useUpdateCustomer,
   useCustomerInvoices, useCustomerPayments, useRecordCreditPayment,
 } from '@/lib/queries'
+import { toast } from '@/lib/toast'
 import { useFeature } from '@/hooks/useFeature'
 import { UpgradeWall } from '@/components/shared/UpgradeWall'
 import type { ApiCustomer, ApiCreditInvoice } from '@/types/api'
@@ -46,8 +47,8 @@ function CustomerFormModal({ open, onClose, initial }: {
     setError(null)
     try {
       const payload = { name: form.name.trim(), phone: form.phone || null, email: form.email || null, address: form.address || null, notes: form.notes || null }
-      if (initial) await update.mutateAsync({ id: initial.id, data: payload })
-      else await create.mutateAsync(payload)
+      if (initial) { await update.mutateAsync({ id: initial.id, data: payload }); toast.success('Customer updated') }
+      else { await create.mutateAsync(payload); toast.success('Customer created') }
       onClose()
     } catch (e: unknown) {
       setError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Failed to save customer')
@@ -120,6 +121,7 @@ function RecordPaymentModal({ open, onClose, customer, preselectedInvoice }: {
           notes: notes || null,
         },
       })
+      toast.success('Payment recorded')
       onClose()
     } catch (e: unknown) {
       setError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Payment failed')

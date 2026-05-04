@@ -28,6 +28,7 @@ import {
 } from '@/lib/queries'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
+import { toast } from '@/lib/toast'
 import { fmtKES } from '@/lib/data'
 import { resolveImageUrl } from '@/lib/api'
 import type { ApiProduct, ApiCategory, ApiPurchaseOrder, ApiInventoryItem, ApiSupplier, TransferStatus, ReorderUrgency, AgingBucket } from '@/types/api'
@@ -955,27 +956,32 @@ function ProductsTab({ branchId }: { branchId?: number }) {
       if (editProduct) {
         await updateProduct.mutateAsync({ id: editProduct.id, data })
         if (imageFile) await uploadImage.mutateAsync({ productId: editProduct.id, file: imageFile })
+        toast.success('Product updated')
       } else {
         const created = await createProduct.mutateAsync(data) as ApiProduct
         if (initialStock > 0) {
           await adjustInventory.mutateAsync({ product_id: created.id, branch_id: user?.branch ? (Number(user.branch) || null) : null, qty_change: initialStock, notes: 'Initial stock' })
         }
         if (imageFile) await uploadImage.mutateAsync({ productId: created.id, file: imageFile })
+        toast.success('Product created')
       }
       setAddOpen(false); setEditProduct(null)
     } catch (err) {
       const limit = parseLimitError(err)
-      if (limit) { setAddOpen(false); setLimitError(limit) } else throw err
+      if (limit) { setAddOpen(false); setLimitError(limit) }
+      else { toast.error('Failed to save product'); throw err }
     }
   }
 
   const handleAdjust = async (data: Record<string, unknown>) => {
     await adjustInventory.mutateAsync(data)
+    toast.success('Stock adjusted')
     setAdjustProduct(null)
   }
 
   const handleDelete = async (product: ApiProduct) => {
     await deleteProduct.mutateAsync(product.id)
+    toast.success('Product deleted')
     setDeleteConfirm(null)
     if (selectedProduct?.id === product.id) setSelectedProduct(null)
   }
@@ -985,6 +991,7 @@ function ProductsTab({ branchId }: { branchId?: number }) {
     setBulkDeletePending(true)
     try {
       await Promise.all([...selectedIds].map((id) => deleteProduct.mutateAsync(id)))
+      toast.success(`${selectedIds.size} product${selectedIds.size > 1 ? 's' : ''} deleted`)
       if (selectedProduct && selectedIds.has(selectedProduct.id)) setSelectedProduct(null)
       setSelectedIds(new Set())
     } finally {
@@ -1278,6 +1285,7 @@ function NewPOModal({ open, onClose, products, branches }: {
       unit_cost: parseFloat(l.unit_cost) || 0,
     }))
     await createPO.mutateAsync({ supplier, branch_id: branchId ? Number(branchId) : null, items })
+    toast.success('Purchase order created')
     setSupplier(''); setBranchId(''); setLines([{ product_id: '', product_name: '', qty: '', unit_cost: '' }])
     onClose()
   }
@@ -1463,12 +1471,12 @@ function PurchaseOrdersTab({ products, branches }: { products: ApiProduct[]; bra
                   <div className="flex items-center gap-1.5">
                     {po.status === 'pending' && (
                       <>
-                        <Button size="sm" variant="outline" className="h-7 text-xs" disabled={updateStatus.isPending} onClick={() => updateStatus.mutate({ id: po.id, status: 'transit' })}>Mark In Transit</Button>
-                        <button onClick={() => deletePO.mutate(po.id)} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors"><Trash2 size={13} /></button>
+                        <Button size="sm" variant="outline" className="h-7 text-xs" disabled={updateStatus.isPending} onClick={() => updateStatus.mutate({ id: po.id, status: 'transit' }, { onSuccess: () => toast.success('Marked in transit') })}>Mark In Transit</Button>
+                        <button onClick={() => deletePO.mutate(po.id, { onSuccess: () => toast.success('Purchase order deleted') })} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors"><Trash2 size={13} /></button>
                       </>
                     )}
                     {po.status === 'transit' && (
-                      <Button size="sm" className="h-7 text-xs bg-green-600 hover:bg-green-700" disabled={updateStatus.isPending} onClick={() => updateStatus.mutate({ id: po.id, status: 'received' })}>
+                      <Button size="sm" className="h-7 text-xs bg-green-600 hover:bg-green-700" disabled={updateStatus.isPending} onClick={() => updateStatus.mutate({ id: po.id, status: 'received' }, { onSuccess: () => toast.success('Stock received') })}>
                         <CheckCircle2 size={12} className="mr-1" />Receive Stock
                       </Button>
                     )}
@@ -1609,7 +1617,9 @@ function TransfersTab({ products, branches }: { products: ApiProduct[]; branches
   )
 
   const act = (id: number, action: 'mark-transit' | 'confirm' | 'cancel') =>
-    transferAction.mutate({ id, action })
+    transferAction.mutate({ id, action }, {
+      onSuccess: () => toast.success(action === 'confirm' ? 'Transfer confirmed' : action === 'cancel' ? 'Transfer cancelled' : 'Marked in transit'),
+    })
 
   return (
     <>
@@ -1701,8 +1711,8 @@ function SuppliersTab() {
 
   const handleSave = async () => {
     const data = { name: form.name.trim(), contact_name: form.contact_name || null, phone: form.phone || null, email: form.email || null, address: form.address || null, notes: form.notes || null }
-    if (editSupplier) await updateSupplier.mutateAsync({ id: editSupplier.id, data })
-    else await createSupplier.mutateAsync(data)
+    if (editSupplier) { await updateSupplier.mutateAsync({ id: editSupplier.id, data }); toast.success('Supplier updated') }
+    else { await createSupplier.mutateAsync(data); toast.success('Supplier created') }
     setAddOpen(false)
   }
 
@@ -1748,7 +1758,7 @@ function SuppliersTab() {
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1.5">
                     <Button size="sm" variant="outline" className="h-7 w-7 p-0" onClick={() => openEdit(s)}><Pencil size={12} /></Button>
-                    <Button size="sm" variant="outline" className="h-7 w-7 p-0 text-red-600 hover:text-red-700 border-red-200" onClick={() => { if (window.confirm(`Delete ${s.name}?`)) deleteSupplier.mutate(s.id) }}><Trash2 size={12} /></Button>
+                    <Button size="sm" variant="outline" className="h-7 w-7 p-0 text-red-600 hover:text-red-700 border-red-200" onClick={() => { if (window.confirm(`Delete ${s.name}?`)) deleteSupplier.mutate(s.id, { onSuccess: () => toast.success('Supplier deleted') }) }}><Trash2 size={12} /></Button>
                   </div>
                 </TableCell>
               </TableRow>

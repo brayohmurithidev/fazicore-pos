@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { RoleBadge } from '@/components/shared/RoleBadge'
 import { LimitReachedDialog, parseLimitError, type LimitError } from '@/components/shared/LimitReachedDialog'
 import { useUsers, useCreateUser, useDeleteUser, useUpdateUserById, useBranches, useOrgInfo } from '@/lib/queries'
+import { toast } from '@/lib/toast'
 import type { ApiUser, ApiBranch, ApiRole } from '@/types/api'
 
 const ROLES: { id: ApiRole; label: string; desc: string }[] = [
@@ -68,15 +69,17 @@ export function UsersPage() {
     try {
       if (editUser) {
         await updateUser.mutateAsync({ id: editUser.id, data })
+        toast.success('User updated')
       } else {
         await createUser.mutateAsync(data)
+        toast.success('User created')
       }
       setAddOpen(false)
       setEditUser(null)
     } catch (err) {
       const limit = parseLimitError(err)
       if (limit) { setAddOpen(false); setLimitError(limit) }
-      else throw err
+      else { toast.error('Failed to save user'); throw err }
     }
   }
 

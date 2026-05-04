@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { LimitReachedDialog, parseLimitError, type LimitError } from '@/components/shared/LimitReachedDialog'
 import { useBranches, useCreateBranch, useOrgInfo } from '@/lib/queries'
+import { toast } from '@/lib/toast'
 import type { ApiBranch } from '@/types/api'
 
 function StatCard({ label, value, icon: Icon, accent = '#111827' }: { label: string; value: string | number; icon: React.ElementType; accent?: string }) {
@@ -126,10 +127,11 @@ export function BranchesPage() {
             onClose={() => setAddOpen(false)}
             onSave={(data) => {
               createBranch.mutate(data, {
-                onSuccess: () => setAddOpen(false),
+                onSuccess: () => { setAddOpen(false); toast.success('Branch created') },
                 onError: (err) => {
                   const limit = parseLimitError(err)
                   if (limit) { setAddOpen(false); setLimitError(limit) }
+                  else toast.error('Failed to create branch')
                 },
               })
             }}
