@@ -224,7 +224,7 @@ function StepPlan({ form, onChange, plans }: {
           const isSelected = form.plan_slug === plan.slug;
           const features = Array.isArray(plan.features)
             ? plan.features as string[]
-            : Object.values(plan.features as Record<string, string>);
+            : Object.values(plan.features as unknown as Record<string, string>);
 
           return (
             <button
@@ -536,7 +536,6 @@ export default function CustomerOnboardPage() {
 
         <div className="space-y-1 flex-1">
           {STEPS.map((s) => {
-            const Icon = s.icon;
             const done = step > s.id;
             const active = step === s.id;
             return (
