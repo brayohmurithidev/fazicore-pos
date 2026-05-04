@@ -1295,7 +1295,7 @@ function NewPOModal({ open, onClose, products, branches }: {
           </div>
           <div className="col-span-2">
             <Label className="mb-1.5 block text-xs text-gray-500">Deliver to Branch</Label>
-            <Select value={branchId} onValueChange={setBranchId}>
+            <Select value={branchId} onValueChange={(v) => setBranchId(v ?? '')}>
               <SelectTrigger>
                 <span className={branchId ? undefined : 'text-muted-foreground'}>
                   {branchId ? (branches.find((b) => String(b.id) === branchId)?.name ?? branchId) : '— Any branch —'}
@@ -1326,7 +1326,7 @@ function NewPOModal({ open, onClose, products, branches }: {
                   <td className="px-2 py-1.5">
                     <Select value={line.product_id} onValueChange={(v) => {
                       const p = products.find((x) => x.id === Number(v))
-                      setLines((l) => l.map((r, idx) => idx === i ? { ...r, product_id: v, product_name: p?.name ?? '', unit_cost: p?.cost ? String(p.cost) : r.unit_cost } : r))
+                      setLines((l) => l.map((r, idx) => idx === i ? { ...r, product_id: v ?? '', product_name: p?.name ?? '', unit_cost: p?.cost ? String(p.cost) : r.unit_cost } : r))
                     }}>
                       <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select product" /></SelectTrigger>
                       <SelectContent>{products.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}</SelectContent>
@@ -1410,7 +1410,7 @@ function PurchaseOrdersTab({ products, branches }: { products: ApiProduct[]; bra
   return (
     <>
       <div className="flex items-center gap-2.5 mb-4">
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
+        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v ?? '')}>
           <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All statuses</SelectItem>
