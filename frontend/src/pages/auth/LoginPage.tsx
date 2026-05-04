@@ -261,7 +261,7 @@ export function LoginPage() {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6">
         <Logo />
-        <div className="bg-white border border-gray-200 rounded-2xl p-8 sm:p-10 w-full max-w-xs sm:max-w-sm shadow-sm">
+        <div className="bg-white border border-gray-200 rounded-2xl p-6 sm:p-10 w-full sm:max-w-sm shadow-sm">
           <button
             onClick={handleBack}
             className="flex items-center gap-1 text-sm text-gray-500 mb-6 hover:text-gray-900"
@@ -318,14 +318,14 @@ export function LoginPage() {
               </div>
 
               {/* On-screen numpad — touch/tablet only */}
-              <div className="grid grid-cols-3 gap-2.5 md:hidden">
+              <div className="grid grid-cols-3 gap-3 md:hidden">
                 {['1','2','3','4','5','6','7','8','9','','0','del'].map((k, i) =>
                   k === '' ? <div key={i} /> : (
                     <button
                       key={i}
                       onClick={() => handlePinKey(k)}
                       disabled={pinLogin.isPending}
-                      className={`py-4 sm:py-5 text-xl sm:text-2xl font-semibold rounded-xl border transition-colors disabled:opacity-50 ${
+                      className={`py-5 text-2xl font-semibold rounded-xl border transition-colors disabled:opacity-50 active:scale-95 ${
                         k === 'del'
                           ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
                           : 'bg-gray-50 text-gray-900 border-gray-200 hover:bg-gray-100 active:bg-gray-200'

@@ -24,7 +24,7 @@ import {
   useInventoryTransactions, useProductInventory,
   useSuppliers, useCreateSupplier, useUpdateSupplier, useDeleteSupplier,
   useStockTransfers, useInitiateTransfer, useTransferAction, useUploadProductImage,
-  useReorderSuggestions, useInventoryAging,
+  useReorderSuggestions, useInventoryAging, usePermissions,
 } from '@/lib/queries'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
@@ -847,7 +847,11 @@ type StockFilter = 'all' | 'in-stock' | 'low' | 'out'
 
 function ProductsTab({ branchId }: { branchId?: number }) {
   const { user } = useAuthStore()
-  const canManage = user?.role !== 'stock'
+  const { data: permsData } = usePermissions()
+  const role = user?.role
+  const canManage = role === 'admin' || role === 'manager'
+    || (role === 'cashier' && permsData?.permissions?.cashier?.manage_inventory === true)
+    || (role === 'stock' && permsData?.permissions?.stock?.manage_inventory !== false)
   const [search, setSearch] = useState('')
   const [catFilter, setCatFilter] = useState('all')
   const [stockFilter, setStockFilter] = useState<StockFilter>('all')
