@@ -1,3 +1,4 @@
+import React from 'react'
 import { Printer, Text, Row, Line, Cut, Br, render } from 'react-thermal-printer'
 import type { SaleInfo, Settings } from '@/types'
 
@@ -9,6 +10,11 @@ function clip(s: string, max: number) {
 
 function fmt(n: number, cur: string) {
   return `${cur} ${Math.round(n).toLocaleString()}`
+}
+
+function padRow(left: string, right: string, width = W): string {
+  const gap = width - left.length - right.length
+  return left + ' '.repeat(Math.max(1, gap)) + right
 }
 
 export async function renderReceipt(sale: SaleInfo, settings: Settings): Promise<Uint8Array> {
@@ -26,9 +32,10 @@ export async function renderReceipt(sale: SaleInfo, settings: Settings): Promise
   const discountAmt = Math.max(0, Math.round(sale.subtotal - sale.total))
   const tendered    = sale.cashTendered ?? sale.cashAmount ?? sale.total
 
-  // Build VAT label: "VAT (16%)" if all taxed items share one rate, otherwise "VAT (incl.)"
   const vatRates = [...new Set(sale.items.filter(i => i.vatRate > 0).map(i => Math.round(i.vatRate * 100)))]
   const vatLabel = vatRates.length === 1 ? `VAT (${vatRates[0]}%)` : 'VAT (incl.)'
+
+  const totalLine = padRow('TOTAL', f(sale.total), W)
 
   return render(
     <Printer type="epson" width={W}>
@@ -51,24 +58,24 @@ export async function renderReceipt(sale: SaleInfo, settings: Settings): Promise
       <Text>Cashier: {sale.cashier}</Text>
 
       {sale.payment === 'credit' && sale.creditName && (
-        <>
+        <React.Fragment>
           <Line />
           <Text bold>Bill To:</Text>
           <Text>{sale.creditName}</Text>
           {sale.creditPhone && <Text>{sale.creditPhone}</Text>}
-        </>
+        </React.Fragment>
       )}
 
       {/* ── Items ── */}
       <Line />
       {sale.items.map((item, i) => (
-        <span key={i}>
+        <React.Fragment key={i}>
           <Text bold>{clip(item.name, W)}</Text>
           <Row
             left={`  ${item.qty} x ${cur} ${item.price.toLocaleString()}`}
             right={f(item.price * item.qty)}
           />
-        </span>
+        </React.Fragment>
       ))}
 
       {/* ── Totals ── */}
@@ -77,34 +84,30 @@ export async function renderReceipt(sale: SaleInfo, settings: Settings): Promise
       {discountAmt > 0 && <Row left="Discount" right={`-${f(discountAmt)}`} />}
       {showVat       && <Row left={vatLabel} right={f(Math.round(vatTotal))} />}
       <Line />
-      {/* Double-width TOTAL — width halves to 16 effective cols */}
-      <Row
-        left={<Text bold size={{ width: 2, height: 1 }}>TOTAL</Text>}
-        right={<Text bold size={{ width: 2, height: 1 }}>{f(sale.total)}</Text>}
-      />
+      <Text bold>{totalLine}</Text>
       <Line />
 
       {/* ── Payment ── */}
       {sale.payment === 'cash' && (
-        <>
+        <React.Fragment>
           <Row left="Cash" right={f(tendered)} />
           {tendered > sale.total && (
-            <Row left={<Text bold>Change</Text>} right={<Text bold>{f(tendered - sale.total)}</Text>} />
+            <Row left="Change" right={f(tendered - sale.total)} />
           )}
-        </>
+        </React.Fragment>
       )}
       {sale.payment === 'mpesa' && (
-        <>
+        <React.Fragment>
           <Row left="M-Pesa" right={f(sale.total)} />
           {sale.mpesaRef && <Text>Ref: {sale.mpesaRef}</Text>}
-        </>
+        </React.Fragment>
       )}
       {sale.payment === 'split' && (
-        <>
+        <React.Fragment>
           {sale.cashAmount  && <Row left="Cash"   right={f(sale.cashAmount)} />}
           {sale.mpesaAmount && <Row left="M-Pesa" right={f(sale.mpesaAmount)} />}
           {sale.mpesaRef    && <Text>Ref: {sale.mpesaRef}</Text>}
-        </>
+        </React.Fragment>
       )}
       {sale.payment === 'credit' && (
         <Text bold>Amount Due: {f(sale.total)}</Text>
@@ -112,19 +115,19 @@ export async function renderReceipt(sale: SaleInfo, settings: Settings): Promise
 
       {/* ── Notes ── */}
       {sale.notes && (
-        <>
+        <React.Fragment>
           <Line />
           <Text>{clip(`Note: ${sale.notes}`, W)}</Text>
-        </>
+        </React.Fragment>
       )}
 
       {/* ── Footer ── */}
       <Line />
       <Text align="center">Thank you for shopping with us!</Text>
       <Text align="center">Powered by Fazi POS</Text>
-      {/* <Br />
       <Br />
-      <Br /> */}
+      <Br />
+      <Br />
       <Cut />
     </Printer>,
   )

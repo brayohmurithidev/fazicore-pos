@@ -22,7 +22,9 @@ export function ReceiptModal({ open, onClose, sale }: Props) {
     setPrinting(true)
     try {
       const ok = await printESCPOS(sale, settings)
-      if (!ok) printReceipt(sale, settings) // fall back to popup HTML
+      if (!ok) printReceipt(sale, settings)
+    } catch {
+      printReceipt(sale, settings)
     } finally {
       setPrinting(false)
     }

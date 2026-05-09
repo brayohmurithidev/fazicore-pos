@@ -106,21 +106,33 @@ async function sendViaTauriSerial(data: Uint8Array, baudRate: number): Promise<b
 async function sendToSerial(data: Uint8Array, baudRate = 9600): Promise<boolean> {
   if (isTauri) return sendViaTauriSerial(data, baudRate)
   if (!('serial' in navigator)) return false
+
+  // Use only a previously granted port — never prompt during a print job
+  if (!_port) {
+    const saved = await navigator.serial.getPorts()
+    _port = saved[0] ?? null
+    if (!_port) return false
+  }
+
+  let writer: WritableStreamDefaultWriter<Uint8Array> | null = null
   try {
-    if (!_port) {
-      const saved = await navigator.serial.getPorts()
-      _port = saved[0] ?? (await navigator.serial.requestPort())
-    }
-    if (!_port.readable) {
+    if (!_port.writable) {
       await _port.open({ baudRate, dataBits: 8, stopBits: 1, parity: 'none' })
     }
-    const writer = _port.writable!.getWriter()
+    writer = _port.writable!.getWriter()
     await writer.write(data)
-    await writer.close()
-    await new Promise((r) => setTimeout(r, 500))
+    writer.releaseLock()
+    writer = null
+    await new Promise((r) => setTimeout(r, 300))
     await _port.close()
+    _port = null  // reset so next print re-opens cleanly
     return true
-  } catch { _port = null; return false }
+  } catch {
+    if (writer) { try { writer.releaseLock() } catch { /* ignore */ } }
+    try { await _port?.close() } catch { /* ignore */ }
+    _port = null
+    return false
+  }
 }
 
 // ── Route to the active transport ─────────────────────────────────────────────
