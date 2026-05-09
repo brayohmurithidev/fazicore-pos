@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Receipt, Download, Search, X, TrendingUp, ShoppingCart, CreditCard, Printer, Pencil, Ban, Loader2, Trash2 } from 'lucide-react'
+import { Receipt, Download, Search, X, TrendingUp, ShoppingCart, CreditCard, Printer, Pencil, Ban, Loader2, Trash2, Plus } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { PayBadge } from '@/components/shared/PayBadge'
-import { useOrders, useBranches, useVoidOrder, useEditOrder } from '@/lib/queries'
+import { useOrders, useBranches, useVoidOrder, useEditOrder, useProducts } from '@/lib/queries'
 import { useAuthStore } from '@/stores/auth'
 import { fmtKES } from '@/lib/data'
 import { toast } from '@/lib/toast'
@@ -159,27 +159,56 @@ function EditDialog({ order, isCashier, onConfirm, onClose, isPending }: {
   const [discount, setDiscount] = useState(String(order.discount_amount))
   const [notes, setNotes] = useState(order.notes ?? '')
   const [pin, setPin] = useState('')
+  const [productSearch, setProductSearch] = useState('')
+
+  const { data: productResults = [] } = useProducts(productSearch || undefined)
+  const showResults = productSearch.length >= 1 && productResults.length > 0
 
   const setItem = (idx: number, patch: Partial<EditItem>) =>
     setItems((prev) => prev.map((it, i) => i === idx ? { ...it, ...patch } : it))
 
   const removeItem = (idx: number) => setItems((prev) => prev.filter((_, i) => i !== idx))
 
+  function addProduct(p: { id: number; name: string; sku: string | null; price: number }) {
+    const existing = items.findIndex((i) => i.product_id === p.id)
+    if (existing >= 0) {
+      setItem(existing, { quantity: items[existing].quantity + 1 })
+    } else {
+      setItems((prev) => [...prev, {
+        product_id: p.id,
+        product_name: p.name,
+        product_sku: p.sku,
+        quantity: 1,
+        unit_price: p.price,
+        discount_amount: 0,
+      }])
+    }
+    setProductSearch('')
+  }
+
   const subtotal = items.reduce((s, i) => s + (i.unit_price * i.quantity - i.discount_amount), 0)
   const total = Math.max(0, subtotal - (parseFloat(discount) || 0))
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[580px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Receipt #{order.order_number}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-2">
+        {/* Current items */}
+        <div className="space-y-1.5">
+          <div className="grid grid-cols-[1fr_56px_84px_32px] gap-1.5 pb-1 border-b border-gray-100">
+            <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Item</span>
+            <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide text-center">Qty</span>
+            <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide text-right">Line total</span>
+            <span />
+          </div>
           {items.map((item, idx) => (
-            <div key={idx} className="grid grid-cols-[1fr_60px_80px_32px] gap-1.5 items-center">
-              <div className="text-sm font-medium text-gray-800 truncate" title={item.product_name}>
+            <div key={idx} className="grid grid-cols-[1fr_56px_84px_32px] gap-1.5 items-center">
+              <div className="text-sm font-medium text-gray-800 truncate leading-tight" title={item.product_name}>
                 {item.product_name}
+                {item.product_sku && <span className="text-[10px] text-gray-400 ml-1">({item.product_sku})</span>}
               </div>
               <Input
                 type="number"
@@ -188,8 +217,8 @@ function EditDialog({ order, isCashier, onConfirm, onClose, isPending }: {
                 onChange={(e) => setItem(idx, { quantity: Math.max(1, Number(e.target.value)) })}
                 className="h-8 text-sm text-center px-1"
               />
-              <div className="text-xs text-right text-gray-500">
-                KES {(item.unit_price * item.quantity).toLocaleString()}
+              <div className="text-xs text-right text-gray-600 tabular-nums">
+                KES {(item.unit_price * item.quantity - item.discount_amount).toLocaleString()}
               </div>
               <button
                 onClick={() => removeItem(idx)}
@@ -201,13 +230,48 @@ function EditDialog({ order, isCashier, onConfirm, onClose, isPending }: {
             </div>
           ))}
           {items.length === 0 && (
-            <div className="text-xs text-gray-400 text-center py-4">All items removed — this will void the receipt</div>
+            <div className="text-xs text-gray-400 text-center py-3">All items removed — saving will void the receipt</div>
           )}
         </div>
 
+        {/* Add product search */}
+        <div className="border-t pt-3">
+          <Label className="text-xs text-gray-500 mb-1.5 block">Add product</Label>
+          <div className="relative">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <Input
+              value={productSearch}
+              onChange={(e) => setProductSearch(e.target.value)}
+              placeholder="Search by name or SKU…"
+              className="pl-8 h-9 text-sm"
+            />
+          </div>
+          {showResults && (
+            <div className="mt-1 border border-gray-200 rounded-md shadow-sm max-h-44 overflow-y-auto bg-white">
+              {productResults.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => addProduct(p)}
+                  className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-50 transition-colors"
+                >
+                  <div className="text-left">
+                    <div className="font-medium text-gray-800">{p.name}</div>
+                    {p.sku && <div className="text-[11px] text-gray-400">{p.sku}</div>}
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-xs text-gray-500 tabular-nums">KES {p.price.toLocaleString()}</span>
+                    <Plus size={14} className="text-gray-400" />
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Totals and meta */}
         <div className="border-t pt-3 space-y-2.5">
           <div className="flex items-center gap-2">
-            <Label className="text-xs text-gray-500 w-24 shrink-0">Cart Discount</Label>
+            <Label className="text-xs text-gray-500 w-28 shrink-0">Cart Discount (KES)</Label>
             <Input
               type="number"
               min={0}
@@ -217,10 +281,10 @@ function EditDialog({ order, isCashier, onConfirm, onClose, isPending }: {
             />
           </div>
           <div className="flex items-center gap-2">
-            <Label className="text-xs text-gray-500 w-24 shrink-0">Notes</Label>
+            <Label className="text-xs text-gray-500 w-28 shrink-0">Notes</Label>
             <Input value={notes} onChange={(e) => setNotes(e.target.value)} className="h-8 text-sm flex-1" />
           </div>
-          <div className="flex justify-between text-sm font-bold pt-1">
+          <div className="flex justify-between text-sm font-bold pt-1 border-t">
             <span>New Total</span>
             <span>{fmtKES(total)}</span>
           </div>
