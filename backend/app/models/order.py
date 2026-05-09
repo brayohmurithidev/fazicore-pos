@@ -40,6 +40,7 @@ class Order(Base, TimestampMixin):
     order_number: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
     customer_id: Mapped[int | None] = mapped_column(ForeignKey("customers.id"), nullable=True)
     cashier_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    cashier_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     status: Mapped[OrderStatus] = mapped_column(Enum(OrderStatus), default=OrderStatus.PENDING, nullable=False)
     payment_method: Mapped[PaymentMethod] = mapped_column(Enum(PaymentMethod), nullable=False)
     payment_status: Mapped[PaymentStatus] = mapped_column(Enum(PaymentStatus), default=PaymentStatus.PENDING, nullable=False)

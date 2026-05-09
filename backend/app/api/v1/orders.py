@@ -64,6 +64,7 @@ async def create_order(
     order = await service.create_order(
         org_id=current_user.org_id,
         cashier_id=current_user.id,
+        cashier_name=current_user.name,
         branch_id=branch_id,
         org_slug=org.slug,
         data=data,
