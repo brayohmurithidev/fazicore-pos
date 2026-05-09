@@ -4,7 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.order import Order, OrderItem, PaymentMethod
+from app.models.order import Order, OrderItem, OrderStatus, PaymentMethod
 from app.repositories.base import BaseRepository
 from app.schemas.order import OrderCreate, OrderOut
 
@@ -81,6 +81,7 @@ class OrderRepository(BaseRepository[Order, OrderCreate, OrderOut]):
             Order.org_id == org_id,
             Order.created_at >= day_start,
             Order.created_at <= day_end,
+            Order.status != OrderStatus.VOIDED,
         )
         if branch_id is not None:
             stmt = stmt.where(Order.branch_id == branch_id)
@@ -96,13 +97,14 @@ class OrderRepository(BaseRepository[Order, OrderCreate, OrderOut]):
             Order.org_id == org_id,
             Order.created_at >= day_start,
             Order.created_at <= day_end,
+            Order.status != OrderStatus.VOIDED,
         ).group_by(Order.payment_method)
         if branch_id is not None:
             breakdown_stmt = breakdown_stmt.where(Order.branch_id == branch_id)
 
         breakdown_result = await self.session.execute(breakdown_stmt)
         payment_breakdown = {
-            str(r.payment_method): {"count": r.count, "total": float(r.total)}
+            r.payment_method.value: {"count": r.count, "total": float(r.total)}
             for r in breakdown_result.all()
         }
 

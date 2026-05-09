@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_session
 from app.core.deps import get_current_active_user
 from app.models.inventory import Inventory
-from app.models.order import Order, OrderItem
+from app.models.order import Order, OrderItem, OrderStatus
 from app.models.product import Product
 from app.models.user import User, UserRole
 from app.repositories.inventory import InventoryRepository
@@ -48,6 +48,7 @@ async def dashboard_summary(
             Order.org_id == current_user.org_id,
             Order.created_at >= day_start,
             Order.created_at <= day_end,
+            Order.status != OrderStatus.VOIDED,
         )
         .group_by(Product.id, Product.name)
         .order_by(func.sum(OrderItem.quantity).desc())
