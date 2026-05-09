@@ -12,7 +12,6 @@ import { resolveImageUrl } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import { useCategories, useProducts, useCreateOrder, useBranches, usePermissions } from '@/lib/queries'
-import { useFeatureFlags } from '@/hooks/useFeature'
 import { useBarcodeScanner } from '@/hooks/useBarcodeScanner'
 import { printReceipt } from '@/lib/print'
 import { printESCPOS } from '@/lib/escpos'
@@ -263,7 +262,6 @@ function CartItemRow({ item, maxQty, catColor, onQty, onRemove, onItemDiscount, 
 export function POSPage() {
   const { user } = useAuthStore()
   const { settings } = useSettingsStore()
-  const flags = useFeatureFlags()
   const searchRef = useRef<HTMLInputElement>(null)
 
   // ── State ────────────────────────────────────────────────────────────────
@@ -282,7 +280,7 @@ export function POSPage() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [mobileCartOpen, setMobileCartOpen] = useState(false)
   const [scanFeedback, setScanFeedback] = useState<{ ok: boolean; text: string } | null>(null)
-  const scanFeedbackTimer = useRef<ReturnType<typeof setTimeout>>()
+  const scanFeedbackTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   const createOrder = useCreateOrder()
   const isAdmin = user?.role === 'admin'

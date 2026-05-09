@@ -14,7 +14,7 @@ export function useBarcodeScanner({
   enabled = true,
 }: Options) {
   const buffer = useRef<{ char: string; t: number }[]>([])
-  const timer = useRef<ReturnType<typeof setTimeout>>()
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const onScanRef = useRef(onScan)
   useEffect(() => { onScanRef.current = onScan }, [onScan])
 

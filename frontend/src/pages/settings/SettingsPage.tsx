@@ -23,7 +23,7 @@ import {
   useMpesaCredentials, useSaveMpesaCredentials, useDeleteMpesaCredentials,
   useSetLiveMpesaEnvironment, useRegisterC2bUrls, useSimulateC2b,
   useOrgInfo,
-  type MpesaCredentialsIn, type MpesaCredentialsOut,
+  type MpesaCredentialsOut,
 } from '@/lib/queries'
 import { useFeatureFlags } from '@/hooks/useFeature'
 import { useAuthStore } from '@/stores/auth'

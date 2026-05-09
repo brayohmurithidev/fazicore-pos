@@ -20,8 +20,6 @@ export function printReceipt(sale: SaleInfo, settings: Settings) {
     (s, i) => s + (i.vatRate > 0 ? (i.price * i.qty * i.vatRate) / (1 + i.vatRate) : 0), 0
   )
   const showVat = settings.showVat && vatTotal > 0.5
-  const cartDiscount = Math.max(0, sale.subtotal - sale.total + (showVat ? 0 : 0))
-  // Discount = subtotal - total (VAT is inclusive so doesn't affect this)
   const discountAmt = Math.round(sale.subtotal - sale.total)
 
   const isCredit = sale.payment === 'credit'

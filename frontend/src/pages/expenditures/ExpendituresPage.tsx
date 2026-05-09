@@ -103,7 +103,7 @@ function ExpenditureModal({
         <form onSubmit={handleSubmit} className="space-y-4 mt-1">
           <div>
             <Label className="text-xs text-gray-500 mb-1.5 block">Category</Label>
-            <Select value={form.category} onValueChange={(v) => set('category', v)}>
+            <Select value={form.category} onValueChange={(v) => set('category', v ?? '')}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {CATEGORIES.map((c) => (
@@ -134,7 +134,7 @@ function ExpenditureModal({
           {branches.length > 1 && (
             <div>
               <Label className="text-xs text-gray-500 mb-1.5 block">Branch</Label>
-              <Select value={form.branch_id} onValueChange={(v) => set('branch_id', v)}>
+              <Select value={form.branch_id} onValueChange={(v) => set('branch_id', v ?? '')}>
                 <SelectTrigger><SelectValue placeholder="All branches" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="">All branches</SelectItem>
@@ -258,7 +258,7 @@ export function ExpendituresPage() {
           onChange={(e) => setDateTo(e.target.value)}
           className="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-300"
         />
-        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+        <Select value={categoryFilter} onValueChange={(v) => setCategoryFilter(v ?? '')}>
           <SelectTrigger className="w-40 text-sm h-9">
             <SelectValue placeholder="All categories" />
           </SelectTrigger>
