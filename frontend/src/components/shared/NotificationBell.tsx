@@ -1,11 +1,15 @@
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { Bell, Package, AlertTriangle, X, ArrowRight } from 'lucide-react'
 import { useNavigate } from 'react-router'
 import { useNotifications } from '@/lib/queries'
 import { useSettingsStore } from '@/stores/settings'
+
 export function NotificationBell() {
   const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState({ top: 0, right: 0 })
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const panelRef   = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
   const { settings } = useSettingsStore()
   const { data } = useNotifications({ enabled: settings.lowStockAlerts !== false })
@@ -14,18 +18,31 @@ export function NotificationBell() {
   const outCount = data?.out_of_stock_count ?? 0
   const total = lowCount + outCount
 
+  const handleOpen = () => {
+    if (!open && triggerRef.current) {
+      const r = triggerRef.current.getBoundingClientRect()
+      setPos({ top: r.bottom + 8, right: window.innerWidth - r.right })
+    }
+    setOpen(o => !o)
+  }
+
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      if (
+        triggerRef.current?.contains(e.target as Node) ||
+        panelRef.current?.contains(e.target as Node)
+      ) return
+      setOpen(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative">
       <button
-        onClick={() => setOpen(o => !o)}
+        ref={triggerRef}
+        onClick={handleOpen}
         className="relative flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-100 transition-colors"
       >
         <Bell size={16} className="text-gray-600" />
@@ -36,8 +53,11 @@ export function NotificationBell() {
         )}
       </button>
 
-      {open && (
-        <div className="absolute right-0 top-10 w-80 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
+      {open && createPortal(
+        <div
+          ref={panelRef}
+          style={{ position: 'fixed', top: pos.top, right: pos.right }}
+          className="w-80 bg-white border border-gray-200 rounded-xl shadow-xl z-[9999] overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <span className="text-sm font-bold text-gray-900">Notifications</span>
             <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-700"><X size={14} /></button>
@@ -92,7 +112,8 @@ export function NotificationBell() {
               </button>
             </div>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

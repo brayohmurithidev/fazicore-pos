@@ -14,6 +14,8 @@ from app.models.platform_admin import PlatformAdmin
 from app.models.subscription import Plan, Subscription
 from app.models.attendance import Attendance
 from app.models.audit_log import AuditLog
+from app.models.mpesa import MpesaCredentials, MpesaTransaction
+from app.models.expenditure import Expenditure
 
 __all__ = [
     "Organization",
@@ -36,4 +38,7 @@ __all__ = [
     "Subscription",
     "Attendance",
     "AuditLog",
+    "MpesaCredentials",
+    "MpesaTransaction",
+    "Expenditure",
 ]

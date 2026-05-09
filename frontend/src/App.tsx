@@ -11,6 +11,7 @@ import { SettingsPage } from '@/pages/settings/SettingsPage'
 import { CustomersPage } from '@/pages/customers/CustomersPage'
 import { ReportsPage } from '@/pages/reports/ReportsPage'
 import { AuditPage } from '@/pages/audit/AuditPage'
+import { ExpendituresPage } from '@/pages/expenditures/ExpendituresPage'
 import { useAuthStore } from '@/stores/auth'
 import type { Role } from '@/types'
 
@@ -60,7 +61,8 @@ const router = createBrowserRouter([
       { path: '/reports',    element: <RequireRole allow={['admin','manager','stock']}><ReportsPage /></RequireRole> },
       { path: '/branches',   element: <RequireRole allow={['admin']}><BranchesPage /></RequireRole> },
       { path: '/users',      element: <RequireRole allow={['admin']}><UsersPage /></RequireRole> },
-      { path: '/audit',      element: <RequireRole allow={['admin']}><AuditPage /></RequireRole> },
+      { path: '/audit',        element: <RequireRole allow={['admin']}><AuditPage /></RequireRole> },
+      { path: '/expenditures', element: <RequireRole allow={['admin','manager']}><ExpendituresPage /></RequireRole> },
       { path: '/settings',   element: <RequireRole allow={['admin']}><SettingsPage /></RequireRole> },
     ],
   },

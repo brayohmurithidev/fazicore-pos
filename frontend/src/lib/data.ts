@@ -71,10 +71,11 @@ export const DEFAULT_SETTINGS: Settings = {
   vatNumber: '',
   businessEmail: '',
   businessPhone: '',
-  cash: true, mpesa: true, credit: true, other: true,
+  cash: true, mpesa: true, mpesaManual: true, mpesaStk: true, credit: true, other: true,
   requirePin: true, autoPrint: false, lowStockAlerts: true,
-  expiryTracking: true, barcodeMode: true, receiptPaper: '80mm',
-  showVat: true, showLogo: true, smsReceipt: false, branchInventory: true,
+  expiryTracking: true, barcodeMode: true, receiptPaper: '80mm', printerBaudRate: 9600,
+  printerMode: 'cups', cupsName: '',
+  showVat: true, showLogo: false, smsReceipt: false, branchInventory: true,
   consolidatedReports: true, stockTransfer: true,
 }
 

@@ -30,6 +30,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import { toast } from '@/lib/toast'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { useFeature } from '@/hooks/useFeature'
 import { fmtKES } from '@/lib/data'
 import { resolveImageUrl } from '@/lib/api'
 import type { ApiProduct, ApiCategory, ApiPurchaseOrder, ApiInventoryItem, ApiSupplier, TransferStatus, ReorderUrgency, AgingBucket } from '@/types/api'
@@ -331,6 +332,13 @@ function ProductFormModal({ open, onClose, initial, categories, allProducts, isP
   const [saveError, setSaveError] = useState<string | null>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const createCat = useCreateCategory()
+  const hasCustomUnits = useFeature('custom_units')
+  const hasProductImages = useFeature('product_images')
+  const { data: orgInfo } = useOrgInfo()
+  const STANDARD_UNITS = ['piece','bottle','packet','bag','tin','pack','tub','crate','litre','kg','100g','dozen']
+  const unitOptions = hasCustomUnits && orgInfo?.custom_units?.length
+    ? [...STANDARD_UNITS, ...orgInfo.custom_units.filter((u) => !STANDARD_UNITS.includes(u))]
+    : STANDARD_UNITS
 
   useEffect(() => {
     if (!open) return
@@ -475,7 +483,7 @@ function ProductFormModal({ open, onClose, initial, categories, allProducts, isP
             <Label className="mb-1.5 block text-xs text-gray-500">Unit</Label>
             <Select value={form.unit} onValueChange={(v) => set('unit', v ?? '')}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{['piece','bottle','packet','bag','tin','pack','tub','crate','litre','kg','100g','dozen'].map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+              <SelectContent>{unitOptions.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
@@ -546,7 +554,7 @@ function ProductFormModal({ open, onClose, initial, categories, allProducts, isP
             <Label className="mb-1.5 block text-xs text-gray-500">Expiry Date</Label>
             <Input type="date" value={form.expiry_date} onChange={(e) => set('expiry_date', e.target.value)} />
           </div>
-          <div className="col-span-2">
+          {hasProductImages && <div className="col-span-2">
             <Label className="mb-1.5 block text-xs text-gray-500">Product Image</Label>
             <input ref={imageInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" className="hidden" onChange={handleImageChange} />
             {/* Drop zone */}
@@ -610,7 +618,7 @@ function ProductFormModal({ open, onClose, initial, categories, allProducts, isP
                 </div>
               )
             })()}
-          </div>
+          </div>}
         </div>
         {saveError && (
           <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2 mt-2">{saveError}</p>
@@ -911,6 +919,7 @@ function ProductsTab({ branchId }: { branchId?: number }) {
   const updateProduct = useUpdateProductById()
   const deleteProduct = useDeleteProduct()
   const adjustInventory = useAdjustInventory()
+  const hasProductImages = useFeature('product_images')
 
   // Sync selectedProduct with fresh data after mutations
   const currentSelected = useMemo(() =>
@@ -1165,7 +1174,7 @@ function ProductsTab({ branchId }: { branchId?: number }) {
                               style={{ background: catColor ?? '#9CA3AF' }}>
                               {p.name[0].toUpperCase()}
                             </div>
-                            {p.image_url && (
+                            {hasProductImages && p.image_url && (
                               <img src={resolveImageUrl(p.image_url) ?? ''} alt={p.name}
                                 className="absolute inset-0 w-full h-full object-cover rounded-md ring-1 ring-gray-200"
                                 onError={(e) => { e.currentTarget.style.display = 'none' }} />
@@ -2213,6 +2222,7 @@ type Tab = 'products' | 'orders' | 'transfers' | 'suppliers' | 'reports'
 export function InventoryPage() {
   const { user } = useAuthStore()
   const isAdmin = user?.role === 'admin'
+  const hasSupplierMgmt = useFeature('supplier_management')
   const [tab, setTab] = useState<Tab>('products')
   const [selectedBranchId, setSelectedBranchId] = useState<number | null>(null)
 
@@ -2235,14 +2245,15 @@ export function InventoryPage() {
 
   const TABS: { id: Tab; label: string; count?: number }[] = [
     { id: 'products', label: 'Products', count: activeProducts.length },
-    { id: 'orders', label: 'Purchase Orders', count: pendingPOs || undefined },
+    ...(hasSupplierMgmt ? [{ id: 'orders' as Tab, label: 'Purchase Orders', count: pendingPOs || undefined }] : []),
     ...(isMultiBranch ? [{ id: 'transfers' as Tab, label: 'Transfers' }] : []),
-    { id: 'suppliers', label: 'Suppliers' },
+    ...(hasSupplierMgmt ? [{ id: 'suppliers' as Tab, label: 'Suppliers' }] : []),
     { id: 'reports', label: 'Reports', count: lowCount + outCount || undefined },
   ]
 
-  // If user is on transfers tab but branches drop to single-location, reset to products
+  // Reset to products if active tab becomes hidden
   if (tab === 'transfers' && !isMultiBranch) setTab('products')
+  if ((tab === 'orders' || tab === 'suppliers') && !hasSupplierMgmt) setTab('products')
 
   return (
     <div className="p-4 sm:p-6 overflow-y-auto h-full">

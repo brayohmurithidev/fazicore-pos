@@ -5,6 +5,7 @@ import type {
   ApiInventoryItem, ApiInventoryTransaction, ApiOrder, ApiProduct,
   ApiPurchaseOrder, ApiUser, ApiOrgInfo, ApiSubscriptionInfo, ApiSupplier, ApiStockTransfer,
   ApiPermissions, ApiNotifications, ApiAnalyticsDailyItem, ReorderSuggestion, AgingItem, DashboardData, TokenResponse,
+  ApiExpenditure, ApiExpenditureSummary,
 } from '@/types/api'
 
 export const FEATURE_CATALOG = [
@@ -16,7 +17,9 @@ export const FEATURE_CATALOG = [
   { key: 'inventory_analytics', label: 'Inventory Analytics',     group: 'Analytics',  description: 'Reorder suggestions and aging stock reports' },
   { key: 'audit_logs',          label: 'Audit Logs',              group: 'Security',   description: 'Track all user actions for compliance' },
   { key: 'permissions_mgmt',    label: 'Custom Permissions',      group: 'Security',   description: 'Configure role-based access control per role' },
+  { key: 'expenditure_tracking', label: 'Expenditure Tracking',    group: 'Finance',    description: 'Record and report on business expenses' },
   { key: 'multi_branch',        label: 'Multi-Branch',            group: 'Operations', description: 'Manage multiple store locations' },
+  { key: 'supplier_management', label: 'Supplier Management',     group: 'Operations', description: 'Manage suppliers and create purchase orders' },
   { key: 'barcode_mode',        label: 'Barcode Scanner',         group: 'Operations', description: 'Scan barcodes to add products at POS' },
   { key: 'custom_units',        label: 'Custom Product Units',    group: 'Operations', description: 'Define custom units of measure for products' },
   { key: 'api_access',          label: 'API Access',              group: 'Developer',  description: 'REST API access for third-party integrations' },
@@ -655,6 +658,50 @@ export function useInventoryAging(branchId?: number) {
   })
 }
 
+// ── Expenditures ──────────────────────────────────────────────────────────
+
+export function useExpenditures(params?: { date_from?: string; date_to?: string; category?: string; branch_id?: number }) {
+  return useQuery<ApiExpenditure[]>({
+    queryKey: ['expenditures', params],
+    queryFn: () => api.get('/expenditures/', { params }).then((r) => r.data),
+    staleTime: 30_000,
+  })
+}
+
+export function useExpenditureSummary(params?: { date_from?: string; date_to?: string }) {
+  return useQuery<ApiExpenditureSummary>({
+    queryKey: ['expenditures-summary', params],
+    queryFn: () => api.get('/expenditures/summary', { params }).then((r) => r.data),
+    staleTime: 30_000,
+  })
+}
+
+export function useCreateExpenditure() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { category: string; amount: number; description?: string; date: string; branch_id?: number }) =>
+      api.post('/expenditures/', data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['expenditures'] }),
+  })
+}
+
+export function useUpdateExpenditure() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: number; category?: string; amount?: number; description?: string; date?: string; branch_id?: number }) =>
+      api.patch(`/expenditures/${id}`, data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['expenditures'] }),
+  })
+}
+
+export function useDeleteExpenditure() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.delete(`/expenditures/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['expenditures'] }),
+  })
+}
+
 // ── Org settings ──────────────────────────────────────────────────────────
 
 export function useUpdateOrgSettings() {
@@ -664,4 +711,140 @@ export function useUpdateOrgSettings() {
       api.patch('/org/settings', data).then((r) => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['org-info'] }),
   })
+}
+
+// ── M-Pesa ────────────────────────────────────────────────────────────────
+
+const MPESA_CREDS_KEY = ['mpesa-credentials-v2']
+
+export function useMpesaCredentials() {
+  return useQuery({
+    queryKey: MPESA_CREDS_KEY,
+    queryFn: () => api.get('/mpesa/credentials').then((r) => {
+      const d = r.data
+      // guard against stale single-object cache
+      return (Array.isArray(d) ? d : d ? [d] : []) as MpesaCredentialsOut[]
+    }),
+    retry: false,
+  })
+}
+
+export function useSaveMpesaCredentials() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: MpesaCredentialsIn) => api.put('/mpesa/credentials', data).then((r) => r.data as MpesaCredentialsOut),
+    onSuccess: () => qc.invalidateQueries({ queryKey: MPESA_CREDS_KEY }),
+  })
+}
+
+export function useDeleteMpesaCredentials() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (environment: 'sandbox' | 'production') => api.delete(`/mpesa/credentials/${environment}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: MPESA_CREDS_KEY }),
+  })
+}
+
+export function useSetLiveMpesaEnvironment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (environment: 'sandbox' | 'production') =>
+      api.post(`/mpesa/credentials/set-live/${environment}`).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: MPESA_CREDS_KEY }),
+  })
+}
+
+export function useInitiateStkPush() {
+  return useMutation({
+    mutationFn: (data: { phone: string; amount: number; order_ref: string }) =>
+      api.post('/mpesa/stk-push', data).then((r) => r.data as StkPushResult),
+  })
+}
+
+export function useStkStatus(checkoutRequestId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ['stk-status', checkoutRequestId],
+    queryFn: () => api.get(`/mpesa/stk-status/${checkoutRequestId}`).then((r) => r.data as StkStatusResult),
+    enabled: !!checkoutRequestId && enabled,
+    refetchInterval: 3000,
+    refetchIntervalInBackground: true,
+  })
+}
+
+export function useRegisterC2bUrls() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (environment?: 'sandbox' | 'production') =>
+      api.post(`/mpesa/register-c2b${environment ? `?environment=${environment}` : ''}`).then((r) => r.data as { ok: boolean }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: MPESA_CREDS_KEY }),
+  })
+}
+
+export function useSimulateC2b() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { phone: string; amount: number; bill_ref?: string }) =>
+      api.post('/mpesa/simulate-c2b?environment=sandbox', body).then((r) => r.data as { ok: boolean }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['mpesa-transactions'] }),
+  })
+}
+
+export function useMpesaTransactions(unattachedOnly = false) {
+  return useQuery({
+    queryKey: ['mpesa-transactions', unattachedOnly],
+    queryFn: () => api.get(`/mpesa/transactions?unattached_only=${unattachedOnly}`).then((r) => r.data as MpesaTransactionItem[]),
+    refetchInterval: unattachedOnly ? 5000 : false,
+  })
+}
+
+// ── M-Pesa types ──────────────────────────────────────────────────────────
+
+export interface MpesaCredentialsOut {
+  environment: 'sandbox' | 'production'
+  shortcode: string
+  consumer_key_masked: string
+  consumer_secret_masked: string
+  passkey_masked: string
+  callback_url_override: string | null
+  is_active: boolean
+  is_live: boolean
+  stk_callback_url: string
+  c2b_confirmation_url: string
+  c2b_validation_url: string
+}
+
+export interface MpesaCredentialsIn {
+  environment: 'sandbox' | 'production'
+  shortcode: string
+  consumer_key: string
+  consumer_secret: string
+  passkey: string
+  callback_url_override?: string
+}
+
+export interface StkPushResult {
+  checkout_request_id: string
+  merchant_request_id: string
+  response_code: string
+  customer_message: string
+}
+
+export interface StkStatusResult {
+  status: 'pending' | 'completed' | 'failed' | 'cancelled' | 'timeout'
+  mpesa_receipt_number: string | null
+  result_desc: string | null
+  amount: number
+  phone: string | null
+}
+
+export interface MpesaTransactionItem {
+  id: number
+  transaction_type: 'stk_push' | 'c2b'
+  status: string
+  phone: string | null
+  sender_name: string | null
+  amount: number
+  mpesa_receipt_number: string | null
+  order_id: number | null
+  created_at: string
 }

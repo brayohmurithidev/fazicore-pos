@@ -43,6 +43,8 @@ export function ReceiptModal({ open, onClose, sale }: Props) {
   const dateStr = now.toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' })
   const timeStr = now.toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })
   const vatTotal = sale.items.reduce((s, i) => s + (i.vatRate > 0 ? i.price * i.qty * i.vatRate / (1 + i.vatRate) : 0), 0)
+  const vatRates = [...new Set(sale.items.filter(i => i.vatRate > 0).map(i => Math.round(i.vatRate * 100)))]
+  const vatLabel = vatRates.length === 1 ? `VAT (${vatRates[0]}%)` : 'VAT (incl.)'
   const showVat = settings.showVat && vatTotal > 0
   const showLogo = settings.showLogo
   const showSms = settings.smsReceipt
@@ -106,7 +108,7 @@ export function ReceiptModal({ open, onClose, sale }: Props) {
               </div>
               {showVat && (
                 <div className="flex justify-between text-gray-500 mb-0.5">
-                  <span>VAT (16%)</span><span>KES {Math.round(vatTotal).toLocaleString()}</span>
+                  <span>{vatLabel}</span><span>KES {Math.round(vatTotal).toLocaleString()}</span>
                 </div>
               )}
               <div className="flex justify-between font-extrabold text-base border-t-2 border-gray-900 mt-2 pt-2">
@@ -179,7 +181,7 @@ export function ReceiptModal({ open, onClose, sale }: Props) {
             ))}
             <div style={{ borderTop: '1px dashed #999', margin: '6px 0' }} />
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}><span>Subtotal</span><span>KES {sale.subtotal.toLocaleString()}</span></div>
-            {showVat && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}><span>VAT (16%)</span><span>KES {Math.round(vatTotal).toLocaleString()}</span></div>}
+            {showVat && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}><span>{vatLabel}</span><span>KES {Math.round(vatTotal).toLocaleString()}</span></div>}
             <div style={{ borderTop: '1px dashed #999', margin: '6px 0' }} />
             <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 14 }}>
               <span>TOTAL</span><span>KES {sale.total.toLocaleString()}</span>

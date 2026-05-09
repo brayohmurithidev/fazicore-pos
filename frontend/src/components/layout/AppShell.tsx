@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router'
 import {
   LayoutDashboard, Monitor, Package, Receipt, Building2, Settings,
-  ChevronLeft, ChevronRight, LogOut, BarChart3, UserCheck, Menu, X, Clock,
+  ChevronLeft, ChevronRight, LogOut, BarChart3, UserCheck, Menu, X, Clock, TrendingDown,
 } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Toaster } from '@/components/ui/Toaster'
@@ -13,6 +13,8 @@ import { useSettingsStore } from '@/stores/settings'
 import { useBranches, useDashboard, useOrgInfo, useClockOut } from '@/lib/queries'
 import { useFeatureFlags } from '@/hooks/useFeature'
 import { useInactivityLogout } from '@/hooks/useInactivityLogout'
+import { isTauri } from '@/hooks/useTauri'
+import { TitleBar } from '@/components/layout/TitleBar'
 import type { Role } from '@/types'
 import { cn } from '@/lib/utils'
 
@@ -30,8 +32,9 @@ const NAV: NavItem[] = [
   { id: 'inventory',  label: 'Inventory',  icon: Package,         path: '/inventory',  roles: ['admin', 'manager', 'stock'] },
   { id: 'sales',      label: 'Sales',      icon: Receipt,         path: '/sales',      roles: ['admin', 'manager', 'cashier'] },
   { id: 'customers',  label: 'Customers',  icon: UserCheck,       path: '/customers',  roles: ['admin', 'manager', 'cashier'] },
-  { id: 'reports',    label: 'Reports',    icon: BarChart3,       path: '/reports',    roles: ['admin', 'manager', 'stock'] },
-  { id: 'branches',   label: 'Branches',   icon: Building2,       path: '/branches',   roles: ['admin'] },
+  { id: 'reports',       label: 'Reports',       icon: BarChart3,    path: '/reports',       roles: ['admin', 'manager', 'stock'] },
+  { id: 'expenditures', label: 'Expenditures', icon: TrendingDown, path: '/expenditures', roles: ['admin', 'manager'] },
+  { id: 'branches',     label: 'Branches',     icon: Building2,    path: '/branches',     roles: ['admin'] },
   { id: 'settings',   label: 'Settings',   icon: Settings,        path: '/settings',   roles: ['admin'] },
 ]
 
@@ -71,10 +74,12 @@ export function AppShell() {
 
   const allowedNav = NAV.filter((n) => {
     if (!n.roles.includes(user.role)) return false
-    if (n.id === 'branches' && !isMultiBranch) return false
+    // Branches: show when the multi_branch feature is on (regardless of how many branches exist)
+    if (n.id === 'branches' && featureFlags.multi_branch === false) return false
     if (n.id === 'customers' && featureFlags.credit_system === false) return false
     if (n.id === 'audit' && featureFlags.audit_logs === false) return false
     if (n.id === 'reports' && featureFlags.advanced_reports === false) return false
+    if (n.id === 'expenditures' && featureFlags.expenditure_tracking === false) return false
     return true
   })
 
@@ -96,7 +101,11 @@ export function AppShell() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
+    <div className="flex flex-col h-screen overflow-hidden bg-gray-900">
+      {/* Native title bar — only in Tauri desktop */}
+      {isTauri && <TitleBar />}
+
+      <div className="flex flex-1 overflow-hidden bg-gray-50">
       {/* Mobile backdrop */}
       {mobileOpen && (
         <div
@@ -260,6 +269,7 @@ export function AppShell() {
         </main>
       </div>
       <Toaster />
+      </div>
     </div>
   )
 }

@@ -9,7 +9,7 @@ from app.core.features import FEATURE_CATALOG, resolve_flags
 from app.models.branch import Branch
 from app.models.organization import Organization
 from app.models.product import Product
-from app.models.subscription import Plan
+from app.models.subscription import Plan, Subscription
 from app.models.user import User
 
 router = APIRouter(prefix="/org", tags=["org"])
@@ -209,7 +209,18 @@ async def get_subscription(
         select(func.count(Product.id)).where(Product.org_id == org.id, Product.is_active == True)
     ) or 0
 
-    current_slug = org.plan.value
+    # Use the Subscription table as the authoritative source for the current plan slug
+    sub_plan_id = await session.scalar(
+        select(Subscription.plan_id)
+        .where(Subscription.organization_id == org.id)
+        .order_by(Subscription.created_at.desc())
+        .limit(1)
+    )
+    if sub_plan_id:
+        sub_plan = await session.get(Plan, sub_plan_id)
+        current_slug = sub_plan.slug if sub_plan else org.plan.value
+    else:
+        current_slug = org.plan.value
 
     # Pull plans from DB; fall back to hardcoded catalog if table is empty
     db_plans_result = await session.execute(
@@ -284,8 +295,17 @@ async def get_org_features(
     org = await session.get(Organization, current_user.org_id)
     if not org:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
-    current_slug = org.plan.value
-    db_plan = await session.scalar(select(Plan).where(Plan.slug == current_slug, Plan.is_active == True))  # noqa: E712
+    sub_plan_id = await session.scalar(
+        select(Subscription.plan_id)
+        .where(Subscription.organization_id == org.id)
+        .order_by(Subscription.created_at.desc())
+        .limit(1)
+    )
+    if sub_plan_id:
+        db_plan = await session.get(Plan, sub_plan_id)
+    else:
+        current_slug = org.plan.value
+        db_plan = await session.scalar(select(Plan).where(Plan.slug == current_slug, Plan.is_active == True))  # noqa: E712
     return resolve_flags(db_plan.features if db_plan else None)
 
 

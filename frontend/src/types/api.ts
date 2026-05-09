@@ -257,6 +257,23 @@ export interface ApiStockTransfer {
   created_at: string
 }
 
+export interface ApiExpenditure {
+  id: number
+  org_id: number
+  branch_id: number | null
+  category: string
+  amount: number
+  description: string | null
+  date: string
+  recorded_by: number | null
+  created_at: string
+}
+
+export interface ApiExpenditureSummary {
+  total: number
+  by_category: Record<string, number>
+}
+
 export interface ApiCustomer {
   id: number
   name: string

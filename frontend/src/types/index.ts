@@ -101,7 +101,9 @@ export interface Settings {
   businessPhone: string
   // Payment methods
   cash: boolean
-  mpesa: boolean
+  mpesa: boolean       // legacy: true when either mpesaManual or mpesaStk is on
+  mpesaManual: boolean
+  mpesaStk: boolean
   credit: boolean
   other: boolean
   // POS behaviour
@@ -112,6 +114,9 @@ export interface Settings {
   barcodeMode: boolean
   // Receipt
   receiptPaper: '58mm' | '80mm' | 'a4'
+  printerBaudRate: 9600 | 19200 | 38400 | 57600 | 115200
+  printerMode: 'serial' | 'cups'
+  cupsName: string
   showVat: boolean
   showLogo: boolean
   smsReceipt: boolean

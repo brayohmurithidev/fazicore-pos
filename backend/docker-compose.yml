@@ -28,8 +28,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    profiles:
-      - migrate
 
   worker:
     image: ${API_IMAGE}

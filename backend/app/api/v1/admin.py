@@ -11,7 +11,7 @@ from app.core.database import get_session
 from app.core.features import FEATURE_CATALOG, resolve_flags
 from app.core.security import create_access_token, decode_token, hash_password, verify_password
 from app.models.branch import Branch
-from app.models.organization import Organization, OrgStatus
+from app.models.organization import Organization, OrgStatus, SubscriptionPlan
 from app.models.platform_admin import PlatformAdmin
 from app.models.product import Product
 from app.models.subscription import BillingInterval, Plan, Subscription, SubscriptionStatus
@@ -480,6 +480,12 @@ async def set_org_subscription(
         org.max_products = plan.max_products
     if plan.max_branches is not None:
         org.max_branches = plan.max_branches
+
+    # Keep org.plan enum in sync when the slug matches an enum value
+    try:
+        org.plan = SubscriptionPlan(plan.slug)
+    except ValueError:
+        pass  # custom plan slug — org.plan stays as-is
 
     result = await session.execute(
         select(Subscription).where(Subscription.organization_id == org_id).limit(1)

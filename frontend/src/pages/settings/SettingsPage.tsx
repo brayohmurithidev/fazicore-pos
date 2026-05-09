@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { RefreshCw } from 'lucide-react'
 import {
   CheckCircle2, XCircle, Pencil, X, Check, Zap, Loader2, Lock, Star,
   Settings, CreditCard, Users, Shield, ClipboardList, Sparkles,
+  Usb, Printer as PrinterIcon, Bluetooth,
 } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
@@ -10,7 +12,19 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useSettingsStore } from '@/stores/settings'
-import { useSubscription, usePermissions, useUpdatePermissions, FEATURE_CATALOG } from '@/lib/queries'
+import {
+  connectPrinter, forgetPort, getPort, getTauriPort, getAvailablePorts, getSystemPrinters, testPrint,
+  connectBluetooth, forgetBluetooth, getBluetoothDevice,
+} from '@/lib/escpos'
+import { isTauriPortOpen } from '@/lib/tauri-serial'
+import { isTauri } from '@/hooks/useTauri'
+import {
+  useSubscription, usePermissions, useUpdatePermissions, FEATURE_CATALOG,
+  useMpesaCredentials, useSaveMpesaCredentials, useDeleteMpesaCredentials,
+  useSetLiveMpesaEnvironment, useRegisterC2bUrls, useSimulateC2b,
+  useOrgInfo,
+  type MpesaCredentialsIn, type MpesaCredentialsOut,
+} from '@/lib/queries'
 import { useFeatureFlags } from '@/hooks/useFeature'
 import { useAuthStore } from '@/stores/auth'
 import { UsersPage } from '@/pages/users/UsersPage'
@@ -175,12 +189,338 @@ function BusinessInfoSection() {
   )
 }
 
+// ── Printer Setup ─────────────────────────────────────────────────────────────
+
+type PrinterStatus = 'idle' | 'connecting' | 'connected' | 'testing' | 'error'
+type CupsStatus    = 'idle' | 'testing' | 'ok' | 'error'
+
+function PrinterSetupSection() {
+  const { settings, update } = useSettingsStore()
+
+  // Active mode: cups (macOS system printer) or serial (USB/raw)
+  const printerMode = settings.printerMode ?? (isTauri ? 'cups' : 'serial')
+  const isCupsMode  = isTauri && printerMode === 'cups'
+
+  // ── CUPS state ──
+  const [cupsPrinters, setCupsPrinters] = useState<string[]>([])
+  const [cupsLoading,  setCupsLoading]  = useState(false)
+  const [cupsStatus,   setCupsStatus]   = useState<CupsStatus>('idle')
+  const [cupsMsg,      setCupsMsg]      = useState('')
+
+  const loadCupsPrinters = async () => {
+    setCupsLoading(true)
+    try {
+      const printers = await getSystemPrinters()
+      setCupsPrinters(printers)
+      if (printers.length > 0 && !settings.cupsName) update({ cupsName: printers[0] })
+    } finally {
+      setCupsLoading(false)
+    }
+  }
+
+  // ── USB / Serial state ──
+  const serialSupported = isTauri || ('serial' in navigator)
+  const [usbStatus, setUsbStatus] = useState<PrinterStatus>(
+    () => (isTauri ? isTauriPortOpen() : !!getPort()) ? 'connected' : 'idle'
+  )
+  const [usbMsg, setUsbMsg] = useState('')
+
+  const [tauriPorts, setTauriPorts]     = useState<string[]>([])
+  const [selectedPort, setSelectedPort] = useState(getTauriPort() ?? '')
+
+  const loadTauriPorts = async () => {
+    const ports = await getAvailablePorts()
+    setTauriPorts(ports)
+    if (ports.length > 0 && !selectedPort) setSelectedPort(ports[0])
+  }
+
+  useEffect(() => {
+    if (isTauri) {
+      loadCupsPrinters()
+      loadTauriPorts()
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Bluetooth state ──
+  const bleSupported = !!navigator.bluetooth
+  const [bleStatus, setBleStatus] = useState<PrinterStatus>(() => getBluetoothDevice() ? 'connected' : 'idle')
+  const [bleMsg, setBleMsg]       = useState('')
+
+  // ── Handlers ──
+  async function handleUsbConnect() {
+    setUsbStatus('connecting'); setUsbMsg('')
+    const ok = await connectPrinter(isTauri ? selectedPort : undefined, settings.printerBaudRate ?? 9600)
+    if (ok) { setUsbStatus('connected'); setUsbMsg(isTauri ? `Connected to ${selectedPort}.` : 'USB printer connected.') }
+    else    { setUsbStatus('error');     setUsbMsg('Could not connect. Make sure the printer is plugged in.') }
+  }
+
+  async function handleBleConnect() {
+    setBleStatus('connecting'); setBleMsg('')
+    const ok = await connectBluetooth()
+    if (ok) { setBleStatus('connected'); setBleMsg(`Connected to "${getBluetoothDevice()?.name ?? 'BLE printer'}".`) }
+    else    { setBleStatus('error');     setBleMsg('Could not connect. Ensure the printer is powered on and paired.') }
+  }
+
+  async function handleTest() {
+    if (isCupsMode) {
+      setCupsStatus('testing'); setCupsMsg('')
+      const ok = await testPrint(settings)
+      if (ok) { setCupsStatus('ok');    setCupsMsg('Test print sent!') }
+      else    { setCupsStatus('error'); setCupsMsg('Print failed. Is the printer online?') }
+      return
+    }
+    const active = bleStatus === 'connected' ? 'ble' : 'usb'
+    if (active === 'ble') { setBleStatus('testing'); setBleMsg('') }
+    else                  { setUsbStatus('testing'); setUsbMsg('') }
+    const ok = await testPrint(settings)
+    if (active === 'ble') {
+      if (ok) { setBleStatus('connected'); setBleMsg('Test print sent!') }
+      else    { setBleStatus('error');     setBleMsg('Print failed. Try reconnecting.') }
+    } else {
+      if (ok) { setUsbStatus('connected'); setUsbMsg('Test print sent!') }
+      else    { setUsbStatus('error');     setUsbMsg('Print failed. Try disconnecting and reconnecting.') }
+    }
+  }
+
+  const cupsReady    = isCupsMode && !!settings.cupsName
+  const usbConnected = usbStatus === 'connected'
+  const bleConnected = bleStatus === 'connected'
+  const anyConnected = cupsReady || usbConnected || bleConnected
+  const cupsBusy     = cupsStatus === 'testing'
+  const usbBusy      = usbStatus === 'connecting' || usbStatus === 'testing'
+  const bleBusy      = bleStatus === 'connecting' || bleStatus === 'testing'
+  const anyBusy      = cupsBusy || usbBusy || bleBusy
+
+  return (
+    <Section title="Thermal Printer">
+
+      {/* Tauri: printer mode selector */}
+      {isTauri && (
+        <div className="flex items-center justify-between py-2.5 border-b border-gray-100">
+          <div>
+            <div className="text-sm font-medium text-gray-900">Connection Mode</div>
+            <div className="text-xs text-gray-400 mt-0.5">How the app talks to the printer</div>
+          </div>
+          <select
+            value={printerMode}
+            onChange={(e) => update({ printerMode: e.target.value as 'cups' | 'serial' })}
+            className="text-sm border border-gray-200 rounded-md px-2.5 py-1.5 bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-300"
+          >
+            <option value="cups">CUPS System Printer</option>
+            <option value="serial">USB / Serial (raw)</option>
+          </select>
+        </div>
+      )}
+
+      {/* ── CUPS mode ── */}
+      {isCupsMode && (
+        <>
+          <div className="flex items-center justify-between py-2.5 border-b border-gray-100">
+            <div>
+              <div className="text-sm font-medium text-gray-900 flex items-center gap-1.5">
+                <PrinterIcon size={13} className="text-gray-400" /> System Printer
+              </div>
+              <div className="text-xs text-gray-400 mt-0.5">
+                Printers registered in macOS Printers &amp; Scanners
+              </div>
+            </div>
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${cupsReady ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+              {cupsReady ? 'Ready' : 'Not selected'}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 mt-2 mb-1">
+            <select
+              value={settings.cupsName ?? ''}
+              onChange={(e) => update({ cupsName: e.target.value })}
+              className="flex-1 text-sm border border-gray-200 rounded-md px-2.5 py-1.5 bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-300"
+            >
+              {cupsPrinters.length === 0
+                ? <option value="">No system printers found</option>
+                : cupsPrinters.map((p) => <option key={p} value={p}>{p}</option>)
+              }
+            </select>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={loadCupsPrinters}
+              disabled={cupsLoading}
+              title="Refresh printer list"
+              className="px-2"
+            >
+              {cupsLoading ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+            </Button>
+          </div>
+          {cupsMsg && (
+            <p className={`text-xs mt-1 px-0.5 ${cupsStatus === 'error' ? 'text-red-500' : 'text-green-600'}`}>{cupsMsg}</p>
+          )}
+        </>
+      )}
+
+      {/* ── Serial mode (Tauri serial) or browser serial ── */}
+      {(!isTauri || printerMode === 'serial') && (
+        <>
+          <div className="flex items-center justify-between py-2.5 border-b border-gray-100">
+            <div>
+              <div className="text-sm font-medium text-gray-900 flex items-center gap-1.5">
+                <Usb size={13} className="text-gray-400" /> USB / Serial
+              </div>
+              <div className="text-xs text-gray-400 mt-0.5">
+                {isTauri ? 'ESC/POS via USB cable — native desktop serial' : 'ESC/POS via USB cable (Chrome / Edge only)'}
+              </div>
+            </div>
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${usbConnected ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+              {usbConnected ? (isTauri ? selectedPort : 'Connected') : 'Not connected'}
+            </span>
+          </div>
+
+          {isTauri && (
+            <div className="mt-2 mb-1">
+              <div className="flex items-center gap-2 mb-2">
+                <select
+                  value={selectedPort}
+                  onChange={(e) => { setSelectedPort(e.target.value); setUsbStatus('idle'); setUsbMsg('') }}
+                  disabled={usbConnected || usbBusy}
+                  className="flex-1 text-sm border border-gray-200 rounded-md px-2.5 py-1.5 bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-300 disabled:opacity-50"
+                >
+                  {tauriPorts.length === 0
+                    ? <option value="">No serial ports found</option>
+                    : tauriPorts.map((p) => <option key={p} value={p}>{p}</option>)
+                  }
+                </select>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={loadTauriPorts}
+                  disabled={usbBusy}
+                  title="Refresh port list"
+                  className="px-2"
+                >
+                  <RefreshCw size={13} />
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {!usbConnected ? (
+                  <Button
+                    size="sm"
+                    onClick={handleUsbConnect}
+                    disabled={usbBusy || bleConnected || !selectedPort}
+                    className="flex items-center gap-1.5"
+                  >
+                    {usbBusy ? <Loader2 size={13} className="animate-spin" /> : <Usb size={13} />}
+                    {usbStatus === 'connecting' ? 'Connecting…' : 'Connect'}
+                  </Button>
+                ) : (
+                  <Button size="sm" variant="outline" onClick={() => { forgetPort(); setUsbStatus('idle'); setUsbMsg('') }} disabled={anyBusy}>
+                    Disconnect
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {!isTauri && !serialSupported && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 mt-2">
+              Web Serial requires Chrome or Edge.
+            </p>
+          )}
+          {!isTauri && serialSupported && (
+            <div className="flex flex-wrap gap-2 mt-2 mb-1">
+              {!usbConnected ? (
+                <Button size="sm" onClick={handleUsbConnect} disabled={usbBusy || bleConnected} className="flex items-center gap-1.5">
+                  {usbBusy ? <Loader2 size={13} className="animate-spin" /> : <Usb size={13} />}
+                  {usbStatus === 'connecting' ? 'Connecting…' : 'Connect USB'}
+                </Button>
+              ) : (
+                <Button size="sm" variant="outline" onClick={() => { forgetPort(); setUsbStatus('idle'); setUsbMsg('') }} disabled={anyBusy}>
+                  Disconnect
+                </Button>
+              )}
+            </div>
+          )}
+
+          {usbMsg && (
+            <p className={`text-xs mt-1 px-0.5 ${usbStatus === 'error' ? 'text-red-500' : 'text-green-600'}`}>{usbMsg}</p>
+          )}
+
+          {/* Baud rate */}
+          <div className="flex items-center justify-between py-2 border-b border-gray-100">
+            <div>
+              <div className="text-sm font-medium text-gray-900">Baud Rate</div>
+              <div className="text-xs text-gray-400 mt-0.5">Must match your printer's setting (9600 is default)</div>
+            </div>
+            <select
+              value={settings.printerBaudRate ?? 9600}
+              onChange={(e) => update({ printerBaudRate: Number(e.target.value) as SettingsType['printerBaudRate'] })}
+              className="text-sm border border-gray-200 rounded-md px-2.5 py-1.5 bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-300"
+            >
+              <option value={9600}>9600</option>
+              <option value={19200}>19200</option>
+              <option value={38400}>38400</option>
+              <option value={57600}>57600</option>
+              <option value={115200}>115200</option>
+            </select>
+          </div>
+        </>
+      )}
+
+      {/* Bluetooth — only shown in browser */}
+      {!isTauri && (
+        <>
+          <div className="flex items-center justify-between py-2.5 border-b border-gray-100 mt-2">
+            <div>
+              <div className="text-sm font-medium text-gray-900 flex items-center gap-1.5">
+                <Bluetooth size={13} className="text-gray-400" /> Bluetooth (BLE)
+              </div>
+              <div className="text-xs text-gray-400 mt-0.5">Wireless ESC/POS — P58E and similar BLE printers</div>
+            </div>
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${bleConnected ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
+              {bleConnected ? (getBluetoothDevice()?.name ?? 'Connected') : 'Not connected'}
+            </span>
+          </div>
+          {!bleSupported && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 mt-2">
+              Web Bluetooth requires Chrome on Android, or Chrome with the Experimental Web Platform features flag enabled.
+            </p>
+          )}
+          {bleMsg && (
+            <p className={`text-xs mt-1.5 px-0.5 ${bleStatus === 'error' ? 'text-red-500' : 'text-green-600'}`}>{bleMsg}</p>
+          )}
+          {bleSupported && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              {!bleConnected ? (
+                <Button size="sm" onClick={handleBleConnect} disabled={bleBusy || usbConnected} className="flex items-center gap-1.5">
+                  {bleBusy ? <Loader2 size={13} className="animate-spin" /> : <Bluetooth size={13} />}
+                  {bleStatus === 'connecting' ? 'Connecting…' : 'Connect Bluetooth'}
+                </Button>
+              ) : (
+                <Button size="sm" variant="outline" onClick={() => { forgetBluetooth(); setBleStatus('idle'); setBleMsg('') }} disabled={anyBusy}>
+                  Disconnect
+                </Button>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Shared test button */}
+      {anyConnected && (
+        <div className="mt-3 pt-3 border-t border-gray-100">
+          <Button size="sm" onClick={handleTest} disabled={anyBusy} className="flex items-center gap-1.5">
+            {anyBusy ? <Loader2 size={13} className="animate-spin" /> : <PrinterIcon size={13} />}
+            {anyBusy ? 'Printing…' : 'Test Print'}
+          </Button>
+        </div>
+      )}
+    </Section>
+  )
+}
+
 // ── General tab ───────────────────────────────────────────────────────────────
 
 function GeneralTab() {
   const { settings, update } = useSettingsStore()
   const flags = useFeatureFlags()
-  const patch = (k: keyof SettingsType, v: boolean) => update({ [k]: v })
+  const patch = <K extends keyof SettingsType>(k: K, v: SettingsType[K]) => update({ [k]: v })
 
   return (
     <div className="p-4 sm:p-6 max-w-2xl">
@@ -212,6 +552,7 @@ function GeneralTab() {
         <Toggle label="Show Business Logo" sub="Include logo on printed receipts" value={settings.showLogo} onChange={(v) => patch('showLogo', v)} />
         <Toggle label="Digital Receipt (SMS)" sub="Send receipt via SMS to customer" value={settings.smsReceipt} onChange={(v) => patch('smsReceipt', v)} locked={flags.sms_receipts === false} />
       </Section>
+      {(isTauri || flags.thermal_printing !== false) && <PrinterSetupSection />}
       <Section title="Branches">
         <Toggle label="Branch-level Inventory" sub="Each branch tracks its own stock separately" value={settings.branchInventory} onChange={(v) => patch('branchInventory', v)} locked={flags.multi_branch === false} />
         <Toggle label="Consolidated Reports" sub="Combined reports across all branches" value={settings.consolidatedReports} onChange={(v) => patch('consolidatedReports', v)} locked={flags.multi_branch === false} />
@@ -221,23 +562,254 @@ function GeneralTab() {
   )
 }
 
+// ── M-Pesa Daraja credentials section ─────────────────────────────────────────
+
+function EnvCredPanel({ env, existing, orgSlug }: {
+  env: 'sandbox' | 'production'
+  existing: MpesaCredentialsOut | undefined
+  orgSlug: string
+}) {
+  const save        = useSaveMpesaCredentials()
+  const remove      = useDeleteMpesaCredentials()
+  const setLive     = useSetLiveMpesaEnvironment()
+  const registerC2b = useRegisterC2bUrls()
+  const simulate    = useSimulateC2b()
+
+  const [simPhone,  setSimPhone]  = useState('254708374149')
+  const [simAmount, setSimAmount] = useState('100')
+  const [simRef,    setSimRef]    = useState('TestPayment')
+
+  const apiBase    = `${window.location.origin}/api/v1/mpesa/callback`
+  const autoStkUrl = `${apiBase}/${orgSlug}/stk`
+  const autoC2bUrl = `${apiBase}/${orgSlug}/c2b`
+
+  const [shortcode, setShortcode]   = useState('')
+  const [consumerKey, setKey]       = useState('')
+  const [consumerSecret, setSecret] = useState('')
+  const [passkey, setPasskey]       = useState('')
+  const [callbackUrl, setCallback]  = useState('')
+  const [editing, setEditing]       = useState(false)
+  const [msg, setMsg]               = useState<{ ok: boolean; text: string } | null>(null)
+
+  useEffect(() => {
+    if (existing && !editing) {
+      setShortcode(existing.shortcode)
+      setCallback(existing.callback_url_override ?? '')
+      setKey(''); setSecret(''); setPasskey('')
+    }
+  }, [existing, editing])
+
+  const handleSave = async () => {
+    if (!shortcode) { setMsg({ ok: false, text: 'Business Shortcode is required.' }); return }
+    if (!existing && (!consumerKey || !consumerSecret || !passkey)) {
+      setMsg({ ok: false, text: 'All credential fields are required for first setup.' }); return
+    }
+    try {
+      await save.mutateAsync({ environment: env, shortcode, consumer_key: consumerKey, consumer_secret: consumerSecret, passkey, callback_url_override: callbackUrl || undefined })
+      setMsg({ ok: true, text: 'Credentials saved.' })
+      setEditing(false)
+    } catch { setMsg({ ok: false, text: 'Failed to save.' }) }
+  }
+
+  const isSandbox = env === 'sandbox'
+  const bannerCls = isSandbox
+    ? 'bg-blue-50 border-blue-200 text-blue-800'
+    : 'bg-amber-50 border-amber-200 text-amber-800'
+
+  return (
+    <div className={`rounded-lg border p-4 space-y-3 ${existing?.is_live ? 'border-green-300 ring-1 ring-green-200' : 'border-gray-200'}`}>
+      {/* Header row */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isSandbox ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+            {isSandbox ? 'Sandbox' : 'Production'}
+          </span>
+          {existing?.is_live && (
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700">● Live</span>
+          )}
+          {existing && !existing.is_live && (
+            <button
+              onClick={async () => { await setLive.mutateAsync(env); setMsg(null) }}
+              disabled={setLive.isPending}
+              className="text-xs text-gray-500 hover:text-green-700 underline"
+            >
+              Set as live
+            </button>
+          )}
+        </div>
+        {existing && !editing && (
+          <div className="flex gap-1.5">
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setEditing(true); setMsg(null) }}>Edit</Button>
+            <Button
+              size="sm" variant="outline" className="h-7 text-xs"
+              disabled={registerC2b.isPending}
+              onClick={async () => {
+                try {
+                  await registerC2b.mutateAsync(env)
+                  setMsg({ ok: true, text: 'C2B URLs registered with Safaricom.' })
+                } catch (err: unknown) {
+                  const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+                  setMsg({ ok: false, text: detail ?? 'C2B registration failed.' })
+                }
+              }}
+            >
+              {registerC2b.isPending && <Loader2 size={11} className="animate-spin mr-1" />}Register C2B
+            </Button>
+            <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={async () => { if (!confirm(`Remove ${env} credentials?`)) return; await remove.mutateAsync(env); setEditing(false); setMsg(null) }} disabled={remove.isPending}>Remove</Button>
+          </div>
+        )}
+      </div>
+
+      <div className={`text-xs px-3 py-2 rounded border ${bannerCls}`}>
+        {isSandbox ? 'Test only — no real money charged. Use test credentials from developer.safaricom.co.ke.' : 'Live payments — real money. Ensure your production app is approved.'}
+      </div>
+
+      {/* Saved summary */}
+      {existing && !editing && (
+        <div className="space-y-2">
+          <div className="text-xs text-gray-600">Shortcode: <span className="font-semibold text-gray-900">{existing.shortcode}</span></div>
+          <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mt-1">Callback URLs</div>
+          {[
+            { label: 'STK',      url: existing.stk_callback_url },
+            { label: 'C2B Confirm', url: existing.c2b_confirmation_url },
+            { label: 'C2B Validate', url: existing.c2b_validation_url },
+          ].map(({ label, url }) => (
+            <div key={label} className="flex items-center gap-2 bg-gray-50 rounded px-2 py-1.5">
+              <span className="text-[10px] font-bold text-gray-400 w-6 shrink-0">{label}</span>
+              <code className="text-[11px] text-gray-700 flex-1 break-all font-mono">{url}</code>
+              <button onClick={() => navigator.clipboard.writeText(url)} className="text-[10px] text-gray-400 hover:text-gray-700 border border-gray-200 rounded px-1.5 py-0.5 shrink-0">Copy</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Simulate C2B — sandbox only, only when saved and not editing */}
+      {isSandbox && existing && !editing && (
+        <div className="border-t border-gray-100 pt-3 space-y-2">
+          <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Simulate C2B Payment</div>
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <Label className="text-xs text-gray-500 mb-1 block">Phone</Label>
+              <Input value={simPhone} onChange={(e) => setSimPhone(e.target.value)} placeholder="254708374149" className="text-xs h-8" />
+            </div>
+            <div>
+              <Label className="text-xs text-gray-500 mb-1 block">Amount (KES)</Label>
+              <Input value={simAmount} onChange={(e) => setSimAmount(e.target.value)} placeholder="100" className="text-xs h-8" />
+            </div>
+            <div>
+              <Label className="text-xs text-gray-500 mb-1 block">Bill Ref</Label>
+              <Input value={simRef} onChange={(e) => setSimRef(e.target.value)} placeholder="TestPayment" className="text-xs h-8" />
+            </div>
+          </div>
+          <Button
+            size="sm" variant="outline" className="h-7 text-xs"
+            disabled={simulate.isPending}
+            onClick={async () => {
+              try {
+                await simulate.mutateAsync({ phone: simPhone, amount: Number(simAmount), bill_ref: simRef })
+                setMsg({ ok: true, text: 'Simulated — check Incoming Payments in POS.' })
+              } catch (err: unknown) {
+                const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+                setMsg({ ok: false, text: detail ?? 'Simulation failed.' })
+              }
+            }}
+          >
+            {simulate.isPending && <Loader2 size={11} className="animate-spin mr-1" />}
+            Send Test Payment
+          </Button>
+        </div>
+      )}
+
+      {/* Form */}
+      {(!existing || editing) && (
+        <div className="space-y-2.5">
+          <div>
+            <Label className="text-xs text-gray-500 mb-1 block">Business Shortcode *</Label>
+            <Input value={shortcode} onChange={(e) => setShortcode(e.target.value)} placeholder={isSandbox ? '174379' : 'Your paybill/till'} />
+          </div>
+          {[
+            { label: 'Consumer Key', val: consumerKey, set: setKey, masked: existing?.consumer_key_masked },
+            { label: 'Consumer Secret', val: consumerSecret, set: setSecret, masked: existing?.consumer_secret_masked },
+            { label: 'Lipa na M-Pesa Passkey', val: passkey, set: setPasskey, masked: existing?.passkey_masked },
+          ].map(({ label, val, set, masked }) => (
+            <div key={label}>
+              <Label className="text-xs text-gray-500 mb-1 block">{label} *{existing && <span className="text-gray-400 font-normal"> (blank = keep current)</span>}</Label>
+              <Input type="password" value={val} onChange={(e) => set(e.target.value)} placeholder={masked ?? 'Paste from Daraja portal'} autoComplete="off" />
+            </div>
+          ))}
+          <div>
+            <Label className="text-xs text-gray-500 mb-1 block">Callback URL override <span className="text-gray-400 font-normal">(optional — for ngrok / custom domain)</span></Label>
+            <Input value={callbackUrl} onChange={(e) => setCallback(e.target.value)} placeholder={autoStkUrl} />
+          </div>
+          <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Auto-generated callback URLs</div>
+          {[
+            { label: 'STK',          url: (callbackUrl || autoStkUrl).replace('/stk', '/stk') },
+            { label: 'C2B Confirm',  url: autoC2bUrl + '/confirm' },
+            { label: 'C2B Validate', url: autoC2bUrl + '/validate' },
+          ].map(({ label, url }) => (
+            <div key={label} className="flex items-center gap-2 bg-gray-50 rounded px-2 py-1.5">
+              <span className="text-[10px] font-bold text-gray-400 w-6 shrink-0">{label}</span>
+              <code className="text-[11px] text-gray-700 flex-1 break-all font-mono">{url}</code>
+              <button onClick={() => navigator.clipboard.writeText(url)} className="text-[10px] text-gray-400 hover:text-gray-700 border border-gray-200 rounded px-1.5 py-0.5 shrink-0">Copy</button>
+            </div>
+          ))}
+          <div className="flex gap-2 pt-1">
+            {existing && <Button size="sm" variant="outline" onClick={() => { setEditing(false); setMsg(null) }}>Cancel</Button>}
+            <Button size="sm" onClick={handleSave} disabled={save.isPending} className="flex items-center gap-1.5">
+              {save.isPending && <Loader2 size={12} className="animate-spin" />}
+              {existing ? 'Update' : 'Save Credentials'}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {msg && <p className={`text-xs ${msg.ok ? 'text-green-600' : 'text-red-500'}`}>{msg.text}</p>}
+    </div>
+  )
+}
+
+function MpesaCredentialsSection() {
+  const { data: allCreds = [], isLoading } = useMpesaCredentials()
+  const { data: orgInfo } = useOrgInfo()
+  const orgSlug = orgInfo?.slug ?? 'your-org'
+
+  if (isLoading) return null
+
+  const sandbox    = allCreds.find((c) => c.environment === 'sandbox')
+  const production = allCreds.find((c) => c.environment === 'production')
+
+  return (
+    <Section title="M-Pesa Daraja API">
+      <p className="text-xs text-gray-400 -mt-1 mb-3">
+        Both environments are stored independently. Toggle which one is <strong>Live</strong> to switch between testing and real payments.
+      </p>
+      <div className="space-y-4">
+        <EnvCredPanel env="sandbox"    existing={sandbox}    orgSlug={orgSlug} />
+        <EnvCredPanel env="production" existing={production} orgSlug={orgSlug} />
+      </div>
+    </Section>
+  )
+}
+
 // ── Payments tab ──────────────────────────────────────────────────────────────
 
 function PaymentsTab() {
   const { settings, update } = useSettingsStore()
   const flags = useFeatureFlags()
+  const { user } = useAuthStore()
   const patch = (k: keyof SettingsType, v: boolean) => update({ [k]: v })
 
   return (
     <div className="p-4 sm:p-6 max-w-2xl">
       <Section title="Payment Methods">
         <Toggle label="Cash" sub="Accept cash payments" value={settings.cash} onChange={(v) => patch('cash', v)} />
-        <Toggle label="M-Pesa Manual" sub="Customer sends M-Pesa, cashier enters the reference code" value={settings.mpesa} onChange={(v) => patch('mpesa', v)} locked={flags.mpesa_manual === false} />
-        <Toggle label="M-Pesa STK Push" sub="Trigger a payment prompt on the customer's phone" value={settings.mpesa} onChange={(v) => patch('mpesa', v)} locked={flags.mpesa_stk === false} />
+        <Toggle label="M-Pesa Manual" sub="Customer sends M-Pesa, cashier enters the reference code" value={settings.mpesaManual} onChange={(v) => { patch('mpesaManual', v); patch('mpesa', v || settings.mpesaStk) }} locked={flags.mpesa_manual === false} />
+        <Toggle label="M-Pesa STK Push" sub="Trigger a payment prompt on the customer's phone" value={settings.mpesaStk} onChange={(v) => { patch('mpesaStk', v); patch('mpesa', v || settings.mpesaManual) }} locked={flags.mpesa_stk === false} />
         <Toggle label="Credit Sales" sub="Allow sales on credit with debt tracking" value={settings.credit} onChange={(v) => patch('credit', v)} locked={flags.credit_system === false} />
         <Toggle label="Other Methods" sub="Bank transfer, card, etc." value={settings.other} onChange={(v) => patch('other', v)} />
-        <Toggle label="Split Payments" sub="Allow part-cash, part-M-Pesa" value={settings.mpesa && settings.cash} onChange={() => {}} />
+        <Toggle label="Split Payments" sub="Allow part-cash, part-M-Pesa" value={(settings.mpesaManual || settings.mpesaStk) && settings.cash} onChange={() => {}} />
       </Section>
+      {user?.role === 'admin' && (settings.mpesaManual || settings.mpesaStk) && <MpesaCredentialsSection />}
     </div>
   )
 }
@@ -558,7 +1130,7 @@ export function SettingsPage() {
     { id: 'general',     label: 'General',      icon: Settings },
     { id: 'payments',    label: 'Payments',     icon: CreditCard },
     { id: 'users',       label: 'Users',        icon: Users,        adminOnly: true },
-    { id: 'permissions', label: 'Permissions',  icon: Shield,       adminOnly: true },
+    { id: 'permissions', label: 'Permissions',  icon: Shield,       adminOnly: true, hidden: flags.permissions_mgmt === false },
     { id: 'audit',       label: 'Audit Log',    icon: ClipboardList, adminOnly: true, hidden: flags.audit_logs === false },
     { id: 'plan',        label: 'Plan & Billing', icon: Sparkles },
   ] as { id: TabId; label: string; icon: React.ElementType; adminOnly?: boolean; hidden?: boolean }[]).filter((t) => !t.hidden && (!t.adminOnly || isAdmin))
