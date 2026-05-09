@@ -301,16 +301,24 @@ export function useDeleteOrder() {
   })
 }
 
+function invalidateOrderRelated(qc: ReturnType<typeof useQueryClient>) {
+  return Promise.all([
+    qc.invalidateQueries({ queryKey: ['orders'] }),
+    qc.invalidateQueries({ queryKey: ['dashboard'] }),
+    qc.invalidateQueries({ queryKey: ['inventory'] }),
+    qc.invalidateQueries({ queryKey: ['products'] }),
+    qc.invalidateQueries({ queryKey: ['notifications'] }),
+    qc.invalidateQueries({ queryKey: ['analytics'] }),
+    qc.invalidateQueries({ queryKey: ['customers'] }),
+  ])
+}
+
 export function useVoidOrder() {
   const qc = useQueryClient()
   return useMutation<ApiOrder, Error, { id: number; reason?: string; pin?: string }>({
     mutationFn: ({ id, reason, pin }) =>
       api.post(`/orders/${id}/void`, { reason, pin }).then((r) => r.data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['orders'] })
-      qc.invalidateQueries({ queryKey: ['dashboard'] })
-      qc.invalidateQueries({ queryKey: ['inventory'] })
-    },
+    onSuccess: () => invalidateOrderRelated(qc),
   })
 }
 
@@ -318,11 +326,7 @@ export function useEditOrder() {
   const qc = useQueryClient()
   return useMutation<ApiOrder, Error, { id: number; body: Record<string, unknown> }>({
     mutationFn: ({ id, body }) => api.patch(`/orders/${id}`, body).then((r) => r.data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['orders'] })
-      qc.invalidateQueries({ queryKey: ['dashboard'] })
-      qc.invalidateQueries({ queryKey: ['inventory'] })
-    },
+    onSuccess: () => invalidateOrderRelated(qc),
   })
 }
 
