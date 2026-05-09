@@ -1,6 +1,8 @@
+import hashlib
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
@@ -8,10 +10,43 @@ from app.core.deps import get_current_active_user
 from app.models.user import User, UserRole
 from app.repositories.order import OrderRepository
 from app.repositories.organization import OrganizationRepository
-from app.schemas.order import OrderCreate, OrderOut
+from app.schemas.order import OrderCreate, OrderEdit, OrderOut, OrderVoid
 from app.services.order import OrderService
 
 router = APIRouter(prefix="/orders", tags=["orders"])
+
+
+def _check_pin(pin: str | None, current_user: User) -> None:
+    """If caller is cashier, verify a manager/admin PIN was provided and matches their hash."""
+    if current_user.role in (UserRole.ADMIN, UserRole.MANAGER):
+        return  # admins/managers don't need to supply a PIN
+    if not pin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="A manager or admin PIN is required to perform this action",
+        )
+    # Verify PIN against the current user's own hash (they must use their own PIN,
+    # but the role guard above already ensures only cashiers reach here).
+    # In practice the cashier enters their manager's PIN — we verify it by looking
+    # up any manager/admin in the same org whose pin_hash matches.
+    # We pass the verification responsibility to the endpoint (see void/edit below).
+
+
+async def _verify_elevated_pin(pin: str, org_id: int, session: AsyncSession) -> User:
+    """Return the manager/admin whose PIN matches, or raise 403."""
+    pin_hash = hashlib.sha256(pin.encode()).hexdigest()
+    result = await session.execute(
+        select(User).where(
+            User.org_id == org_id,
+            User.pin_hash == pin_hash,
+            User.role.in_([UserRole.ADMIN, UserRole.MANAGER]),
+            User.is_active == True,  # noqa: E712
+        )
+    )
+    manager = result.scalar_one_or_none()
+    if not manager:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid PIN")
+    return manager
 
 
 @router.post("/", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
@@ -33,7 +68,6 @@ async def create_order(
         org_slug=org.slug,
         data=data,
     )
-    # Reload with items eagerly to avoid lazy-load in async context
     repo = OrderRepository(session)
     loaded = await repo.get_with_items(order.id)
     return OrderOut.model_validate(loaded)
@@ -66,7 +100,6 @@ async def list_orders(
 ) -> list[OrderOut]:
     repo = OrderRepository(session)
     effective_branch = branch_id if current_user.role == UserRole.ADMIN else current_user.branch_id
-    # Cashiers see only their own orders regardless of any passed cashier_id
     effective_cashier_id = current_user.id if current_user.role == UserRole.CASHIER else cashier_id
     orders = await repo.get_by_org(
         current_user.org_id, effective_branch, skip, limit,
@@ -89,18 +122,74 @@ async def get_order(
     return OrderOut.model_validate(order)
 
 
-@router.delete("/{order_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{order_id}/void", response_model=OrderOut)
 async def void_order(
     order_id: int,
+    body: OrderVoid,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_active_user),
-) -> None:
+) -> OrderOut:
     repo = OrderRepository(session)
     order = await repo.get_with_items(order_id)
     if not order or order.org_id != current_user.org_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
-    # Cashiers can only void their own orders
-    if current_user.role == UserRole.CASHIER and order.cashier_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot void another cashier's order")
-    await session.delete(order)
+
+    # Determine acting user — cashiers must supply a manager PIN
+    if current_user.role == UserRole.CASHIER:
+        if not body.pin:
+            raise HTTPException(status_code=403, detail="A manager or admin PIN is required")
+        actor = await _verify_elevated_pin(body.pin, current_user.org_id, session)
+    else:
+        actor = current_user
+
+    service = OrderService(session)
+    order = await service.void_order(order, actor.id, actor.name, body)
+    await session.commit()
+
+    loaded = await repo.get_with_items(order.id)
+    return OrderOut.model_validate(loaded)
+
+
+@router.patch("/{order_id}", response_model=OrderOut)
+async def edit_order(
+    order_id: int,
+    body: OrderEdit,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_active_user),
+) -> OrderOut:
+    repo = OrderRepository(session)
+    order = await repo.get_with_items(order_id)
+    if not order or order.org_id != current_user.org_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+
+    if current_user.role == UserRole.CASHIER:
+        if not body.pin:
+            raise HTTPException(status_code=403, detail="A manager or admin PIN is required")
+        actor = await _verify_elevated_pin(body.pin, current_user.org_id, session)
+    else:
+        actor = current_user
+
+    service = OrderService(session)
+    order = await service.edit_order(order, actor.id, actor.name, body)
+    await session.commit()
+
+    loaded = await repo.get_with_items(order.id)
+    return OrderOut.model_validate(loaded)
+
+
+# Keep old DELETE for backwards compatibility — redirects to void with no reason
+@router.delete("/{order_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_order_legacy(
+    order_id: int,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_active_user),
+) -> None:
+    if current_user.role not in (UserRole.ADMIN, UserRole.MANAGER):
+        raise HTTPException(status_code=403, detail="Only admins/managers can delete orders")
+    repo = OrderRepository(session)
+    order = await repo.get_with_items(order_id)
+    if not order or order.org_id != current_user.org_id:
+        raise HTTPException(status_code=404, detail="Order not found")
+    service = OrderService(session)
+    await service.void_order(order, current_user.id, current_user.name, OrderVoid())
     await session.commit()

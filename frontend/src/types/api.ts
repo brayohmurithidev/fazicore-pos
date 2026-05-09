@@ -103,6 +103,11 @@ export interface ApiOrder {
   credit_customer_name: string | null
   credit_customer_phone: string | null
   notes: string | null
+  voided_by: number | null
+  voided_at: string | null
+  void_reason: string | null
+  edited_by: number | null
+  edited_at: string | null
   items: ApiOrderItem[]
   created_at: string
 }

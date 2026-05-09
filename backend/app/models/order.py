@@ -1,6 +1,7 @@
 import enum
+from datetime import datetime
 
-from sqlalchemy import Enum, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -12,6 +13,7 @@ class OrderStatus(str, enum.Enum):
     COMPLETED = "completed"
     REFUNDED = "refunded"
     CANCELLED = "cancelled"
+    VOIDED = "voided"
 
 
 class PaymentMethod(str, enum.Enum):
@@ -53,6 +55,11 @@ class Order(Base, TimestampMixin):
     credit_customer_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     credit_customer_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    voided_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    voided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    void_reason: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    edited_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     customer: Mapped["Customer | None"] = relationship("Customer", back_populates="orders")
     cashier: Mapped["User"] = relationship("User")

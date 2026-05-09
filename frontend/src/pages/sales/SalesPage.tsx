@@ -1,26 +1,61 @@
 import { useState, useMemo } from 'react'
-import { Receipt, Download, Search, X, TrendingUp, ShoppingCart, CreditCard, Trash2 } from 'lucide-react'
+import { Receipt, Download, Search, X, TrendingUp, ShoppingCart, CreditCard, Printer, Pencil, Ban, Loader2, Trash2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { PayBadge } from '@/components/shared/PayBadge'
-import { ManagerApprovalModal } from '@/components/shared/ManagerApprovalModal'
-import { useOrders, useBranches, useDeleteOrder, usePermissions } from '@/lib/queries'
+import { useOrders, useBranches, useVoidOrder, useEditOrder } from '@/lib/queries'
 import { useAuthStore } from '@/stores/auth'
 import { fmtKES } from '@/lib/data'
 import { toast } from '@/lib/toast'
+import { printReceipt } from '@/lib/print'
+import { printESCPOS } from '@/lib/escpos'
+import { useSettingsStore } from '@/stores/settings'
 import type { ApiOrder, ApiPaymentMethod } from '@/types/api'
+import type { SaleInfo } from '@/types'
 
-function todayISO() {
-  return new Date().toISOString().slice(0, 10)
-}
+function todayISO() { return new Date().toISOString().slice(0, 10) }
 
 function fmtDateTime(iso: string) {
   const d = new Date(iso)
   return d.toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' }) +
     ' · ' + d.toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })
+}
+
+function orderToSaleInfo(order: ApiOrder): SaleInfo {
+  return {
+    id: order.order_number,
+    cashier: order.cashier_name ?? 'Unknown',
+    payment: order.payment_method as SaleInfo['payment'],
+    items: order.items.map((i) => ({
+      id: String(i.product_id ?? i.id),
+      name: i.product_name,
+      category: '',
+      price: i.unit_price,
+      cost: 0,
+      sku: i.product_sku ?? '',
+      barcode: '',
+      stock: 0,
+      minStock: 0,
+      expiryDate: '',
+      unit: '',
+      vatRate: 0,
+      qty: i.quantity,
+      itemDiscount: i.discount_amount,
+    })),
+    subtotal: order.subtotal,
+    total: order.total,
+    cashTendered: order.cash_amount || undefined,
+    cashAmount: order.cash_amount || undefined,
+    mpesaAmount: order.mpesa_amount || undefined,
+    mpesaRef: order.mpesa_ref || undefined,
+    creditName: order.credit_customer_name || undefined,
+    creditPhone: order.credit_customer_phone || undefined,
+    notes: order.notes || undefined,
+  }
 }
 
 function StatCard({ label, value, sub, icon: Icon, accent = '#111827' }: {
@@ -44,22 +79,194 @@ function StatCard({ label, value, sub, icon: Icon, accent = '#111827' }: {
   )
 }
 
-function OrderDetailDialog({
-  order,
-  onClose,
-  onVoid,
-  canVoid,
-  isVoiding,
-}: {
+// ── Void dialog ───────────────────────────────────────────────────────────────
+
+function VoidDialog({ order, isCashier, onConfirm, onClose, isPending }: {
+  order: ApiOrder
+  isCashier: boolean
+  onConfirm: (reason: string, pin?: string) => void
+  onClose: () => void
+  isPending: boolean
+}) {
+  const [reason, setReason] = useState('')
+  const [pin, setPin] = useState('')
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Void Receipt #{order.order_number}?</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-gray-500">
+          This will mark the receipt as voided ({fmtKES(order.total)}) and restore inventory.
+          The record is kept for audit purposes.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs text-gray-500 mb-1 block">Reason <span className="text-gray-400">(optional)</span></Label>
+            <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Customer returned items" />
+          </div>
+          {isCashier && (
+            <div>
+              <Label className="text-xs text-gray-500 mb-1 block">Manager / Admin PIN <span className="text-red-400">*</span></Label>
+              <Input
+                type="password"
+                value={pin}
+                onChange={(e) => setPin(e.target.value)}
+                placeholder="Enter PIN"
+                autoFocus
+              />
+            </div>
+          )}
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" size="sm" onClick={onClose} disabled={isPending}>Cancel</Button>
+          <Button
+            variant="destructive" size="sm"
+            onClick={() => onConfirm(reason, isCashier ? pin : undefined)}
+            disabled={isPending || (isCashier && !pin)}
+          >
+            {isPending && <Loader2 size={13} className="animate-spin mr-1" />}
+            Void Receipt
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ── Edit dialog ───────────────────────────────────────────────────────────────
+
+type EditItem = { product_id: number | null; product_name: string; product_sku: string | null; quantity: number; unit_price: number; discount_amount: number }
+
+function EditDialog({ order, isCashier, onConfirm, onClose, isPending }: {
+  order: ApiOrder
+  isCashier: boolean
+  onConfirm: (items: EditItem[], discount: number, notes: string, pin?: string) => void
+  onClose: () => void
+  isPending: boolean
+}) {
+  const [items, setItems] = useState<EditItem[]>(
+    order.items.map((i) => ({
+      product_id: i.product_id,
+      product_name: i.product_name,
+      product_sku: i.product_sku,
+      quantity: i.quantity,
+      unit_price: i.unit_price,
+      discount_amount: i.discount_amount,
+    }))
+  )
+  const [discount, setDiscount] = useState(String(order.discount_amount))
+  const [notes, setNotes] = useState(order.notes ?? '')
+  const [pin, setPin] = useState('')
+
+  const setItem = (idx: number, patch: Partial<EditItem>) =>
+    setItems((prev) => prev.map((it, i) => i === idx ? { ...it, ...patch } : it))
+
+  const removeItem = (idx: number) => setItems((prev) => prev.filter((_, i) => i !== idx))
+
+  const subtotal = items.reduce((s, i) => s + (i.unit_price * i.quantity - i.discount_amount), 0)
+  const total = Math.max(0, subtotal - (parseFloat(discount) || 0))
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit Receipt #{order.order_number}</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-2">
+          {items.map((item, idx) => (
+            <div key={idx} className="grid grid-cols-[1fr_60px_80px_32px] gap-1.5 items-center">
+              <div className="text-sm font-medium text-gray-800 truncate" title={item.product_name}>
+                {item.product_name}
+              </div>
+              <Input
+                type="number"
+                min={1}
+                value={item.quantity}
+                onChange={(e) => setItem(idx, { quantity: Math.max(1, Number(e.target.value)) })}
+                className="h-8 text-sm text-center px-1"
+              />
+              <div className="text-xs text-right text-gray-500">
+                KES {(item.unit_price * item.quantity).toLocaleString()}
+              </div>
+              <button
+                onClick={() => removeItem(idx)}
+                className="text-gray-300 hover:text-red-500 transition-colors flex items-center justify-center h-8"
+                title="Remove item"
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+          ))}
+          {items.length === 0 && (
+            <div className="text-xs text-gray-400 text-center py-4">All items removed — this will void the receipt</div>
+          )}
+        </div>
+
+        <div className="border-t pt-3 space-y-2.5">
+          <div className="flex items-center gap-2">
+            <Label className="text-xs text-gray-500 w-24 shrink-0">Cart Discount</Label>
+            <Input
+              type="number"
+              min={0}
+              value={discount}
+              onChange={(e) => setDiscount(e.target.value)}
+              className="h-8 text-sm w-28"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Label className="text-xs text-gray-500 w-24 shrink-0">Notes</Label>
+            <Input value={notes} onChange={(e) => setNotes(e.target.value)} className="h-8 text-sm flex-1" />
+          </div>
+          <div className="flex justify-between text-sm font-bold pt-1">
+            <span>New Total</span>
+            <span>{fmtKES(total)}</span>
+          </div>
+        </div>
+
+        {isCashier && (
+          <div className="border-t pt-3">
+            <Label className="text-xs text-gray-500 mb-1 block">Manager / Admin PIN <span className="text-red-400">*</span></Label>
+            <Input
+              type="password"
+              value={pin}
+              onChange={(e) => setPin(e.target.value)}
+              placeholder="Enter PIN to save changes"
+            />
+          </div>
+        )}
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" size="sm" onClick={onClose} disabled={isPending}>Cancel</Button>
+          <Button
+            size="sm"
+            onClick={() => onConfirm(items, parseFloat(discount) || 0, notes, isCashier ? pin : undefined)}
+            disabled={isPending || items.length === 0 || (isCashier && !pin)}
+          >
+            {isPending && <Loader2 size={13} className="animate-spin mr-1" />}
+            Save Changes
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ── Order detail dialog ───────────────────────────────────────────────────────
+
+function OrderDetailDialog({ order, onClose, onVoid, onEdit, onReprint, canVoid, canEdit }: {
   order: ApiOrder | null
   onClose: () => void
   onVoid: () => void
+  onEdit: () => void
+  onReprint: () => void
   canVoid: boolean
-  isVoiding: boolean
+  canEdit: boolean
 }) {
   if (!order) return null
-
-  const isCredit = order.payment_method === 'credit'
+  const isVoided = order.status === 'voided'
   const isSplit = order.payment_method === 'split'
   const isMpesa = order.payment_method === 'mpesa'
 
@@ -67,16 +274,31 @@ function OrderDetailDialog({
     <Dialog open onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="sm:max-w-[520px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="font-mono">#{order.order_number}</DialogTitle>
+          <div className="flex items-center gap-2 flex-wrap">
+            <DialogTitle className="font-mono">#{order.order_number}</DialogTitle>
+            {isVoided && (
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">VOIDED</span>
+            )}
+            {order.edited_at && !isVoided && (
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">EDITED</span>
+            )}
+          </div>
         </DialogHeader>
 
-        <div className="flex flex-wrap gap-3 text-xs text-gray-500 -mt-1 mb-1">
+        <div className="flex flex-wrap gap-2 text-xs text-gray-500 -mt-1 mb-1">
           <span>{fmtDateTime(order.created_at)}</span>
           {order.cashier_name && <span>· Cashier: <span className="text-gray-700 font-medium">{order.cashier_name}</span></span>}
           <PayBadge method={order.payment_method as ApiPaymentMethod} />
         </div>
 
-        {isCredit && (order.credit_customer_name || order.credit_customer_phone) && (
+        {isVoided && (
+          <div className="bg-red-50 border border-red-200 rounded-md px-3 py-2 text-xs text-red-700">
+            Voided{order.voided_at ? ` on ${fmtDateTime(order.voided_at)}` : ''}
+            {order.void_reason ? ` · ${order.void_reason}` : ''}
+          </div>
+        )}
+
+        {order.payment_method === 'credit' && (order.credit_customer_name || order.credit_customer_phone) && (
           <div className="bg-purple-50 rounded-md px-3 py-2 text-sm">
             <span className="font-semibold text-purple-700">Credit: </span>
             {order.credit_customer_name}{order.credit_customer_phone ? ` · ${order.credit_customer_phone}` : ''}
@@ -88,7 +310,7 @@ function OrderDetailDialog({
             <tr className="border-b-2 border-gray-900">
               <th className="text-left py-1.5 font-bold">Item</th>
               <th className="text-right py-1.5 font-bold w-10">Qty</th>
-              <th className="text-right py-1.5 font-bold">Unit Price</th>
+              <th className="text-right py-1.5 font-bold">Unit</th>
               <th className="text-right py-1.5 font-bold">Total</th>
             </tr>
           </thead>
@@ -131,9 +353,7 @@ function OrderDetailDialog({
         {(isSplit || isMpesa || order.payment_method === 'cash') && (
           <div className="border-t pt-3 mt-1 text-sm text-gray-600 space-y-1">
             {(isSplit || order.payment_method === 'cash') && order.cash_amount > 0 && (
-              <div className="flex justify-between">
-                <span>Cash paid</span><span>KES {order.cash_amount.toLocaleString()}</span>
-              </div>
+              <div className="flex justify-between"><span>Cash paid</span><span>KES {order.cash_amount.toLocaleString()}</span></div>
             )}
             {(isSplit || isMpesa) && order.mpesa_amount > 0 && (
               <div className="flex justify-between">
@@ -155,45 +375,20 @@ function OrderDetailDialog({
           </div>
         )}
 
-        {canVoid && (
-          <DialogFooter className="mt-2">
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={onVoid}
-              disabled={isVoiding}
-              className="gap-1.5"
-            >
-              <Trash2 size={14} />
-              Void Receipt
-            </Button>
-          </DialogFooter>
-        )}
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function VoidConfirmDialog({ order, onConfirm, onClose, isVoiding }: {
-  order: ApiOrder
-  onConfirm: () => void
-  onClose: () => void
-  isVoiding: boolean
-}) {
-  return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Void Receipt #{order.order_number}?</DialogTitle>
-        </DialogHeader>
-        <p className="text-sm text-gray-500">
-          This will permanently delete this receipt ({fmtKES(order.total)}). This action cannot be undone.
-        </p>
-        <DialogFooter className="gap-2">
-          <Button variant="outline" size="sm" onClick={onClose} disabled={isVoiding}>Cancel</Button>
-          <Button variant="destructive" size="sm" onClick={onConfirm} disabled={isVoiding}>
-            {isVoiding ? 'Voiding…' : 'Void Receipt'}
+        <DialogFooter className="mt-2 flex-wrap gap-2">
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={onReprint}>
+            <Printer size={13} /> Reprint
           </Button>
+          {!isVoided && canEdit && (
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={onEdit}>
+              <Pencil size={13} /> Edit
+            </Button>
+          )}
+          {!isVoided && canVoid && (
+            <Button variant="destructive" size="sm" className="gap-1.5" onClick={onVoid}>
+              <Ban size={13} /> Void
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -201,7 +396,7 @@ function VoidConfirmDialog({ order, onConfirm, onClose, isVoiding }: {
 }
 
 function downloadCSV(orders: ApiOrder[]) {
-  const headers = ['Order #', 'Date', 'Time', 'Cashier', 'Items', 'Payment', 'Subtotal', 'Discount', 'Total', 'M-Pesa Ref', 'Notes']
+  const headers = ['Order #', 'Date', 'Time', 'Cashier', 'Status', 'Items', 'Payment', 'Subtotal', 'Discount', 'Total', 'M-Pesa Ref', 'Notes']
   const rows = orders.map((o) => {
     const d = new Date(o.created_at)
     return [
@@ -209,6 +404,7 @@ function downloadCSV(orders: ApiOrder[]) {
       d.toLocaleDateString('en-KE'),
       d.toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' }),
       o.cashier_name ?? '',
+      o.status,
       o.items.reduce((s, i) => s + i.quantity, 0),
       o.payment_method,
       o.subtotal,
@@ -227,27 +423,27 @@ function downloadCSV(orders: ApiOrder[]) {
 
 export function SalesPage() {
   const { user } = useAuthStore()
-  const { data: permsData } = usePermissions()
+  const { settings } = useSettingsStore()
   const isCashier = user?.role === 'cashier'
   const isAdmin = user?.role === 'admin'
   const isManager = user?.role === 'manager'
-
-  // Admins and managers can always void; cashiers only if delete_sales permission is on
-  const canVoid = isAdmin || isManager || (isCashier && permsData?.permissions?.cashier?.delete_sales === true)
+  const canVoid = isAdmin || isManager || isCashier   // cashiers must supply PIN
+  const canEdit = isAdmin || isManager || isCashier
 
   const [dateFrom, setDateFrom] = useState(todayISO())
   const [dateTo, setDateTo] = useState(todayISO())
   const [paymentMethod, setPaymentMethod] = useState('')
   const [search, setSearch] = useState('')
   const [branchFilter, setBranchFilter] = useState<number | null>(null)
+
   const [selected, setSelected] = useState<ApiOrder | null>(null)
   const [voidTarget, setVoidTarget] = useState<ApiOrder | null>(null)
-  const [showManagerApproval, setShowManagerApproval] = useState(false)
+  const [editTarget, setEditTarget] = useState<ApiOrder | null>(null)
 
   const { data: branches = [] } = useBranches()
-  const deleteOrder = useDeleteOrder()
+  const voidOrder = useVoidOrder()
+  const editOrder = useEditOrder()
 
-  // Admins filter by selected branch; non-admins are server-scoped to their branch
   const effectiveBranchId = isAdmin ? (branchFilter || undefined) : undefined
 
   const { data: orders = [], isLoading } = useOrders({
@@ -257,13 +453,13 @@ export function SalesPage() {
     payment_method: paymentMethod || undefined,
     search: search || undefined,
     branch_id: effectiveBranchId,
-    // Backend enforces cashier_id for cashier role; this is belt-and-suspenders
     cashier_id: isCashier && user?.id ? Number(user.id) : undefined,
   })
 
   const stats = useMemo(() => {
-    const revenue = orders.reduce((s, o) => s + o.total, 0)
-    const count = orders.length
+    const active = orders.filter((o) => o.status !== 'voided')
+    const revenue = active.reduce((s, o) => s + o.total, 0)
+    const count = active.length
     const avg = count > 0 ? revenue / count : 0
     return { revenue, count, avg }
   }, [orders])
@@ -271,35 +467,69 @@ export function SalesPage() {
   const hasFilters = !!(paymentMethod || search || dateFrom !== todayISO() || dateTo !== todayISO() || branchFilter)
 
   function clearFilters() {
-    setDateFrom(todayISO())
-    setDateTo(todayISO())
-    setPaymentMethod('')
-    setSearch('')
-    setBranchFilter(null)
+    setDateFrom(todayISO()); setDateTo(todayISO())
+    setPaymentMethod(''); setSearch(''); setBranchFilter(null)
   }
 
-  function handleVoidClick(order: ApiOrder) {
-    setVoidTarget(order)
-    if (isCashier) {
-      // Cashier needs manager/admin PIN approval
-      setSelected(null)
-      setShowManagerApproval(true)
+  async function handleReprint(order: ApiOrder) {
+    const sale = orderToSaleInfo(order)
+    try {
+      const ok = await printESCPOS(sale, settings)
+      if (!ok) printReceipt(sale, settings)
+    } catch {
+      printReceipt(sale, settings)
     }
-    // Admin/manager flow handled by VoidConfirmDialog rendered below
   }
 
-  function executeVoid(order: ApiOrder) {
-    deleteOrder.mutate(order.id, {
-      onSuccess: () => {
-        toast.success(`Receipt #${order.order_number} voided`)
-        setVoidTarget(null)
-        setSelected(null)
-        setShowManagerApproval(false)
+  function handleVoidConfirm(reason: string, pin?: string) {
+    if (!voidTarget) return
+    voidOrder.mutate(
+      { id: voidTarget.id, reason, pin },
+      {
+        onSuccess: (updated) => {
+          toast.success(`Receipt #${voidTarget.order_number} voided`)
+          setVoidTarget(null)
+          setSelected(updated)
+        },
+        onError: (err: unknown) => {
+          const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+          toast.error(msg ?? 'Failed to void receipt')
+        },
       },
-      onError: () => {
-        toast.error('Failed to void receipt')
+    )
+  }
+
+  function handleEditConfirm(items: EditItem[], discount: number, notes: string, pin?: string) {
+    if (!editTarget) return
+    editOrder.mutate(
+      {
+        id: editTarget.id,
+        body: {
+          items: items.map((i) => ({
+            product_id: i.product_id,
+            product_name: i.product_name,
+            product_sku: i.product_sku,
+            quantity: i.quantity,
+            unit_price: i.unit_price,
+            discount_amount: i.discount_amount,
+          })),
+          discount_amount: discount,
+          notes,
+          pin,
+        },
       },
-    })
+      {
+        onSuccess: (updated) => {
+          toast.success(`Receipt #${editTarget.order_number} updated`)
+          setEditTarget(null)
+          setSelected(updated)
+        },
+        onError: (err: unknown) => {
+          const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+          toast.error(msg ?? 'Failed to edit receipt')
+        },
+      },
+    )
   }
 
   return (
@@ -320,50 +550,20 @@ export function SalesPage() {
         <StatCard label="Avg Order Value" value={fmtKES(stats.avg)} sub="per transaction" icon={CreditCard} accent="#059669" />
       </div>
 
-      {/* Branch/cashier context label */}
-      {isCashier ? (
-        <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-3 bg-gray-50 border border-gray-200 rounded-md px-3 py-2 w-fit">
-          <Receipt size={12} />
-          Showing your sales
-        </div>
-      ) : !isAdmin && user?.branch_name ? (
-        <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-3 bg-gray-50 border border-gray-200 rounded-md px-3 py-2 w-fit">
-          <Receipt size={12} />
-          Showing sales for <span className="font-semibold text-gray-700">{user.branch_name}</span>
-        </div>
-      ) : null}
-
       {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-4 items-center">
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-          <Input
-            placeholder="Order #..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 w-40 h-9 text-sm"
-          />
+          <Input placeholder="Order #..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-8 w-40 h-9 text-sm" />
         </div>
         <div className="flex items-center gap-1.5 text-sm text-gray-500">
           <span>From</span>
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            className="border border-gray-200 rounded-md px-2.5 py-1.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-gray-300"
-          />
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="border border-gray-200 rounded-md px-2.5 py-1.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-gray-300" />
           <span>to</span>
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            className="border border-gray-200 rounded-md px-2.5 py-1.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-gray-300"
-          />
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="border border-gray-200 rounded-md px-2.5 py-1.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-gray-300" />
         </div>
         <Select value={paymentMethod || '__all__'} onValueChange={(v) => setPaymentMethod(!v || v === '__all__' ? '' : v)}>
-          <SelectTrigger className="w-36 h-9 text-sm">
-            <SelectValue placeholder="All methods" />
-          </SelectTrigger>
+          <SelectTrigger className="w-36 h-9 text-sm"><SelectValue placeholder="All methods" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="__all__">All methods</SelectItem>
             <SelectItem value="cash">Cash</SelectItem>
@@ -374,22 +574,13 @@ export function SalesPage() {
           </SelectContent>
         </Select>
         {isAdmin && branches.length > 0 && (
-          <Select
-            value={branchFilter ? String(branchFilter) : '__all__'}
-            onValueChange={(v) => setBranchFilter(v === '__all__' ? null : Number(v))}
-          >
+          <Select value={branchFilter ? String(branchFilter) : '__all__'} onValueChange={(v) => setBranchFilter(v === '__all__' ? null : Number(v))}>
             <SelectTrigger className="w-40 h-9 text-sm">
-              <span>
-                {branchFilter
-                  ? (branches.find((b) => b.id === branchFilter)?.name ?? String(branchFilter))
-                  : 'All branches'}
-              </span>
+              <span>{branchFilter ? (branches.find((b) => b.id === branchFilter)?.name ?? String(branchFilter)) : 'All branches'}</span>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">All branches</SelectItem>
-              {branches.map((b) => (
-                <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
-              ))}
+              {branches.map((b) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
             </SelectContent>
           </Select>
         )}
@@ -416,9 +607,7 @@ export function SalesPage() {
             </thead>
             <tbody>
               {isLoading ? (
-                <tr>
-                  <td colSpan={isCashier ? 5 : 6} className="text-center text-gray-400 py-16 text-sm">Loading…</td>
-                </tr>
+                <tr><td colSpan={isCashier ? 5 : 6} className="text-center text-gray-400 py-16 text-sm">Loading…</td></tr>
               ) : orders.length === 0 ? (
                 <tr>
                   <td colSpan={isCashier ? 5 : 6} className="text-center py-16">
@@ -428,33 +617,36 @@ export function SalesPage() {
                   </td>
                 </tr>
               ) : (
-                orders.map((order) => (
-                  <tr
-                    key={order.id}
-                    className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors"
-                    onClick={() => setSelected(order)}
-                  >
-                    <td className="px-4 py-3">
-                      <span className="font-mono text-xs font-semibold text-gray-800">#{order.order_number}</span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">{fmtDateTime(order.created_at)}</td>
-                    {!isCashier && <td className="px-4 py-3 text-gray-700">{order.cashier_name ?? '—'}</td>}
-                    <td className="px-4 py-3 text-right text-gray-600">
-                      {order.items.reduce((s, i) => s + i.quantity, 0)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <PayBadge method={order.payment_method as ApiPaymentMethod} />
-                    </td>
-                    <td className="px-4 py-3 text-right font-bold text-gray-900">{fmtKES(order.total)}</td>
-                  </tr>
-                ))
+                orders.map((order) => {
+                  const isVoided = order.status === 'voided'
+                  return (
+                    <tr
+                      key={order.id}
+                      className={`border-b border-gray-50 cursor-pointer transition-colors ${isVoided ? 'opacity-50 bg-red-50 hover:bg-red-50' : 'hover:bg-gray-50'}`}
+                      onClick={() => setSelected(order)}
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono text-xs font-semibold text-gray-800">#{order.order_number}</span>
+                          {isVoided && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600">VOID</span>}
+                          {order.edited_at && !isVoided && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-600">EDIT</span>}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-gray-500 text-xs">{fmtDateTime(order.created_at)}</td>
+                      {!isCashier && <td className="px-4 py-3 text-gray-700">{order.cashier_name ?? '—'}</td>}
+                      <td className="px-4 py-3 text-right text-gray-600">{order.items.reduce((s, i) => s + i.quantity, 0)}</td>
+                      <td className="px-4 py-3"><PayBadge method={order.payment_method as ApiPaymentMethod} /></td>
+                      <td className={`px-4 py-3 text-right font-bold ${isVoided ? 'line-through text-gray-400' : 'text-gray-900'}`}>{fmtKES(order.total)}</td>
+                    </tr>
+                  )
+                })
               )}
             </tbody>
             {orders.length > 0 && (
               <tfoot>
                 <tr className="border-t-2 border-gray-200 bg-gray-50">
                   <td colSpan={isCashier ? 4 : 5} className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    {orders.length} transaction{orders.length !== 1 ? 's' : ''}
+                    {stats.count} transaction{stats.count !== 1 ? 's' : ''}
                   </td>
                   <td className="px-4 py-3 text-right font-extrabold text-gray-900">{fmtKES(stats.revenue)}</td>
                 </tr>
@@ -464,32 +656,36 @@ export function SalesPage() {
         </div>
       </Card>
 
+      {/* Detail dialog */}
       <OrderDetailDialog
         order={selected}
         onClose={() => setSelected(null)}
-        onVoid={() => handleVoidClick(selected!)}
+        onVoid={() => { setVoidTarget(selected); setSelected(null) }}
+        onEdit={() => { setEditTarget(selected); setSelected(null) }}
+        onReprint={() => selected && handleReprint(selected)}
         canVoid={canVoid}
-        isVoiding={deleteOrder.isPending}
+        canEdit={canEdit}
       />
 
-      {/* Admin/manager void confirmation (cashiers go through ManagerApprovalModal instead) */}
-      {voidTarget && !isCashier && (
-        <VoidConfirmDialog
+      {/* Void dialog */}
+      {voidTarget && (
+        <VoidDialog
           order={voidTarget}
-          onConfirm={() => executeVoid(voidTarget)}
+          isCashier={isCashier}
+          onConfirm={handleVoidConfirm}
           onClose={() => setVoidTarget(null)}
-          isVoiding={deleteOrder.isPending}
+          isPending={voidOrder.isPending}
         />
       )}
 
-      {/* Cashier void — requires manager/admin PIN */}
-      {showManagerApproval && voidTarget && (
-        <ManagerApprovalModal
-          open={showManagerApproval}
-          onClose={() => { setShowManagerApproval(false); setVoidTarget(null) }}
-          onApprove={() => executeVoid(voidTarget)}
-          title="Manager Approval Required"
-          description={`Enter a manager or admin PIN to void receipt #${voidTarget.order_number} (${fmtKES(voidTarget.total)}).`}
+      {/* Edit dialog */}
+      {editTarget && (
+        <EditDialog
+          order={editTarget}
+          isCashier={isCashier}
+          onConfirm={handleEditConfirm}
+          onClose={() => setEditTarget(null)}
+          isPending={editOrder.isPending}
         />
       )}
     </div>

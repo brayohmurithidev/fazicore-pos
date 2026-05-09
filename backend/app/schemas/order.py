@@ -5,6 +5,27 @@ from pydantic import BaseModel
 from app.models.order import OrderStatus, PaymentMethod, PaymentStatus
 
 
+class OrderItemEdit(BaseModel):
+    product_id: int | None = None
+    product_name: str
+    product_sku: str | None = None
+    quantity: int
+    unit_price: float
+    discount_amount: float = 0
+
+
+class OrderEdit(BaseModel):
+    items: list[OrderItemEdit]
+    discount_amount: float = 0
+    notes: str | None = None
+    pin: str | None = None  # required when caller is cashier
+
+
+class OrderVoid(BaseModel):
+    reason: str | None = None
+    pin: str | None = None  # required when caller is cashier
+
+
 class OrderItemCreate(BaseModel):
     product_id: int | None = None
     product_name: str
@@ -65,6 +86,11 @@ class OrderOut(BaseModel):
     credit_customer_name: str | None
     credit_customer_phone: str | None
     notes: str | None
+    voided_by: int | None = None
+    voided_at: datetime | None = None
+    void_reason: str | None = None
+    edited_by: int | None = None
+    edited_at: datetime | None = None
     items: list[OrderItemOut] = []
     created_at: datetime
 
