@@ -139,9 +139,10 @@ function VoidDialog({ order, isCashier, onConfirm, onClose, isPending }: {
 
 type EditItem = { product_id: number | null; product_name: string; product_sku: string | null; quantity: number; unit_price: number; discount_amount: number }
 
-function EditDialog({ order, isCashier, onConfirm, onClose, isPending }: {
+function EditDialog({ order, isCashier, allProducts, onConfirm, onClose, isPending }: {
   order: ApiOrder
   isCashier: boolean
+  allProducts: { id: number; name: string; sku: string | null; price: number }[]
   onConfirm: (items: EditItem[], discount: number, notes: string, pin?: string) => void
   onClose: () => void
   isPending: boolean
@@ -161,8 +162,13 @@ function EditDialog({ order, isCashier, onConfirm, onClose, isPending }: {
   const [pin, setPin] = useState('')
   const [productSearch, setProductSearch] = useState('')
 
-  const { data: productResults = [] } = useProducts(productSearch || undefined)
-  const showResults = productSearch.length >= 1 && productResults.length > 0
+  const q = productSearch.trim().toLowerCase()
+  const productResults = q.length >= 1
+    ? allProducts.filter((p) =>
+        p.name.toLowerCase().includes(q) || (p.sku ?? '').toLowerCase().includes(q)
+      ).slice(0, 20)
+    : []
+  const showResults = productResults.length > 0
 
   const setItem = (idx: number, patch: Partial<EditItem>) =>
     setItems((prev) => prev.map((it, i) => i === idx ? { ...it, ...patch } : it))
@@ -505,6 +511,7 @@ export function SalesPage() {
   const [editTarget, setEditTarget] = useState<ApiOrder | null>(null)
 
   const { data: branches = [] } = useBranches()
+  const { data: allProducts = [] } = useProducts()
   const voidOrder = useVoidOrder()
   const editOrder = useEditOrder()
 
@@ -747,6 +754,7 @@ export function SalesPage() {
         <EditDialog
           order={editTarget}
           isCashier={isCashier}
+          allProducts={allProducts.map((p) => ({ id: p.id, name: p.name, sku: p.sku, price: p.price }))}
           onConfirm={handleEditConfirm}
           onClose={() => setEditTarget(null)}
           isPending={editOrder.isPending}
