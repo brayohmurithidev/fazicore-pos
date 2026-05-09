@@ -39,7 +39,7 @@ export default defineConfig({
 
   build: {
     // Tauri supports es2021
-    target: isTauriDev ? 'chrome105' : 'modules',
+    target: isTauriDev ? 'chrome105' : ['es2020', 'edge88', 'firefox78', 'chrome87', 'safari14'],
     // Don't minify for debug Tauri builds
     minify: !isTauriDev ? 'esbuild' : false,
     sourcemap: !!isTauriDev,
