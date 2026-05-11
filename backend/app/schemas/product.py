@@ -19,6 +19,10 @@ class ProductCreate(BaseModel):
     track_inventory: bool = True
 
 
+class ProductBulkCreate(ProductCreate):
+    initial_stock: int = 0
+
+
 class ProductUpdate(BaseModel):
     name: str | None = None
     description: str | None = None

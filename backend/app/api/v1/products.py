@@ -4,11 +4,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
 from app.core.deps import get_current_active_user
+from app.models.inventory import Inventory
 from app.models.organization import Organization
 from app.models.product import Product
 from app.models.user import User, UserRole
 from app.repositories.product import ProductRepository
-from app.schemas.product import ProductCreate, ProductOut, ProductUpdate
+from app.schemas.product import ProductBulkCreate, ProductCreate, ProductOut, ProductUpdate
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -82,7 +83,7 @@ async def create_product(
 
 @router.post("/bulk", status_code=status.HTTP_201_CREATED)
 async def bulk_create_products(
-    data: list[ProductCreate],
+    data: list[ProductBulkCreate],
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_active_user),
 ) -> dict:
@@ -103,11 +104,21 @@ async def bulk_create_products(
             )
     created = 0
     for item in data:
-        product_data = item.model_dump()
+        product_data = item.model_dump(exclude={"initial_stock"})
         product_data["org_id"] = current_user.org_id
-        session.add(Product(**product_data))
+        product = Product(**product_data)
+        session.add(product)
+        await session.flush()
+        if item.initial_stock > 0 and item.track_inventory:
+            inv = Inventory(
+                product_id=product.id,
+                branch_id=current_user.branch_id,
+                quantity=item.initial_stock,
+                low_stock_threshold=item.min_stock,
+            )
+            session.add(inv)
+            await session.flush()
         created += 1
-    await session.flush()
     return {"created": created}
 
 

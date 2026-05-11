@@ -943,8 +943,8 @@ function ProductsTab({ branchId }: { branchId?: number }) {
 
   const downloadTemplate = () => downloadCSV(
     'products_template.csv',
-    ['name', 'price', 'description', 'sku', 'barcode', 'category', 'cost', 'unit', 'vat_rate', 'min_stock'],
-    [['Sample Product', '100', 'Optional description', 'SKU-001', '', 'Electronics', '70', 'piece', '0.16', '5']]
+    ['name', 'price', 'description', 'sku', 'barcode', 'category', 'cost', 'unit', 'vat_rate', 'min_stock', 'stock_quantity'],
+    [['Sample Product', '100', 'Optional description', 'SKU-001', '', 'Electronics', '70', 'piece', '0.16', '5', '20']]
   )
 
   const handleImportCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -980,6 +980,7 @@ function ProductsTab({ branchId }: { branchId?: number }) {
         unit: col(cols, 'unit') || 'piece',
         vat_rate: parseFloat(col(cols, 'vat_rate')) || 0.16,
         min_stock: parseInt(col(cols, 'min_stock')) || 10,
+        initial_stock: parseInt(col(cols, 'stock_quantity')) || 0,
       })
     }
     if (rows.length === 0) { toast.error('No valid rows found in CSV'); return }
