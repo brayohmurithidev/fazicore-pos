@@ -656,7 +656,7 @@ export function SalesPage() {
           </Select>
         )}
         {hasFilters && (
-          <Button variant="ghost" size="sm" onClick={clearFilters} className="text-gray-500 h-9">
+          <Button variant="ghost" size="sm" onClick={clearFilters} className="text-gray-500">
             <X size={13} className="mr-1" /> Clear
           </Button>
         )}

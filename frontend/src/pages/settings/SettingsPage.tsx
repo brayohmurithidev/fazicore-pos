@@ -641,9 +641,9 @@ function EnvCredPanel({ env, existing, orgSlug }: {
         </div>
         {existing && !editing && (
           <div className="flex gap-1.5">
-            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setEditing(true); setMsg(null) }}>Edit</Button>
+            <Button size="sm" variant="outline" onClick={() => { setEditing(true); setMsg(null) }}>Edit</Button>
             <Button
-              size="sm" variant="outline" className="h-7 text-xs"
+              size="sm" variant="outline"
               disabled={registerC2b.isPending}
               onClick={async () => {
                 try {
@@ -657,7 +657,7 @@ function EnvCredPanel({ env, existing, orgSlug }: {
             >
               {registerC2b.isPending && <Loader2 size={11} className="animate-spin mr-1" />}Register C2B
             </Button>
-            <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={async () => { if (!confirm(`Remove ${env} credentials?`)) return; await remove.mutateAsync(env); setEditing(false); setMsg(null) }} disabled={remove.isPending}>Remove</Button>
+            <Button size="sm" variant="destructive" onClick={async () => { if (!confirm(`Remove ${env} credentials?`)) return; await remove.mutateAsync(env); setEditing(false); setMsg(null) }} disabled={remove.isPending}>Remove</Button>
           </div>
         )}
       </div>
@@ -704,7 +704,7 @@ function EnvCredPanel({ env, existing, orgSlug }: {
             </div>
           </div>
           <Button
-            size="sm" variant="outline" className="h-7 text-xs"
+            size="sm" variant="outline"
             disabled={simulate.isPending}
             onClick={async () => {
               try {
@@ -860,7 +860,7 @@ function PermissionsTab() {
   }
 
   const saveAction = local ? (
-    <Button size="sm" className="h-7 px-3 text-xs" onClick={handleSave} disabled={updatePerms.isPending}>
+    <Button size="sm" onClick={handleSave} disabled={updatePerms.isPending}>
       {updatePerms.isPending && <Loader2 size={11} className="animate-spin mr-1" />}Save
     </Button>
   ) : saved ? (

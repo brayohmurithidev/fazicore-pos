@@ -193,7 +193,7 @@ export function DashboardPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="w-full mt-3 border-amber-200 text-amber-900 hover:bg-amber-100 h-10 text-sm"
+                  className="w-full mt-3 border-amber-200 text-amber-900 hover:bg-amber-100"
                   onClick={() => navigate('/inventory')}
                 >
                   View Inventory

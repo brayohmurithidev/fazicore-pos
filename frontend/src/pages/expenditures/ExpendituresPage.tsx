@@ -145,8 +145,8 @@ function ExpenditureModal({
           )}
           {error && <p className="text-xs text-red-500 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
           <div className="flex gap-2 pt-1">
-            <Button type="button" variant="outline" className="flex-1" onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={isPending} className="flex-1">
+            <Button type="button" variant="outline" size="sm" className="flex-1" onClick={onClose}>Cancel</Button>
+            <Button type="submit" size="sm" disabled={isPending} className="flex-1">
               {isPending && <Loader2 size={14} className="animate-spin mr-1" />}
               {initial ? 'Save changes' : 'Record'}
             </Button>
@@ -215,7 +215,7 @@ export function ExpendituresPage() {
           <p className="text-sm text-gray-400 mt-0.5">Track and manage business expenses</p>
         </div>
         {isAdmin && (
-          <Button onClick={() => setModal('create')} className="flex items-center gap-2">
+          <Button size="sm" onClick={() => setModal('create')} className="flex items-center gap-2">
             <Plus size={15} /> New Expenditure
           </Button>
         )}

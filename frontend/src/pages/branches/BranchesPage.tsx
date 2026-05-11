@@ -113,7 +113,7 @@ export function BranchesPage() {
                   <Badge className={selected.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}>{selected.status}</Badge>
                 </div>
               </div>
-              <Button variant="outline" className="w-full mt-4" onClick={() => setSelected(null)}>Close</Button>
+              <Button variant="outline" size="sm" className="w-full mt-4" onClick={() => setSelected(null)}>Close</Button>
             </>
           )}
         </DialogContent>
@@ -162,8 +162,8 @@ function AddBranchForm({ onClose, onSave }: {
         ))}
       </div>
       <div className="flex gap-2">
-        <Button variant="outline" className="flex-1" onClick={onClose}>Cancel</Button>
-        <Button className="flex-1" disabled={!form.name} onClick={() => onSave(form)}>
+        <Button variant="outline" size="sm" className="flex-1" onClick={onClose}>Cancel</Button>
+        <Button size="sm" className="flex-1" disabled={!form.name} onClick={() => onSave(form)}>
           Add Branch
         </Button>
       </div>

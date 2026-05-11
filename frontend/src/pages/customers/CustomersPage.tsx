@@ -83,8 +83,8 @@ function CustomerFormModal({ open, onClose, initial }: {
           </div>
           {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded">{error}</p>}
           <div className="flex gap-2 mt-1">
-            <Button variant="outline" className="flex-1" onClick={onClose}>Cancel</Button>
-            <Button className="flex-1" onClick={handleSave} disabled={isPending}>
+            <Button variant="outline" size="sm" className="flex-1" onClick={onClose}>Cancel</Button>
+            <Button size="sm" className="flex-1" onClick={handleSave} disabled={isPending}>
               {isPending && <Loader2 size={13} className="animate-spin mr-1.5" />}Save
             </Button>
           </div>
@@ -165,8 +165,8 @@ function RecordPaymentModal({ open, onClose, customer, preselectedInvoice }: {
           </div>
           {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded">{error}</p>}
           <div className="flex gap-2 mt-1">
-            <Button variant="outline" className="flex-1" onClick={onClose}>Cancel</Button>
-            <Button className="flex-1 bg-amber-500 hover:bg-amber-600" onClick={handleSave} disabled={record.isPending}>
+            <Button variant="outline" size="sm" className="flex-1" onClick={onClose}>Cancel</Button>
+            <Button size="sm" className="flex-1 bg-amber-500 hover:bg-amber-600" onClick={handleSave} disabled={record.isPending}>
               {record.isPending && <Loader2 size={13} className="animate-spin mr-1.5" />}Record Payment
             </Button>
           </div>
