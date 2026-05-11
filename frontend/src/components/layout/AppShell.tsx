@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router'
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router'
 import {
   LayoutDashboard, Monitor, Package, Receipt, Building2, Settings,
   ChevronLeft, ChevronRight, LogOut, BarChart3, UserCheck, Menu, X, Clock, TrendingDown, UserCircle,
@@ -46,6 +46,7 @@ function fmtTime(iso: string | null): string | null {
 export function AppShell() {
   const { user, logout, attendanceId, clockInTime, setClockOut } = useAuthStore()
   const navigate = useNavigate()
+  const location = useLocation()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
@@ -405,7 +406,9 @@ export function AppShell() {
 
         {/* Page content */}
         <main className="flex-1 overflow-hidden">
-          <Outlet />
+          <div key={location.pathname} className="h-full animate-page-in">
+            <Outlet />
+          </div>
         </main>
       </div>
       <Toaster />

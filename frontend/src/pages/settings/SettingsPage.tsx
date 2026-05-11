@@ -1222,7 +1222,7 @@ export function SettingsPage() {
         </nav>
 
         {/* Tab content */}
-        <div className="flex-1 overflow-y-auto">
+        <div key={tab} className="flex-1 overflow-y-auto animate-page-in">
           {tab === 'general'     && <GeneralTab />}
           {tab === 'payments'    && <PaymentsTab />}
           {tab === 'users'       && <UsersPage />}
