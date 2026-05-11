@@ -4,12 +4,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
 from app.core.deps import get_current_active_user
-from app.models.inventory import Inventory
+from app.models.inventory import TransactionType
 from app.models.organization import Organization
 from app.models.product import Product
 from app.models.user import User, UserRole
 from app.repositories.product import ProductRepository
 from app.schemas.product import ProductBulkCreate, ProductCreate, ProductOut, ProductUpdate
+from app.services.inventory import InventoryService
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -102,6 +103,7 @@ async def bulk_create_products(
                 detail={"code": "limit_exceeded", "resource": "products",
                         "current": active_count, "max": org.max_products},
             )
+    inv_service = InventoryService(session)
     created = 0
     for item in data:
         product_data = item.model_dump(exclude={"initial_stock"})
@@ -109,15 +111,16 @@ async def bulk_create_products(
         product = Product(**product_data)
         session.add(product)
         await session.flush()
+        await session.refresh(product)
         if item.initial_stock > 0 and item.track_inventory:
-            inv = Inventory(
+            await inv_service.adjust(
                 product_id=product.id,
                 branch_id=current_user.branch_id,
-                quantity=item.initial_stock,
-                low_stock_threshold=item.min_stock,
+                qty_change=item.initial_stock,
+                type=TransactionType.PURCHASE,
+                performed_by=current_user.id,
+                notes="Initial stock from CSV import",
             )
-            session.add(inv)
-            await session.flush()
         created += 1
     return {"created": created}
 
