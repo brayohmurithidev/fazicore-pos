@@ -612,7 +612,7 @@ export function POSPage() {
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="flex h-full overflow-hidden bg-gray-50 relative">
+    <div className="flex flex-1 overflow-hidden bg-gray-50 relative">
       {/* ── Left: Product catalog ─────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
 

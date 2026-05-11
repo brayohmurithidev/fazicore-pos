@@ -405,8 +405,8 @@ export function AppShell() {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-hidden">
-          <div key={location.pathname} className="h-full animate-page-in">
+        <main className="flex-1 overflow-hidden flex flex-col">
+          <div key={location.pathname} className="flex-1 flex flex-col overflow-hidden animate-page-in">
             <Outlet />
           </div>
         </main>
