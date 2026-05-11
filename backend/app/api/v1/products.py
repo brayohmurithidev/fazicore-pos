@@ -80,6 +80,37 @@ async def create_product(
     return ProductOut.model_validate(obj)
 
 
+@router.post("/bulk", status_code=status.HTTP_201_CREATED)
+async def bulk_create_products(
+    data: list[ProductCreate],
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_active_user),
+) -> dict:
+    if current_user.role not in (UserRole.ADMIN, UserRole.MANAGER):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+    org = await session.get(Organization, current_user.org_id)
+    if org:
+        active_count = await session.scalar(
+            select(func.count(Product.id)).where(
+                Product.org_id == current_user.org_id, Product.is_active == True
+            )
+        ) or 0
+        if active_count + len(data) > org.max_products:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail={"code": "limit_exceeded", "resource": "products",
+                        "current": active_count, "max": org.max_products},
+            )
+    created = 0
+    for item in data:
+        product_data = item.model_dump()
+        product_data["org_id"] = current_user.org_id
+        session.add(Product(**product_data))
+        created += 1
+    await session.flush()
+    return {"created": created}
+
+
 @router.get("/{product_id}", response_model=ProductOut)
 async def get_product(
     product_id: int,

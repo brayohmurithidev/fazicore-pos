@@ -157,6 +157,14 @@ export function useDeleteProduct() {
   })
 }
 
+export function useBulkCreateProducts() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>[]) => api.post('/products/bulk', data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['products'] }),
+  })
+}
+
 // ── Categories ────────────────────────────────────────────────────────────
 
 export function useCategories() {

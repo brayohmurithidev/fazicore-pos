@@ -3,7 +3,7 @@ import {
   Search, Plus, ArrowLeftRight, Truck, Package, AlertTriangle, Loader2,
   CheckCircle2, Download, Printer, Pencil, Trash2, SlidersHorizontal,
   TrendingDown, BarChart3, X, XCircle, ChevronRight, Barcode, Wand2,
-  ShoppingCart,
+  ShoppingCart, Upload, FileDown,
 } from 'lucide-react'
 import JsBarcode from 'jsbarcode'
 import { Button } from '@/components/ui/button'
@@ -24,7 +24,7 @@ import {
   useInventoryTransactions, useProductInventory,
   useSuppliers, useCreateSupplier, useUpdateSupplier, useDeleteSupplier,
   useStockTransfers, useInitiateTransfer, useTransferAction, useUploadProductImage,
-  useReorderSuggestions, useInventoryAging, usePermissions,
+  useReorderSuggestions, useInventoryAging, usePermissions, useBulkCreateProducts,
 } from '@/lib/queries'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
@@ -45,6 +45,24 @@ function downloadCSV(filename: string, headers: string[], rows: (string | number
   const a = document.createElement('a')
   a.href = url; a.download = filename; a.click()
   URL.revokeObjectURL(url)
+}
+
+function parseCSVLine(line: string): string[] {
+  const result: string[] = []
+  let cur = '', inQuote = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (ch === '"') {
+      if (inQuote && line[i + 1] === '"') { cur += '"'; i++ }
+      else inQuote = !inQuote
+    } else if (ch === ',' && !inQuote) {
+      result.push(cur); cur = ''
+    } else {
+      cur += ch
+    }
+  }
+  result.push(cur)
+  return result
 }
 
 function openPrintWindow(title: string, headers: string[], rows: (string | number)[][], subtitle?: string) {
@@ -919,7 +937,61 @@ function ProductsTab({ branchId }: { branchId?: number }) {
   const updateProduct = useUpdateProductById()
   const deleteProduct = useDeleteProduct()
   const adjustInventory = useAdjustInventory()
+  const bulkCreateProducts = useBulkCreateProducts()
   const hasProductImages = useFeature('product_images')
+  const importRef = useRef<HTMLInputElement>(null)
+
+  const downloadTemplate = () => downloadCSV(
+    'products_template.csv',
+    ['name', 'price', 'description', 'sku', 'barcode', 'category', 'cost', 'unit', 'vat_rate', 'min_stock'],
+    [['Sample Product', '100', 'Optional description', 'SKU-001', '', 'Electronics', '70', 'piece', '0.16', '5']]
+  )
+
+  const handleImportCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    const text = await file.text()
+    const lines = text.trim().split(/\r?\n/)
+    if (lines.length < 2) { toast.error('CSV has no data rows'); return }
+    const headers = parseCSVLine(lines[0]).map((h) => h.trim().toLowerCase())
+    const nameIdx = headers.indexOf('name')
+    const priceIdx = headers.indexOf('price')
+    if (nameIdx === -1 || priceIdx === -1) { toast.error('CSV must have "name" and "price" columns'); return }
+    const col = (cols: string[], key: string) => { const i = headers.indexOf(key); return i === -1 ? '' : cols[i]?.trim() ?? '' }
+    const rows: Record<string, unknown>[] = []
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim()
+      if (!line) continue
+      const cols = parseCSVLine(line)
+      const name = col(cols, 'name')
+      const price = parseFloat(col(cols, 'price'))
+      if (!name || isNaN(price)) continue
+      const catName = col(cols, 'category')
+      const cat = categories.find((c) => c.name.toLowerCase() === catName.toLowerCase())
+      rows.push({
+        name,
+        price,
+        description: col(cols, 'description') || null,
+        sku: col(cols, 'sku') || null,
+        barcode: col(cols, 'barcode') || null,
+        category_id: cat?.id ?? null,
+        cost: parseFloat(col(cols, 'cost')) || null,
+        unit: col(cols, 'unit') || 'piece',
+        vat_rate: parseFloat(col(cols, 'vat_rate')) || 0.16,
+        min_stock: parseInt(col(cols, 'min_stock')) || 10,
+      })
+    }
+    if (rows.length === 0) { toast.error('No valid rows found in CSV'); return }
+    bulkCreateProducts.mutate(rows, {
+      onSuccess: (res: { created: number }) => toast.success(`Imported ${res.created} product${res.created !== 1 ? 's' : ''}`),
+      onError: (err) => {
+        const limit = parseLimitError(err)
+        if (limit) setLimitError(limit)
+        else toast.error('Import failed — check CSV format')
+      },
+    })
+  }
 
   // Sync selectedProduct with fresh data after mutations
   const currentSelected = useMemo(() =>
@@ -1104,10 +1176,20 @@ function ProductsTab({ branchId }: { branchId?: number }) {
           <Button variant="outline" size="sm" onClick={exportPDF}><Printer size={13} className="mr-1.5" />PDF</Button>
           <Button variant="outline" size="sm" onClick={() => setBarcodeModalOpen(true)}><Barcode size={13} className="mr-1.5" />Labels</Button>
           {canManage && (
-            <Button size="sm" disabled={atLimit} title={atLimit ? 'Product limit reached' : 'N'}
-              onClick={() => { setEditProduct(null); setAddOpen(true) }}>
-              <Plus size={13} className="mr-1.5" />Add Product
-            </Button>
+            <>
+              <input ref={importRef} type="file" accept=".csv" className="hidden" onChange={handleImportCSV} />
+              <Button variant="outline" size="sm" title="Download CSV template" onClick={downloadTemplate}>
+                <FileDown size={13} className="mr-1.5" />Template
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => importRef.current?.click()} disabled={bulkCreateProducts.isPending}>
+                {bulkCreateProducts.isPending ? <Loader2 size={13} className="mr-1.5 animate-spin" /> : <Upload size={13} className="mr-1.5" />}
+                Import
+              </Button>
+              <Button size="sm" disabled={atLimit} title={atLimit ? 'Product limit reached' : undefined}
+                onClick={() => { setEditProduct(null); setAddOpen(true) }}>
+                <Plus size={13} className="mr-1.5" />Add Product
+              </Button>
+            </>
           )}
         </div>
       </div>

@@ -127,7 +127,7 @@ export function AppShell() {
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-white">
+    <div className="flex flex-col h-dvh overflow-hidden bg-white">
       {/* Native title bar — only in Tauri desktop */}
       {isTauri && <TitleBar />}
 
