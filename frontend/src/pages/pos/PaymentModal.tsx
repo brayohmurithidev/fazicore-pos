@@ -519,7 +519,7 @@ export function PaymentModal({ open, onClose, total, onComplete, settings }: Pro
 
             {!showPicker && (
               <div className="flex gap-2 mt-5">
-                <Button variant="outline" className="flex-1" onClick={onClose}>Cancel</Button>
+                <Button variant="outline" className="flex-1 h-11" onClick={onClose}>Cancel</Button>
                 <Button
                   className="flex-1 h-11"
                   disabled={!canProceed()}
