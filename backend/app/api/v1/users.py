@@ -8,7 +8,7 @@ from app.core.security import hash_password
 from app.models.organization import Organization
 from app.models.user import User, UserRole
 from app.repositories.user import UserRepository
-from app.schemas.user import UserCreate, UserOut, UserUpdate
+from app.schemas.user import UserCreate, UserOut, UserSelfUpdate, UserUpdate
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -71,6 +71,24 @@ async def get_user(
     if not user or user.org_id != current_user.org_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return UserOut.model_validate(user)
+
+
+@router.patch("/me", response_model=UserOut)
+async def update_me(
+    data: UserSelfUpdate,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_active_user),
+) -> UserOut:
+    repo = UserRepository(session)
+    update_dict = data.model_dump(exclude_unset=True)
+    if "pin" in update_dict:
+        update_dict["pin_hash"] = hash_password(update_dict.pop("pin"))
+    for field, value in update_dict.items():
+        setattr(current_user, field, value)
+    session.add(current_user)
+    await session.flush()
+    loaded = await repo.get(current_user.id)
+    return UserOut.model_validate(loaded)
 
 
 @router.patch("/{user_id}", response_model=UserOut)

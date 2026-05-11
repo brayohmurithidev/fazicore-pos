@@ -25,6 +25,7 @@ class User(Base, TimestampMixin):
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.CASHIER)
     branch_id: Mapped[int | None] = mapped_column(ForeignKey("branches.id"), nullable=True)
     avatar: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    photo_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     org: Mapped["Organization"] = relationship("Organization", back_populates="users")

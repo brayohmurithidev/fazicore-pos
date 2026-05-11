@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router'
-import { Monitor, ChevronLeft, Building2, Lock, AlertCircle, Loader2 } from 'lucide-react'
+import { ChevronLeft, Building2, Lock, AlertCircle, Loader2, Delete } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { RoleBadge } from '@/components/shared/RoleBadge'
 import { useAuthStore } from '@/stores/auth'
@@ -34,6 +34,25 @@ function formatLastLogin(iso: string | undefined): string | null {
   if (d.toDateString() === now.toDateString()) return `Today ${time}`
   if (d.toDateString() === yesterday.toDateString()) return `Yesterday ${time}`
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ` ${time}`
+}
+
+function PageLogo({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
+  const iconH = size === 'lg' ? 'h-20' : size === 'sm' ? 'h-14' : 'h-16'
+  const nameSize = size === 'lg' ? 'text-3xl' : size === 'sm' ? 'text-xl' : 'text-2xl'
+  const tagSize = size === 'sm' ? 'text-[9px]' : 'text-[10px]'
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <img src="/assets/fazistore-icon.svg" alt="Fazi POS" className={`${iconH} w-auto`} />
+      <div className="text-center leading-none">
+        <div className={`${nameSize} font-extrabold tracking-tight`}>
+          <span className="text-gray-900">fazi</span><span className="text-amber-500">store</span>
+        </div>
+        <div className={`${tagSize} font-semibold tracking-[0.18em] text-gray-400 uppercase mt-1`}>
+          Point of Sale &amp; Inventory
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export function LoginPage() {
@@ -140,6 +159,7 @@ export function LoginPage() {
             branch: String(data.user.branch_id ?? ''),
             branch_name: data.user.branch_name ?? undefined,
             avatar: data.user.avatar ?? getInitials(data.user.name),
+            photo_url: data.user.photo_url ?? undefined,
             pin: '',
           }
           setTimeout(() => doSuccessLogin(user, data.access_token, data.refresh_token), 200)
@@ -163,7 +183,6 @@ export function LoginPage() {
     )
   }
 
-  // ── Desktop keyboard capture ───────────────────────────────────────────
   useEffect(() => {
     if (!selectedUser || pinLocked) return
     const onKey = (e: KeyboardEvent) => {
@@ -174,20 +193,6 @@ export function LoginPage() {
     return () => window.removeEventListener('keydown', onKey)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedUser, pinLocked, pin, pinAttempts, pinLogin.isPending])
-
-  // ── Shared elements ────────────────────────────────────────────────────
-
-  const Logo = () => (
-    <div className="mb-10 text-center">
-      <div className="flex items-center gap-3 justify-center mb-2">
-        <div className="w-12 h-12 bg-gray-900 rounded-xl flex items-center justify-center">
-          <Monitor size={22} className="text-white" />
-        </div>
-        <div className="text-2xl font-extrabold text-gray-900 tracking-tight">Fazi POS</div>
-      </div>
-      <div className="text-sm text-gray-400">by Fazilabs Business Solutions</div>
-    </div>
-  )
 
   const SlugSwitcher = () =>
     editingSlug ? (
@@ -203,55 +208,63 @@ export function LoginPage() {
       >
         <input
           autoFocus
-          className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-gray-900"
+          className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20"
           placeholder="your-business-slug"
           value={slugInput}
           onChange={(e) => setSlugInput(e.target.value)}
         />
-        <button type="submit" className="text-sm font-semibold px-4 py-2 bg-gray-900 text-white rounded-lg">Go</button>
-        <button type="button" onClick={() => setEditingSlug(false)} className="text-sm px-4 py-2 border border-gray-200 rounded-lg">Cancel</button>
+        <button type="submit" className="text-sm font-semibold px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors">Go</button>
+        <button type="button" onClick={() => setEditingSlug(false)} className="text-sm px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">Cancel</button>
       </form>
     ) : (
       <button
         onClick={() => { setEditingSlug(true); setSlugInput(orgSlug) }}
-        className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 mb-6 transition-colors"
+        className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 mb-6 transition-colors"
       >
         <Building2 size={13} />
-        <span className="font-medium">{orgSlug}</span>
-        <span className="text-gray-400">· Switch Business</span>
+        <span className="font-medium text-gray-600">{orgSlug}</span>
+        <span>· Switch</span>
       </button>
     )
+
+  const pageBase = 'min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6'
 
   // ── No slug yet ────────────────────────────────────────────────────────
   if (!orgSlug || editingSlug) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6">
-        <Logo />
-        <div className="bg-white border border-gray-200 rounded-2xl p-8 w-full max-w-sm shadow-sm">
-          <h2 className="font-bold text-lg mb-1">Welcome to Fazi POS</h2>
-          <p className="text-sm text-gray-400 mb-5">Enter your business slug to continue</p>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault()
-              const s = slugInput.trim()
-              if (s) { setOrgSlug(s); setEditingSlug(false); setSlugInput('') }
-            }}
-          >
-            <input
-              autoFocus
-              className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2.5 outline-none focus:border-gray-900 mb-3"
-              placeholder="your-business-slug"
-              value={slugInput}
-              onChange={(e) => setSlugInput(e.target.value)}
-            />
-            <button
-              type="submit"
-              className="w-full text-sm font-semibold px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+      <div className={pageBase}>
+        <div className="bg-white border border-gray-200 rounded-2xl w-full max-w-sm shadow-sm overflow-hidden">
+          <div className="flex justify-center px-8 py-7 border-b border-gray-100">
+            <PageLogo size="md" />
+          </div>
+          <div className="p-8">
+            <h2 className="font-bold text-lg text-gray-900 mb-1">Welcome</h2>
+            <p className="text-sm text-gray-400 mb-5">Enter your business slug to get started</p>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                const s = slugInput.trim()
+                if (s) { setOrgSlug(s); setEditingSlug(false); setSlugInput('') }
+              }}
             >
-              Continue
-            </button>
-          </form>
+              <input
+                autoFocus
+                className="w-full text-sm border border-gray-200 rounded-lg px-3.5 py-3 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/15 mb-3 transition-colors"
+                placeholder="your-business-slug"
+                value={slugInput}
+                onChange={(e) => setSlugInput(e.target.value)}
+              />
+              <button
+                type="submit"
+                className="w-full text-sm font-semibold px-4 py-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 active:bg-amber-700 transition-colors"
+              >
+                Continue
+              </button>
+            </form>
+          </div>
         </div>
+
+        <p className="text-xs text-gray-300 mt-8">Fazilabs Business Solutions</p>
       </div>
     )
   }
@@ -259,23 +272,27 @@ export function LoginPage() {
   // ── PIN screen ─────────────────────────────────────────────────────────
   if (selectedUser) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6">
-        <Logo />
-        <div className="bg-white border border-gray-200 rounded-2xl p-6 sm:p-10 w-full sm:max-w-sm shadow-sm">
-          <button
-            onClick={handleBack}
-            className="flex items-center gap-1 text-sm text-gray-500 mb-6 hover:text-gray-900"
-          >
-            <ChevronLeft size={15} /> Back
-          </button>
+      <div className={pageBase}>
+        <div className="bg-white border border-gray-200 rounded-2xl w-full sm:max-w-sm shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            <button
+              onClick={handleBack}
+              className="flex items-center gap-1 text-sm text-gray-400 hover:text-gray-700 transition-colors"
+            >
+              <ChevronLeft size={15} /> Back
+            </button>
+            <PageLogo size="sm" />
+            <div className="w-14" />
+          </div>
 
+          <div className="px-8 py-7">
           {pinLocked ? (
             <div className="text-center py-4">
-              <div className="w-16 h-16 mx-auto mb-5 bg-red-50 rounded-full flex items-center justify-center">
-                <Lock size={28} className="text-red-500" />
+              <div className="w-14 h-14 mx-auto mb-4 bg-red-50 rounded-full flex items-center justify-center">
+                <Lock size={24} className="text-red-500" />
               </div>
               <div className="font-bold text-lg text-gray-900 mb-2">Account Locked</div>
-              <div className="text-sm text-gray-500 mb-8">
+              <div className="text-sm text-gray-500 mb-7">
                 Too many failed attempts. Ask an admin to assist.
               </div>
               <button
@@ -285,71 +302,72 @@ export function LoginPage() {
                   setSelectedUser(null)
                   setOverrideMode(true)
                 }}
-                className="w-full py-3 px-4 bg-gray-900 text-white text-sm font-semibold rounded-xl hover:bg-gray-800 transition-colors"
+                className="w-full py-3 px-4 bg-amber-500 text-white text-sm font-semibold rounded-xl hover:bg-amber-600 transition-colors"
               >
                 Admin Override
               </button>
             </div>
           ) : (
             <>
-              <div className="text-center mb-8">
-                <Avatar className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-3">
-                  <AvatarFallback className="bg-gray-200 text-gray-700 text-xl sm:text-2xl font-bold">
+              <div className="text-center mb-6">
+                <Avatar className="w-16 h-16 mx-auto mb-3">
+                  <AvatarFallback className="bg-amber-100 text-amber-700 text-xl font-bold">
                     {selectedUser.avatar}
                   </AvatarFallback>
                 </Avatar>
-                <div className="font-bold text-lg sm:text-xl">{selectedUser.name}</div>
-                <div className="mt-1.5"><RoleBadge role={selectedUser.role} /></div>
+                <div className="font-bold text-xl text-gray-900">{selectedUser.name}</div>
+                <div className="mt-2"><RoleBadge role={selectedUser.role} /></div>
               </div>
 
-              <div className="text-sm font-semibold text-gray-700 text-center mb-4">Enter PIN</div>
+              <div className="text-[13px] font-semibold text-gray-500 text-center mb-4 uppercase tracking-widest">Enter PIN</div>
 
-              <div key={shakeKey} className={`flex justify-center gap-3 mb-2 ${shakeKey > 0 ? 'animate-shake' : ''}`}>
+              <div key={shakeKey} className={`flex justify-center gap-4 mb-1 ${shakeKey > 0 ? 'animate-shake' : ''}`}>
                 {[0, 1, 2, 3].map((i) => (
                   <div
                     key={i}
-                    className={`w-4 h-4 rounded-full transition-colors ${pin.length > i ? 'bg-gray-900' : 'bg-gray-200'}`}
+                    className={`w-3.5 h-3.5 rounded-full transition-all duration-150 ${pin.length > i ? 'bg-amber-500 scale-110' : 'bg-gray-200'}`}
                   />
                 ))}
               </div>
 
-              <div className="h-6 flex items-center justify-center mb-3">
-                {error && <p className="text-xs text-red-600 text-center">{error}</p>}
+              <div className="h-7 flex items-center justify-center mb-3">
+                {error && <p className="text-xs text-red-500 text-center font-medium">{error}</p>}
               </div>
 
-              {/* On-screen numpad — touch/tablet only */}
-              <div className="grid grid-cols-3 gap-3 md:hidden">
+              <div className="grid grid-cols-3 gap-2.5 md:hidden">
                 {['1','2','3','4','5','6','7','8','9','','0','del'].map((k, i) =>
                   k === '' ? <div key={i} /> : (
                     <button
                       key={i}
                       onClick={() => handlePinKey(k)}
                       disabled={pinLogin.isPending}
-                      className={`py-5 text-2xl font-semibold rounded-xl border transition-colors disabled:opacity-50 active:scale-95 ${
+                      className={`py-4 text-xl font-semibold rounded-xl border transition-colors disabled:opacity-50 active:scale-95 ${
                         k === 'del'
-                          ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
-                          : 'bg-gray-50 text-gray-900 border-gray-200 hover:bg-gray-100 active:bg-gray-200'
+                          ? 'bg-red-50 text-red-500 border-red-100 hover:bg-red-100'
+                          : 'bg-gray-50 text-gray-900 border-gray-100 hover:bg-gray-100'
                       }`}
                     >
-                      {k === 'del' ? '⌫' : k}
+                      {k === 'del' ? <Delete size={18} /> : k}
                     </button>
                   )
                 )}
               </div>
 
-              {/* Desktop keyboard hint */}
-              <p className="hidden md:block text-xs text-gray-400 text-center mt-1">
+              <p className="hidden md:block text-[12px] text-gray-400 text-center mt-3">
                 Type your PIN using the keyboard
               </p>
 
               {pinAttempts > 0 && (
-                <div className="text-center text-xs text-gray-400 mt-4">
+                <div className="text-center text-[11px] text-gray-400 mt-3">
                   Attempt {pinAttempts} of {MAX_ATTEMPTS}
                 </div>
               )}
             </>
           )}
+          </div>
         </div>
+
+        <p className="text-xs text-gray-300 mt-8">Fazilabs Business Solutions</p>
       </div>
     )
   }
@@ -359,30 +377,28 @@ export function LoginPage() {
   const showBranchScreen = isMultiBranch && !selectedBranch && !overrideMode
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6">
-      <Logo />
-
-      <div className="bg-white border border-gray-200 rounded-2xl p-8 w-full max-w-lg sm:max-w-xl shadow-sm">
-        {/* Back navigation */}
+    <div className={pageBase}>
+      <div className="bg-white border border-gray-200 rounded-2xl w-full max-w-lg sm:max-w-xl shadow-sm overflow-hidden">
+        <div className="flex justify-center px-8 py-6 border-b border-gray-100">
+          <PageLogo size="sm" />
+        </div>
+        <div className="p-8">
         {(selectedBranch || overrideMode) && (
-          <button onClick={handleBack} className="flex items-center gap-1 text-sm text-gray-500 mb-5 hover:text-gray-900">
+          <button onClick={handleBack} className="flex items-center gap-1 text-sm text-gray-400 hover:text-gray-700 mb-5 transition-colors">
             <ChevronLeft size={15} />
             {overrideMode ? 'Cancel' : selectedBranch?.name}
           </button>
         )}
 
-        {/* Slug switcher */}
         {!selectedBranch && !overrideMode && <SlugSwitcher />}
 
-        {/* Loading state */}
         {usersLoading && (
-          <div className="flex flex-col items-center py-10 text-gray-400">
-            <Loader2 size={28} className="animate-spin mb-3" />
+          <div className="flex flex-col items-center py-12 text-gray-400">
+            <Loader2 size={26} className="animate-spin mb-3 text-amber-500" />
             <span className="text-sm">Connecting to {orgSlug}…</span>
           </div>
         )}
 
-        {/* Error state */}
         {!usersLoading && usersError && (
           <div className="flex flex-col items-center py-8 text-center">
             <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mb-3">
@@ -394,28 +410,27 @@ export function LoginPage() {
             </div>
             <button
               onClick={() => { setEditingSlug(true); setSlugInput(orgSlug) }}
-              className="text-sm font-semibold px-5 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+              className="text-sm font-semibold px-5 py-2.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors"
             >
               Change Slug
             </button>
           </div>
         )}
 
-        {/* Branch / user grid */}
         {!usersLoading && !usersError && apiUsers && (
           showBranchScreen ? (
             <>
-              <h2 className="font-bold text-lg mb-1">Select your branch</h2>
-              <p className="text-sm text-gray-400 mb-5">Choose the location you're working at</p>
+              <h2 className="font-bold text-xl text-gray-900 mb-1">Select your branch</h2>
+              <p className="text-sm text-gray-400 mb-6">Choose the location you're working at today</p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {branches.map((b) => (
                   <button
                     key={b.id}
                     onClick={() => setSelectedBranch(b)}
-                    className="flex flex-col items-center gap-3 p-5 border border-gray-200 rounded-xl bg-gray-50 hover:border-gray-900 hover:bg-white transition-colors text-center"
+                    className="group flex flex-col items-center gap-3 p-5 border border-gray-200 rounded-xl bg-gray-50 hover:border-amber-300 hover:bg-amber-50 transition-colors text-center"
                   >
-                    <div className="w-11 h-11 bg-gray-200 rounded-xl flex items-center justify-center">
-                      <Building2 size={18} className="text-gray-600" />
+                    <div className="w-11 h-11 bg-gray-100 group-hover:bg-amber-100 rounded-xl flex items-center justify-center transition-colors">
+                      <Building2 size={18} className="text-gray-500 group-hover:text-amber-600 transition-colors" />
                     </div>
                     <span className="text-sm font-semibold text-gray-900 leading-snug">{b.name}</span>
                   </button>
@@ -424,13 +439,13 @@ export function LoginPage() {
             </>
           ) : (
             <>
-              <h2 className="font-bold text-lg mb-1">
+              <h2 className="font-bold text-xl text-gray-900 mb-1">
                 {overrideMode ? 'Admin Override' : "Who's working today?"}
               </h2>
-              <p className="text-sm text-gray-400 mb-5">
+              <p className="text-sm text-gray-400 mb-6">
                 {overrideMode
                   ? 'Select an admin or manager to continue'
-                  : 'Select your profile to continue'}
+                  : 'Select your profile to sign in'}
               </p>
 
               <div className="flex flex-col gap-2">
@@ -440,15 +455,15 @@ export function LoginPage() {
                     <button
                       key={u.id}
                       onClick={() => handleSelectUser(u)}
-                      className="flex items-center gap-4 p-4 border border-gray-200 rounded-xl bg-gray-50 text-left hover:border-gray-900 hover:bg-white transition-colors"
+                      className="group flex items-center gap-4 p-4 border border-gray-200 rounded-xl bg-gray-50 text-left hover:border-amber-300 hover:bg-amber-50 transition-colors"
                     >
                       <Avatar className="w-12 h-12 flex-shrink-0">
-                        <AvatarFallback className="bg-gray-200 text-gray-700 text-base font-bold">
+                        <AvatarFallback className="bg-gray-100 group-hover:bg-amber-100 text-gray-700 group-hover:text-amber-700 text-base font-bold transition-colors">
                           {u.avatar}
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-gray-900 text-sm">{u.name}</div>
+                        <div className="font-semibold text-gray-900 text-[15px]">{u.name}</div>
                         {lastSeen && (
                           <div className="text-xs text-gray-400 mt-0.5">{lastSeen}</div>
                         )}
@@ -461,7 +476,10 @@ export function LoginPage() {
             </>
           )
         )}
+        </div>
       </div>
+
+      <p className="text-xs text-gray-300 mt-8">Fazilabs Business Solutions</p>
     </div>
   )
 }

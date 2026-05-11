@@ -369,8 +369,8 @@ function OrderDetailDialog({ order, onClose, onVoid, onEdit, onReprint, canVoid,
         )}
 
         {order.payment_method === 'credit' && (order.credit_customer_name || order.credit_customer_phone) && (
-          <div className="bg-purple-50 rounded-md px-3 py-2 text-sm">
-            <span className="font-semibold text-purple-700">Credit: </span>
+          <div className="bg-gray-50 rounded-md px-3 py-2 text-sm">
+            <span className="font-semibold text-gray-700">Credit: </span>
             {order.credit_customer_name}{order.credit_customer_phone ? ` · ${order.credit_customer_phone}` : ''}
           </div>
         )}

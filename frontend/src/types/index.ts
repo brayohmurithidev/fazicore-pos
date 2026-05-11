@@ -43,6 +43,7 @@ export interface User {
   branch: string       // stringified numeric branch_id
   branch_name?: string // display name of the branch
   avatar: string
+  photo_url?: string
   pin: string
 }
 

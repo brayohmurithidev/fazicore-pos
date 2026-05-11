@@ -20,14 +20,14 @@ import type { ApiExpenditure } from '@/types/api'
 const CATEGORIES = ['rent', 'utilities', 'salaries', 'supplies', 'transport', 'marketing', 'maintenance', 'other']
 
 const CATEGORY_COLORS: Record<string, string> = {
-  rent:         'bg-purple-100 text-purple-800',
-  utilities:    'bg-blue-100 text-blue-800',
-  salaries:     'bg-green-100 text-green-800',
-  supplies:     'bg-orange-100 text-orange-800',
-  transport:    'bg-cyan-100 text-cyan-800',
-  marketing:    'bg-pink-100 text-pink-800',
-  maintenance:  'bg-amber-100 text-amber-800',
-  other:        'bg-gray-100 text-gray-700',
+  rent:         'bg-gray-100 text-gray-700',
+  utilities:    'bg-gray-100 text-gray-700',
+  salaries:     'bg-amber-50 text-amber-700',
+  supplies:     'bg-gray-100 text-gray-700',
+  transport:    'bg-gray-100 text-gray-700',
+  marketing:    'bg-amber-50 text-amber-700',
+  maintenance:  'bg-gray-100 text-gray-700',
+  other:        'bg-gray-100 text-gray-600',
 }
 
 const fmt = (n: number) => `KES ${n.toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
@@ -380,7 +380,7 @@ export function ExpendituresPage() {
                       <span className="text-sm font-semibold text-gray-900">{fmt(total)} <span className="text-xs font-normal text-gray-400">({pct.toFixed(1)}%)</span></span>
                     </div>
                     <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${pct}%` }} />
+                      <div className="h-full bg-amber-500 rounded-full" style={{ width: `${pct}%` }} />
                     </div>
                   </div>
                 )

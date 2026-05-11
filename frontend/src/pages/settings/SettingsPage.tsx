@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router'
 import { RefreshCw } from 'lucide-react'
 import {
   CheckCircle2, XCircle, Pencil, X, Check, Zap, Loader2, Lock, Star,
   Settings, CreditCard, Users, Shield, ClipboardList, Sparkles,
-  Usb, Printer as PrinterIcon, Bluetooth,
+  Usb, Printer as PrinterIcon, Bluetooth, Circle, UserCircle, ChevronRight,
 } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
-import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
@@ -473,7 +473,7 @@ function PrinterSetupSection() {
               </div>
               <div className="text-xs text-gray-400 mt-0.5">Wireless ESC/POS — P58E and similar BLE printers</div>
             </div>
-            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${bleConnected ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${bleConnected ? 'bg-gray-100 text-gray-700' : 'bg-gray-100 text-gray-500'}`}>
               {bleConnected ? (getBluetoothDevice()?.name ?? 'Connected') : 'Not connected'}
             </span>
           </div>
@@ -613,7 +613,7 @@ function EnvCredPanel({ env, existing, orgSlug }: {
 
   const isSandbox = env === 'sandbox'
   const bannerCls = isSandbox
-    ? 'bg-blue-50 border-blue-200 text-blue-800'
+    ? 'bg-gray-50 border-gray-200 text-gray-700'
     : 'bg-amber-50 border-amber-200 text-amber-800'
 
   return (
@@ -621,11 +621,13 @@ function EnvCredPanel({ env, existing, orgSlug }: {
       {/* Header row */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isSandbox ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isSandbox ? 'bg-gray-100 text-gray-600' : 'bg-amber-100 text-amber-700'}`}>
             {isSandbox ? 'Sandbox' : 'Production'}
           </span>
           {existing?.is_live && (
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700">● Live</span>
+            <span className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+              <Circle size={7} className="fill-current" /> Live
+            </span>
           )}
           {existing && !existing.is_live && (
             <button
@@ -952,76 +954,97 @@ function UsageBar({ label, current, max }: { label: string; current: number; max
 }
 
 const PLAN_ORDER = ['free', 'starter', 'growth', 'business', 'enterprise']
-const PLAN_COLORS: Record<string, string> = {
-  free: '#9CA3AF', starter: '#6B7280', growth: '#3B82F6', business: '#8B5CF6', enterprise: '#111827',
+
+function PlanCollapsible({ title, defaultOpen = true, children }: {
+  title: string; defaultOpen?: boolean; children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl mb-4 overflow-hidden">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 transition-colors"
+      >
+        <span className="font-bold text-sm text-gray-900">{title}</span>
+        <ChevronRight size={15} className={`text-gray-400 transition-transform duration-200 ${open ? 'rotate-90' : ''}`} />
+      </button>
+      {open && <div className="px-5 pb-5 border-t border-gray-100 pt-4">{children}</div>}
+    </div>
+  )
 }
 
 function PlanCard({ plan, isCurrent }: { plan: ApiPlanInfo; isCurrent: boolean }) {
-  const color = PLAN_COLORS[plan.slug] ?? '#111827'
   const isEnterprise = plan.slug === 'enterprise'
+  const isRecommended = plan.is_recommended && !isCurrent
   return (
-    <div className={`rounded-xl border-2 p-4 flex flex-col gap-3 transition-all ${
-      isCurrent ? 'border-gray-900 bg-gray-50' : plan.is_recommended ? 'border-amber-400 bg-amber-50' : 'border-gray-200 bg-white hover:border-gray-400'
-    }`}>
+    <div className={cn(
+      'rounded-xl border-2 p-4 flex flex-col gap-3 transition-all',
+      isCurrent     ? 'border-gray-900 bg-gray-50'
+      : isRecommended ? 'border-amber-400 bg-amber-50'
+      : 'border-gray-200 bg-white hover:border-gray-300'
+    )}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />
-          <span className="font-bold text-sm">{plan.name}</span>
-          {plan.is_recommended && !isCurrent && (
-            <span className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-200 text-amber-800">
-              <Star size={9} className="fill-amber-600" />Recommended
+          <span className="font-bold text-sm text-gray-900">{plan.name}</span>
+          {isRecommended && (
+            <span className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
+              <Star size={9} className="fill-amber-500" /> Recommended
             </span>
           )}
         </div>
-        {isCurrent && <Badge className="text-[10px] px-1.5 py-0 h-5">Current</Badge>}
+        {isCurrent && (
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-900 text-white">Current</span>
+        )}
       </div>
+
       <div>
         {isEnterprise ? (
           <span className="text-base font-bold text-gray-900">Custom pricing</span>
         ) : plan.price_monthly === 0 ? (
           <span className="text-base font-bold text-gray-900">Free</span>
         ) : (
-          <div>
-            <span className="text-xl font-extrabold text-gray-900">KES {plan.price_monthly.toLocaleString()}</span>
-            <span className="text-xs text-gray-400">/mo</span>
+          <>
+            <div className="flex items-baseline gap-0.5">
+              <span className="text-xl font-extrabold text-gray-900">KES {plan.price_monthly.toLocaleString()}</span>
+              <span className="text-xs text-gray-400">/mo</span>
+            </div>
             {plan.price_annual > 0 && (
-              <div className="text-[11px] text-green-600 font-medium">
+              <div className="text-[11px] text-amber-700 font-medium mt-0.5">
                 KES {plan.price_annual.toLocaleString()}/yr · save {Math.round(100 - (plan.price_annual / (plan.price_monthly * 12)) * 100)}%
               </div>
             )}
-          </div>
+          </>
         )}
       </div>
-      <div className="grid grid-cols-3 gap-1 py-2 border-y border-gray-100">
+
+      <div className="grid grid-cols-3 gap-1 py-2.5 border-y border-gray-100">
         {[{ label: 'Branches', value: plan.max_branches }, { label: 'Users', value: plan.max_users }, { label: 'Products', value: plan.max_products }].map(({ label, value }) => (
           <div key={label} className="text-center">
-            {label === 'Branches' && value === 1
-              ? <>
-                  <div className="text-sm font-bold text-gray-900">Single</div>
-                  <div className="text-[10px] text-gray-400">Business</div>
-                </>
-              : <>
-                  <div className="text-sm font-bold text-gray-900">{value < 0 ? '∞' : value.toLocaleString()}</div>
-                  <div className="text-[10px] text-gray-400">{label}</div>
-                </>
-            }
+            <div className="text-sm font-bold text-gray-900">
+              {label === 'Branches' && value === 1 ? 'Single' : value < 0 ? '∞' : value.toLocaleString()}
+            </div>
+            <div className="text-[10px] text-gray-400 mt-0.5">{label}</div>
           </div>
         ))}
       </div>
+
       {plan.features.length > 0 && (
-        <ul className="space-y-1">
+        <ul className="space-y-1.5">
           {plan.features.map((feat) => (
             <li key={feat} className="flex items-center gap-1.5 text-xs text-gray-600">
-              <CheckCircle2 size={11} className="text-green-500 flex-shrink-0" />{feat}
+              <CheckCircle2 size={11} className="text-amber-500 shrink-0" />{feat}
             </li>
           ))}
         </ul>
       )}
+
       {!isCurrent && (
         <button
-          className="mt-auto w-full py-2 rounded-lg text-xs font-bold text-white transition-opacity hover:opacity-80"
-          style={{ background: color }}
           onClick={() => alert(`Contact sales@fazilabs.com to upgrade to ${plan.name}.`)}
+          className={cn(
+            'mt-auto w-full py-2 rounded-lg text-xs font-bold text-white transition-colors',
+            isRecommended ? 'bg-amber-500 hover:bg-amber-600' : 'bg-gray-900 hover:bg-gray-700'
+          )}
         >
           {isEnterprise ? 'Contact Sales' : `Upgrade to ${plan.name}`}
         </button>
@@ -1036,29 +1059,33 @@ function PlanTab() {
   const featureGroups = [...new Set(FEATURE_CATALOG.map((f) => f.group))]
 
   if (isLoading) {
-    return <div className="p-6 text-sm text-gray-400">Loading plan info...</div>
+    return (
+      <div className="p-6 flex items-center gap-2 text-sm text-gray-400">
+        <Loader2 size={15} className="animate-spin" /> Loading plan info…
+      </div>
+    )
   }
   if (!sub) return null
 
   const statusLabel: Record<string, string> = { trial: 'Free Trial', active: 'Active', suspended: 'Suspended', cancelled: 'Cancelled' }
   const statusColor: Record<string, string> = {
-    trial: 'bg-amber-100 text-amber-800', active: 'bg-green-100 text-green-800',
-    suspended: 'bg-red-100 text-red-800', cancelled: 'bg-gray-100 text-gray-600',
+    trial: 'bg-amber-100 text-amber-800',
+    active: 'bg-green-100 text-green-800',
+    suspended: 'bg-red-100 text-red-800',
+    cancelled: 'bg-gray-100 text-gray-600',
   }
   const trialEnd = sub.trial_ends_at
     ? new Date(sub.trial_ends_at).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' })
     : null
-
   const sortedPlans = [...sub.available_plans].sort(
     (a, b) => PLAN_ORDER.indexOf(a.slug) - PLAN_ORDER.indexOf(b.slug)
   )
-  const currentFlags = sub.feature_flags ?? {}
 
   return (
     <div className="p-4 sm:p-6 max-w-2xl">
       {/* Current plan */}
-      <Section title="Current Plan">
-        <div className="flex items-start justify-between mb-4">
+      <PlanCollapsible title="Current Plan">
+        <div className="flex items-start justify-between mb-5">
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-bold text-base text-gray-900">{sub.plan_name} Plan</span>
@@ -1067,34 +1094,34 @@ function PlanTab() {
               </span>
             </div>
             {trialEnd && sub.status === 'trial' && (
-              <div className="text-xs text-amber-700 mt-1 flex items-center gap-1">
-                <Zap size={11} />Trial ends {trialEnd} — upgrade to keep full access
+              <div className="text-xs text-amber-700 mt-1.5 flex items-center gap-1">
+                <Zap size={11} /> Trial ends {trialEnd} — upgrade to keep full access
               </div>
             )}
           </div>
         </div>
-        <div className="text-[11px] font-semibold text-gray-400 mb-3 uppercase tracking-wide">Usage</div>
+        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Usage</div>
         {sub.max_branches === 1
           ? <div className="mb-3 flex justify-between text-xs"><span className="text-gray-500">Branches</span><span className="font-medium">Single business</span></div>
           : <UsageBar label="Branches" current={sub.branch_count} max={sub.max_branches} />
         }
         <UsageBar label="Users" current={sub.user_count} max={sub.max_users} />
         <UsageBar label="Products" current={sub.active_product_count} max={sub.max_products} />
-      </Section>
+      </PlanCollapsible>
 
       {/* Included features */}
-      <Section title="Included Features">
+      <PlanCollapsible title="Included Features">
         {featureGroups.map((group) => (
-          <div key={group} className="mb-4 last:mb-0">
-            <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">{group}</div>
+          <div key={group} className="mb-5 last:mb-0">
+            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2.5">{group}</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
               {FEATURE_CATALOG.filter((f) => f.group === group).map((feat) => {
                 const enabled = flags[feat.key] === true
                 return (
-                  <div key={feat.key} className={`flex items-center gap-1.5 text-xs py-1 ${enabled ? 'text-gray-700' : 'text-gray-400'}`}>
+                  <div key={feat.key} className={`flex items-center gap-2 text-xs py-1 ${enabled ? 'text-gray-700' : 'text-gray-400'}`}>
                     {enabled
-                      ? <CheckCircle2 size={12} className="text-green-500 shrink-0" />
-                      : <XCircle size={12} className="text-gray-300 shrink-0" />
+                      ? <CheckCircle2 size={12} className="text-amber-500 shrink-0" />
+                      : <XCircle    size={12} className="text-gray-300 shrink-0" />
                     }
                     {feat.label}
                   </div>
@@ -1103,16 +1130,16 @@ function PlanTab() {
             </div>
           </div>
         ))}
-        <div className="hidden">{currentFlags && null}</div>
-      </Section>
+      </PlanCollapsible>
 
       {/* Available plans */}
-      <div className="text-[11px] font-semibold text-gray-400 mb-3 uppercase tracking-wide">Available Plans</div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {sortedPlans.map((plan) => (
-          <PlanCard key={plan.slug} plan={plan} isCurrent={plan.is_current} />
-        ))}
-      </div>
+      <PlanCollapsible title="Available Plans" defaultOpen={false}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {sortedPlans.map((plan) => (
+            <PlanCard key={plan.slug} plan={plan} isCurrent={plan.is_current} />
+          ))}
+        </div>
+      </PlanCollapsible>
     </div>
   )
 }
@@ -1122,6 +1149,7 @@ function PlanTab() {
 export function SettingsPage() {
   const { user } = useAuthStore()
   const flags = useFeatureFlags()
+  const navigate = useNavigate()
   const [tab, setTab] = useState<TabId>('general')
 
   const isAdmin = user?.role === 'admin'
@@ -1181,6 +1209,16 @@ export function SettingsPage() {
               </button>
             )
           })}
+
+          <div className="mt-auto pt-4 border-t border-gray-100">
+            <button
+              onClick={() => navigate('/profile')}
+              className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+            >
+              <UserCircle size={15} className="shrink-0" />
+              My Profile
+            </button>
+          </div>
         </nav>
 
         {/* Tab content */}

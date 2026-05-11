@@ -1,3 +1,4 @@
+import { Delete } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 interface NumpadProps {
@@ -28,7 +29,7 @@ export function Numpad({ value, onChange }: NumpadProps) {
             onClick={() => press(k)}
             className={`py-3.5 text-lg font-semibold h-auto ${k === 'del' ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100' : 'bg-gray-50 hover:bg-gray-100'}`}
           >
-            {k === 'del' ? '⌫' : k}
+            {k === 'del' ? <Delete size={16} /> : k}
           </Button>
         ))}
       </div>

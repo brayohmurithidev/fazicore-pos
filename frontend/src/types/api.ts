@@ -21,6 +21,7 @@ export interface ApiUser {
   branch_id: number | null
   branch_name: string | null
   avatar: string | null
+  photo_url: string | null
   is_active: boolean
   created_at: string
 }

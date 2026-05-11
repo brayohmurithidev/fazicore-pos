@@ -1,6 +1,9 @@
+from pathlib import Path
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.v1 import admin, analytics, attendance, audit, auth, branches, categories, customers, dashboard, expenditures, hooks, inventory, mpesa, orders, org, platform, products, purchase_orders, seed, stock_transfers, suppliers, uploads, users
 from app.api.v1.analytics import sales_router
@@ -22,6 +25,9 @@ app.add_middleware(
 )
 
 app.add_middleware(TenantMiddleware)
+
+_static_dir = Path(__file__).parent / "static"
+app.mount("/static", StaticFiles(directory=_static_dir), name="static")
 
 API_PREFIX = "/api/v1"
 

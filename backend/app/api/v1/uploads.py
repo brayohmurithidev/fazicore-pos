@@ -6,6 +6,7 @@ from app.core.database import get_session
 from app.core.deps import get_current_active_user
 from app.core.minio import upload_file, get_file_url, delete_file
 from app.models.product import Product
+from app.repositories.user import UserRepository
 from app.models.user import User
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
@@ -52,5 +53,39 @@ async def upload_product_image(
 
     product.image_url = url
     await session.commit()
+
+    return UploadResult(url=url, object_name=object_name)
+
+
+@router.post("/avatar", response_model=UploadResult)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_active_user),
+) -> UploadResult:
+    content_type = file.content_type or ""
+    if not content_type and file.filename:
+        ext = file.filename.rsplit(".", 1)[-1].lower()
+        content_type = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+                        "webp": "image/webp", "avif": "image/avif"}.get(ext, "")
+    if content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail="Only JPEG, PNG, WebP, or AVIF images allowed")
+
+    data = await file.read()
+    if len(data) > MAX_IMAGE_SIZE:
+        raise HTTPException(status_code=400, detail="Image must be under 5 MB")
+
+    if current_user.photo_url:
+        old_name = current_user.photo_url.rsplit("/", 1)[-1]
+        delete_file(old_name)
+
+    object_name = upload_file(data, file.filename or "avatar.jpg", content_type)
+    url = get_file_url(object_name)
+
+    repo = UserRepository(session)
+    user = await repo.get(current_user.id)
+    if user:
+        user.photo_url = url
+        await session.commit()
 
     return UploadResult(url=url, object_name=object_name)

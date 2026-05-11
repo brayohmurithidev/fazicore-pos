@@ -247,6 +247,25 @@ export function useUpdateUserById() {
   })
 }
 
+export function useUpdateMe() {
+  return useMutation({
+    mutationFn: (data: { name?: string; pin?: string }) =>
+      api.patch('/users/me', data).then((r) => r.data),
+  })
+}
+
+export function useUploadAvatar() {
+  return useMutation({
+    mutationFn: (file: File) => {
+      const form = new FormData()
+      form.append('file', file)
+      return api.post('/uploads/avatar', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      }).then((r) => r.data as { url: string; object_name: string })
+    },
+  })
+}
+
 export function useDeleteUser() {
   const qc = useQueryClient()
   return useMutation({

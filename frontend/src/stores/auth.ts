@@ -15,6 +15,7 @@ interface AuthState {
   setOrgSlug: (slug: string) => void
   setClockedIn: (id: number, isoTime: string) => void
   setClockOut: () => void
+  updateUser: (patch: Partial<User>) => void
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -38,6 +39,7 @@ export const useAuthStore = create<AuthState>()(
       setOrgSlug: (slug) => set({ orgSlug: slug }),
       setClockedIn: (id, isoTime) => set({ attendanceId: id, clockInTime: isoTime }),
       setClockOut: () => set({ attendanceId: null, clockInTime: null }),
+      updateUser: (patch) => set((s) => ({ user: s.user ? { ...s.user, ...patch } : s.user })),
     }),
     { name: 'fazi-auth' }
   )

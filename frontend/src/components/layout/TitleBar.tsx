@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { Monitor, Minus, Maximize2, Square, X } from 'lucide-react'
+import { Minus, Maximize2, Square, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export function TitleBar() {
@@ -24,19 +24,14 @@ export function TitleBar() {
   return (
     <div
       data-tauri-drag-region
-      className="h-9 flex items-center flex-shrink-0 bg-gray-900 select-none z-50"
+      className="h-9 flex items-center flex-shrink-0 bg-white border-b border-gray-200 select-none z-50"
     >
       {/* Brand */}
       <div
         data-tauri-drag-region
         className="flex items-center gap-2 px-3 pointer-events-none"
       >
-        <div className="w-5 h-5 bg-white rounded flex items-center justify-center flex-shrink-0">
-          <Monitor size={11} className="text-gray-900" />
-        </div>
-        <span className="text-white/60 text-[11px] font-semibold tracking-wide">
-          Fazi POS
-        </span>
+        <img src="/assets/fazistore-logo-full.svg" alt="Fazi POS" className="h-5 w-auto" />
       </div>
 
       {/* Drag region */}
@@ -49,30 +44,30 @@ export function TitleBar() {
           title="Minimize"
           className={cn(
             'w-10 h-full flex items-center justify-center',
-            'text-white/40 hover:text-white hover:bg-white/10 transition-colors'
+            'text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors'
           )}
         >
-          <Minus size={13} />
+          <Minus size={12} />
         </button>
         <button
           onClick={() => win.toggleMaximize()}
           title={maximized ? 'Restore' : 'Maximize'}
           className={cn(
             'w-10 h-full flex items-center justify-center',
-            'text-white/40 hover:text-white hover:bg-white/10 transition-colors'
+            'text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors'
           )}
         >
-          {maximized ? <Square size={12} /> : <Maximize2 size={12} />}
+          {maximized ? <Square size={11} /> : <Maximize2 size={11} />}
         </button>
         <button
           onClick={() => win.close()}
           title="Close"
           className={cn(
             'w-10 h-full flex items-center justify-center',
-            'text-white/40 hover:text-white hover:bg-red-600 transition-colors'
+            'text-gray-400 hover:text-white hover:bg-red-500 transition-colors'
           )}
         >
-          <X size={13} />
+          <X size={12} />
         </button>
       </div>
     </div>

@@ -73,7 +73,7 @@ export function ReceiptModal({ open, onClose, sale }: Props) {
               {biz.vatNo && <div className="text-xs text-gray-500">VAT: {biz.vatNo}</div>}
             </div>
             <div className="text-right">
-              <div className="text-2xl font-extrabold text-purple-700 tracking-tight">INVOICE</div>
+              <div className="text-2xl font-extrabold text-gray-900 tracking-tight">INVOICE</div>
               <div className="text-xs text-gray-500 mt-1">#{sale.id}</div>
               <div className="text-xs text-gray-500">{dateStr} · {timeStr}</div>
             </div>

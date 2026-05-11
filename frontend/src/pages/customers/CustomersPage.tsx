@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   Users, Plus, Search, Phone, Mail, X, ChevronRight,
-  CheckCircle, AlertCircle, Loader2, ArrowDownLeft, Receipt,
+  CheckCircle, AlertCircle, Loader2, ArrowDownLeft, Receipt, ArrowRight,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -166,7 +166,7 @@ function RecordPaymentModal({ open, onClose, customer, preselectedInvoice }: {
           {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded">{error}</p>}
           <div className="flex gap-2 mt-1">
             <Button variant="outline" className="flex-1" onClick={onClose}>Cancel</Button>
-            <Button className="flex-1 bg-green-600 hover:bg-green-700" onClick={handleSave} disabled={record.isPending}>
+            <Button className="flex-1 bg-amber-500 hover:bg-amber-600" onClick={handleSave} disabled={record.isPending}>
               {record.isPending && <Loader2 size={13} className="animate-spin mr-1.5" />}Record Payment
             </Button>
           </div>
@@ -227,7 +227,7 @@ function CustomerDetail({ customer, onClose, onEdit }: {
       <div className="flex gap-2 px-4 py-3 border-b border-gray-100">
         <Button size="sm" variant="outline" className="flex-1" onClick={onEdit}>Edit Customer</Button>
         {customer.credit_balance > 0 && (
-          <Button size="sm" className="flex-1 bg-green-600 hover:bg-green-700" onClick={() => openPayment()}>
+          <Button size="sm" className="flex-1 bg-amber-500 hover:bg-amber-600" onClick={() => openPayment()}>
             <ArrowDownLeft size={13} className="mr-1" />Record Payment
           </Button>
         )}
@@ -254,7 +254,7 @@ function CustomerDetail({ customer, onClose, onEdit }: {
                     <div className="text-sm font-semibold text-gray-900">{fmt(inv.total)}</div>
                     {inv.outstanding > 0 ? (
                       <button onClick={() => openPayment(inv)} className="text-xs text-red-600 hover:text-red-700 font-medium">
-                        {fmt(inv.outstanding)} due →
+                        {fmt(inv.outstanding)} due <ArrowRight size={11} className="inline" />
                       </button>
                     ) : (
                       <span className="text-xs text-green-600 flex items-center gap-0.5"><CheckCircle size={10} />Paid</span>

@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router'
 import {
   LayoutDashboard, Monitor, Package, Receipt, Building2, Settings,
-  ChevronLeft, ChevronRight, LogOut, BarChart3, UserCheck, Menu, X, Clock, TrendingDown,
+  ChevronLeft, ChevronRight, LogOut, BarChart3, UserCheck, Menu, X, Clock, TrendingDown, UserCircle,
 } from 'lucide-react'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Toaster } from '@/components/ui/Toaster'
 import { RoleBadge } from '@/components/shared/RoleBadge'
 import { NotificationBell } from '@/components/shared/NotificationBell'
@@ -48,6 +48,31 @@ export function AppShell() {
   const navigate = useNavigate()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const profileCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const profileRef = useRef<HTMLDivElement>(null)
+
+  const openProfile = () => {
+    if (profileCloseTimer.current) clearTimeout(profileCloseTimer.current)
+    setProfileOpen(true)
+  }
+  const closeProfile = () => {
+    profileCloseTimer.current = setTimeout(() => setProfileOpen(false), 150)
+  }
+  const toggleProfile = () => {
+    if (profileCloseTimer.current) clearTimeout(profileCloseTimer.current)
+    setProfileOpen((v) => !v)
+  }
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+        setProfileOpen(false)
+      }
+    }
+    if (profileOpen) document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [profileOpen])
 
   const { data: liveBranches = [] } = useBranches()
   const { data: dashData } = useDashboard()
@@ -101,15 +126,15 @@ export function AppShell() {
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-gray-900">
+    <div className="flex flex-col h-screen overflow-hidden bg-white">
       {/* Native title bar — only in Tauri desktop */}
       {isTauri && <TitleBar />}
 
-      <div className="flex flex-1 overflow-hidden bg-gray-50">
+      <div className="flex flex-1 overflow-hidden">
       {/* Mobile backdrop */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          className="fixed inset-0 z-40 bg-black/30 md:hidden"
           onClick={() => setMobileOpen(false)}
         />
       )}
@@ -117,33 +142,35 @@ export function AppShell() {
       {/* Sidebar */}
       <aside
         className={cn(
-          'bg-gray-900 flex flex-col flex-shrink-0 transition-all duration-200 overflow-hidden',
+          'bg-white border-r border-gray-200 flex flex-col flex-shrink-0 transition-all duration-200 overflow-hidden',
           'fixed inset-y-0 left-0 z-50 md:relative md:z-auto md:translate-x-0',
           mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
           collapsed ? 'w-64 md:w-[68px]' : 'w-64'
         )}
       >
         {/* Logo */}
-        <div className="px-4 py-4 border-b border-white/10 flex items-center gap-3 overflow-hidden">
-          <div className="w-9 h-9 bg-white rounded-lg flex items-center justify-center flex-shrink-0">
-            <Monitor size={18} className="text-gray-900" />
-          </div>
+        <div className="px-3 py-3 border-b border-gray-100 flex items-center gap-2.5 overflow-hidden">
+          <img src="/assets/fazistore-icon.svg" alt="Fazi POS" className="w-9 h-9 flex-shrink-0" />
           {!collapsed && (
-            <div className="flex-1">
-              <div className="text-[15px] font-extrabold text-white tracking-tight">Fazi POS</div>
-              <div className="text-xs text-white/40">Fazilabs</div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[15px] font-extrabold tracking-tight leading-none">
+                <span className="text-gray-900">fazi</span><span className="text-amber-500">store</span>
+              </div>
+              <div className="text-[9.5px] font-semibold tracking-[0.15em] text-gray-400 uppercase mt-0.5">
+                Point of Sale &amp; Inventory
+              </div>
             </div>
           )}
           <button
             onClick={() => setMobileOpen(false)}
-            className="md:hidden ml-auto text-white/40 hover:text-white/80 p-1"
+            className="md:hidden ml-auto text-gray-400 hover:text-gray-600 p-1 flex-shrink-0"
           >
             <X size={16} />
           </button>
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-2.5 py-3 overflow-y-auto">
+        <nav className="flex-1 px-2 py-3 overflow-y-auto">
           {allowedNav.map((item) => {
             const Icon = item.icon
             const showBadge = item.id === 'inventory' && lowStockCount > 0
@@ -154,23 +181,32 @@ export function AppShell() {
                 onClick={() => setMobileOpen(false)}
                 className={({ isActive }) =>
                   cn(
-                    'relative w-full flex items-center gap-3 px-3 py-3 rounded-xl mb-1 text-[15px] font-semibold transition-colors',
+                    'relative w-full flex items-center gap-3 px-2.5 py-2.5 rounded-xl mb-1 text-[14px] font-semibold transition-colors',
                     collapsed ? 'justify-center' : '',
                     isActive
-                      ? 'bg-white/12 text-white'
-                      : 'text-white/55 hover:bg-white/7 hover:text-white/80'
+                      ? 'bg-amber-50 text-gray-900'
+                      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
                   )
                 }
               >
-                <Icon size={26} className="flex-shrink-0" />
-                {!collapsed && <span className="flex-1 whitespace-nowrap">{item.label}</span>}
-                {showBadge && !collapsed && (
-                  <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-px rounded-full">
-                    {lowStockCount}
-                  </span>
-                )}
-                {showBadge && collapsed && (
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
+                {({ isActive }: { isActive: boolean }) => (
+                  <>
+                    <div className={cn(
+                      'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors',
+                      isActive ? 'bg-amber-100' : 'bg-gray-100'
+                    )}>
+                      <Icon size={20} className="text-amber-500" />
+                    </div>
+                    {!collapsed && <span className="flex-1 whitespace-nowrap">{item.label}</span>}
+                    {showBadge && !collapsed && (
+                      <span className="bg-amber-500 text-white text-[10px] font-bold px-1.5 py-px rounded-full">
+                        {lowStockCount}
+                      </span>
+                    )}
+                    {showBadge && collapsed && (
+                      <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-amber-500 rounded-full" />
+                    )}
+                  </>
                 )}
               </NavLink>
             )
@@ -178,88 +214,192 @@ export function AppShell() {
         </nav>
 
         {/* User + actions */}
-        <div className="px-2.5 py-3 border-t border-white/10">
-          {!collapsed && (
-            <div className="px-3 py-3 mb-1 overflow-hidden">
-              <div className="flex items-center gap-3">
-                <Avatar className="w-9 h-9 flex-shrink-0">
-                  <AvatarFallback className="bg-white/15 text-white text-sm font-bold">
-                    {user.avatar}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="overflow-hidden flex-1">
-                  <div className="text-sm font-semibold text-white truncate">{user.name}</div>
-                  <div className="text-xs text-white/40 truncate">{branchName ?? user.role}</div>
-                </div>
+        <div className="border-t border-gray-100 px-2 pt-2 pb-3">
+          {/* User row */}
+          {collapsed ? (
+            <div className="flex flex-col items-center gap-1 py-1">
+              <Avatar className="w-8 h-8">
+                {user.photo_url && <AvatarImage src={user.photo_url} alt={user.name} />}
+                <AvatarFallback className="bg-amber-100 text-amber-700 text-sm font-bold">
+                  {user.avatar}
+                </AvatarFallback>
+              </Avatar>
+              <button
+                onClick={() => setCollapsed(false)}
+                title="Expand sidebar"
+                className="hidden md:flex w-7 h-7 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2.5 px-2 py-2 rounded-xl">
+              <Avatar className="w-8 h-8 flex-shrink-0">
+                {user.photo_url && <AvatarImage src={user.photo_url} alt={user.name} />}
+                <AvatarFallback className="bg-amber-100 text-amber-700 text-sm font-bold">
+                  {user.avatar}
+                </AvatarFallback>
+              </Avatar>
+              <div className="overflow-hidden flex-1 min-w-0">
+                <div className="text-[13px] font-semibold text-gray-900 truncate">{user.name}</div>
+                <div className="text-[11px] text-gray-400 truncate capitalize">{branchName ?? user.role}</div>
               </div>
-              {isClockedIn && clockDisplay && (
-                <div className="flex items-center justify-between mt-3 px-0.5">
-                  <div className="flex items-center gap-1.5 text-xs text-white/50">
-                    <div className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" />
-                    <span>In since {clockDisplay}</span>
-                  </div>
-                  <button
-                    onClick={handleClockOut}
-                    disabled={clockOutMutation.isPending}
-                    title="Clock Out"
-                    className="text-xs text-white/40 hover:text-orange-400 transition-colors disabled:opacity-50 flex items-center gap-1 px-2 py-1 rounded"
-                  >
-                    <Clock size={12} />
-                    <span>Clock Out</span>
-                  </button>
-                </div>
-              )}
+              <button
+                onClick={() => setCollapsed(true)}
+                title="Collapse sidebar"
+                className="hidden md:flex w-7 h-7 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700 flex-shrink-0 transition-colors"
+              >
+                <ChevronLeft size={15} />
+              </button>
             </div>
           )}
-          <button
-            onClick={() => setCollapsed((c) => !c)}
-            className="hidden md:flex w-full items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-white/7 text-white/50 hover:text-white/80 text-sm mb-1.5 transition-colors"
-          >
-            {collapsed ? <ChevronRight size={16} /> : <><ChevronLeft size={16} /><span>Collapse</span></>}
-          </button>
+
+          {/* Clock status */}
+          {!collapsed && isClockedIn && clockDisplay && (
+            <div className="flex items-center justify-between mx-2 mt-1 mb-1">
+              <div className="flex items-center gap-1.5 text-[11px] text-gray-400">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+                <span>In since {clockDisplay}</span>
+              </div>
+              <button
+                onClick={handleClockOut}
+                disabled={clockOutMutation.isPending}
+                className="text-[11px] text-gray-400 hover:text-amber-600 transition-colors disabled:opacity-50 flex items-center gap-1"
+              >
+                <Clock size={10} />
+                <span>Clock Out</span>
+              </button>
+            </div>
+          )}
+
+          {/* Sign out */}
           <button
             onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-white/40 hover:bg-white/7 hover:text-white/70 text-sm transition-colors"
+            className={cn(
+              'mt-1 flex items-center gap-2 px-2 py-2 rounded-xl text-[12px] text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-colors',
+              collapsed ? 'w-full justify-center' : 'w-full'
+            )}
           >
-            <LogOut size={16} />
-            {!collapsed && <span>Sign Out</span>}
+            <LogOut size={14} />
+            {!collapsed && <span>Sign out</span>}
           </button>
         </div>
       </aside>
 
       {/* Main */}
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0 bg-gray-50">
         {/* Topbar */}
-        <header className="h-13 bg-white border-b border-gray-200 flex items-center px-4 sm:px-5 gap-3 flex-shrink-0">
+        <header className="h-12 bg-white border-b border-gray-200 flex items-center px-4 sm:px-5 gap-3 flex-shrink-0">
           <button
             onClick={() => setMobileOpen(true)}
-            className="md:hidden p-1.5 rounded-md text-gray-500 hover:bg-gray-100"
+            className="md:hidden p-1.5 rounded-md text-gray-400 hover:bg-gray-100"
           >
-            <Menu size={18} />
+            <Menu size={17} />
           </button>
           <div className="flex-1" />
           {isClockedIn && clockDisplay && (
-            <div className="hidden sm:flex items-center gap-1.5 text-xs text-gray-400">
-              <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+            <div className="hidden sm:flex items-center gap-1.5 text-[12px] text-gray-400">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
               <span>In since {clockDisplay}</span>
             </div>
           )}
           {branchName && (
-            <div className="hidden sm:flex items-center gap-1.5 text-xs text-gray-400">
+            <div className="hidden sm:flex items-center gap-1.5 text-[12px] text-gray-400">
               <Building2 size={13} />
               <span>{branchName}</span>
             </div>
           )}
           <NotificationBell />
-          <div className="w-px h-5 bg-gray-200" />
-          <div className="flex items-center gap-2">
-            <Avatar className="w-7 h-7">
-              <AvatarFallback className="bg-gray-200 text-gray-700 text-xs font-bold">
-                {user.avatar}
-              </AvatarFallback>
-            </Avatar>
-            <span className="hidden sm:inline text-xs font-semibold text-gray-900">{user.name.split(' ')[0]}</span>
-            <RoleBadge role={user.role} />
+          <div className="w-px h-4 bg-gray-200" />
+          <div
+            ref={profileRef}
+            className="relative"
+            onMouseEnter={openProfile}
+            onMouseLeave={closeProfile}
+          >
+            <div
+              className="flex items-center gap-2 cursor-pointer select-none"
+              onClick={toggleProfile}
+            >
+              <Avatar className="w-7 h-7">
+                {user.photo_url && <AvatarImage src={user.photo_url} alt={user.name} />}
+                <AvatarFallback className="bg-gray-100 text-gray-700 text-xs font-bold">
+                  {user.avatar}
+                </AvatarFallback>
+              </Avatar>
+              <span className="hidden sm:inline text-[13px] font-semibold text-gray-900">{user.name.split(' ')[0]}</span>
+              <RoleBadge role={user.role} />
+            </div>
+
+            {profileOpen && (
+              <div
+                className="absolute right-0 top-[calc(100%+6px)] w-64 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden"
+                onMouseEnter={openProfile}
+                onMouseLeave={closeProfile}
+              >
+                {/* Header */}
+                <div className="px-4 py-4 border-b border-gray-100">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="w-11 h-11 flex-shrink-0">
+                      {user.photo_url && <AvatarImage src={user.photo_url} alt={user.name} />}
+                      <AvatarFallback className="bg-amber-100 text-amber-700 text-base font-bold">
+                        {user.avatar}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-bold text-gray-900 truncate">{user.name}</div>
+                      <div className="mt-1"><RoleBadge role={user.role} /></div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Info */}
+                {(branchName || isClockedIn) && (
+                  <div className="px-4 py-3 space-y-2.5 border-b border-gray-100">
+                    {branchName && (
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <Building2 size={12} className="text-gray-400 flex-shrink-0" />
+                        <span>{branchName}</span>
+                      </div>
+                    )}
+                    {isClockedIn && clockDisplay && (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+                          <span>In since {clockDisplay}</span>
+                        </div>
+                        <button
+                          onClick={handleClockOut}
+                          disabled={clockOutMutation.isPending}
+                          className="text-[11px] text-gray-400 hover:text-amber-600 transition-colors disabled:opacity-50 flex items-center gap-1"
+                        >
+                          <Clock size={10} />
+                          <span>Clock out</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="px-3 py-2 space-y-0.5">
+                  <button
+                    onClick={() => { setProfileOpen(false); navigate('/profile') }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[13px] text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+                  >
+                    <UserCircle size={14} className="text-gray-400" />
+                    My Profile
+                  </button>
+                  <button
+                    onClick={handleLogout}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[13px] text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+                  >
+                    <LogOut size={14} className="text-gray-400" />
+                    Sign out
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </header>
 

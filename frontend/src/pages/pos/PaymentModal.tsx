@@ -486,9 +486,9 @@ export function PaymentModal({ open, onClose, total, onComplete, settings }: Pro
             {/* ── Credit ── */}
             {method === 'credit' && (
               <div>
-                <div className="bg-purple-50 border border-purple-200 rounded-lg p-3.5 mb-4">
-                  <div className="font-semibold text-purple-900 mb-0.5">Credit Sale</div>
-                  <div className="text-sm text-purple-700">Record as debt — an invoice will be printed for the customer.</div>
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3.5 mb-4">
+                  <div className="font-semibold text-gray-900 mb-0.5">Credit Sale</div>
+                  <div className="text-sm text-gray-600">Record as debt — an invoice will be printed for the customer.</div>
                 </div>
                 <div className="flex flex-col gap-3">
                   <div>

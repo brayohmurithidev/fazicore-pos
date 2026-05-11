@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <!-- Graphite gradient for the icon -->
+    <linearGradient id="graphiteGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4A4A4A"/>
+      <stop offset="50%" style="stop-color:#333333"/>
+      <stop offset="100%" style="stop-color:#1E1E1E"/>
+    </linearGradient>
+    <!-- Amber accent gradient -->
+    <linearGradient id="amberGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFBF00"/>
+      <stop offset="100%" style="stop-color:#E8A800"/>
+    </linearGradient>
+    <!-- Icon shadow -->
+    <filter id="iconShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#1E1E1E" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- === ICON: Stylized POS terminal centered === -->
+  <g transform="translate(30, 18)" filter="url(#iconShadow)">
+    <!-- POS Terminal body -->
+    <rect x="8" y="8" width="130" height="155" rx="18" ry="18" fill="url(#graphiteGrad)"/>
+    
+    <!-- Screen area -->
+    <rect x="23" y="23" width="100" height="68" rx="9" ry="9" fill="#F5F0E8" opacity="0.95"/>
+    
+    <!-- Screen content: mini barcode lines in graphite -->
+    <rect x="34" y="36" width="5" height="28" rx="1" fill="#333333" opacity="0.7"/>
+    <rect x="42" y="36" width="3" height="28" rx="1" fill="#333333" opacity="0.5"/>
+    <rect x="48" y="36" width="6" height="28" rx="1" fill="#333333" opacity="0.8"/>
+    <rect x="57" y="36" width="4" height="28" rx="1" fill="#333333" opacity="0.6"/>
+    <rect x="64" y="36" width="3" height="28" rx="1" fill="#333333" opacity="0.4"/>
+    <rect x="70" y="36" width="7" height="28" rx="1" fill="#333333" opacity="0.7"/>
+    <rect x="80" y="36" width="4" height="28" rx="1" fill="#333333" opacity="0.55"/>
+    <rect x="87" y="36" width="3" height="28" rx="1" fill="#333333" opacity="0.45"/>
+    <rect x="93" y="36" width="6" height="28" rx="1" fill="#333333" opacity="0.75"/>
+    <rect x="102" y="36" width="4" height="28" rx="1" fill="#333333" opacity="0.5"/>
+    <rect x="109" y="36" width="5" height="28" rx="1" fill="#333333" opacity="0.65"/>
+    
+    <!-- Screen: inventory trend line in amber -->
+    <polyline points="34,74 48,65 60,70 75,56 88,62 104,52 114,58" 
+              stroke="#FFBF00" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Chart dot accent -->
+    <circle cx="75" cy="56" r="3" fill="#FFD54F"/>
+    
+    <!-- Keypad dots (3x3 grid) -->
+    <circle cx="45" cy="110" r="6" fill="#F5F0E8" opacity="0.2"/>
+    <circle cx="67" cy="110" r="6" fill="#F5F0E8" opacity="0.2"/>
+    <circle cx="89" cy="110" r="6" fill="#F5F0E8" opacity="0.2"/>
+    <circle cx="45" cy="130" r="6" fill="#F5F0E8" opacity="0.2"/>
+    <circle cx="67" cy="130" r="6" fill="#F5F0E8" opacity="0.2"/>
+    <circle cx="89" cy="130" r="6" fill="#F5F0E8" opacity="0.2"/>
+    <!-- Bottom action button in amber -->
+    <rect x="110" y="122" width="14" height="14" rx="7" fill="url(#amberGrad)" opacity="0.9"/>
+    <!-- Bottom wide button -->
+    <rect x="35" y="145" width="76" height="11" rx="5.5" fill="url(#amberGrad)" opacity="0.85"/>
+    
+    <!-- Receipt paper coming out the top -->
+    <g>
+      <path d="M40,8 L40,-14 Q40,-18 44,-18 L102,-18 Q106,-18 106,-14 L106,8" fill="#FAFAF5" stroke="#D5D0C8" stroke-width="0.8"/>
+      <!-- Receipt torn edge -->
+      <path d="M40,-18 L44,-15 L48,-18 L52,-15 L56,-18 L60,-15 L64,-18 L68,-15 L72,-18 L76,-15 L80,-18 L84,-15 L88,-18 L92,-15 L96,-18 L100,-15 L104,-18 L106,-18" fill="#FAFAF5" stroke="none"/>
+      <!-- Receipt text lines -->
+      <line x1="50" y1="-10" x2="96" y2="-10" stroke="#C8C3BB" stroke-width="1.3"/>
+      <line x1="50" y1="-4" x2="84" y2="-4" stroke="#C8C3BB" stroke-width="1.3"/>
+      <line x1="50" y1="2" x2="90" y2="2" stroke="#C8C3BB" stroke-width="1.3"/>
+      <!-- Checkmark on receipt in amber -->
+      <polyline points="45,-6 49,-2 56,-12" stroke="#E8A800" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </g>
+</svg>

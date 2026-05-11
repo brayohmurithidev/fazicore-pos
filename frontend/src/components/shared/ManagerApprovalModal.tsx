@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronLeft, ShieldCheck } from 'lucide-react'
+import { ChevronLeft, ShieldCheck, Delete } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { RoleBadge } from '@/components/shared/RoleBadge'
@@ -193,7 +193,7 @@ export function ManagerApprovalModal({
                         : 'bg-gray-50 text-gray-900 border-gray-200 hover:bg-gray-100'
                     }`}
                   >
-                    {k === 'del' ? '⌫' : k}
+                    {k === 'del' ? <Delete size={16} /> : k}
                   </button>
                 )
               )}

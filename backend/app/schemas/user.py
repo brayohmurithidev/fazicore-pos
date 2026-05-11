@@ -22,6 +22,11 @@ class UserUpdate(BaseModel):
     is_active: bool | None = None
 
 
+class UserSelfUpdate(BaseModel):
+    name: str | None = None
+    pin: str | None = None
+
+
 class UserOut(BaseModel):
     id: int
     org_id: int
@@ -31,6 +36,7 @@ class UserOut(BaseModel):
     branch_id: int | None
     branch_name: str | None = None
     avatar: str | None
+    photo_url: str | None = None
     is_active: bool
     created_at: datetime
 

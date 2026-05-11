@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
-import { Search, Trash2, Minus, Plus, Receipt, SlidersHorizontal, BookmarkCheck, Bookmark, Keyboard, Building2, X as XIcon, ScanLine } from 'lucide-react'
+import { Search, Trash2, Minus, Plus, Check, Receipt, SlidersHorizontal, BookmarkCheck, Bookmark, Keyboard, Building2, X as XIcon, ScanLine } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -896,11 +896,14 @@ export function POSPage() {
               onClick={() => setNotesOpen((v) => !v)}
               className={`flex-1 py-1.5 border rounded-md text-xs font-semibold transition-colors ${
                 orderNotes
-                  ? 'border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100'
+                  ? 'border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100'
                   : 'border-gray-200 text-gray-600 bg-gray-50 hover:bg-gray-100'
               }`}
             >
-              {orderNotes ? '✓ Note' : '+ Note'}
+              <span className="flex items-center justify-center gap-1">
+                {orderNotes ? <Check size={11} /> : <Plus size={11} />}
+                Note
+              </span>
             </button>
           </div>
 

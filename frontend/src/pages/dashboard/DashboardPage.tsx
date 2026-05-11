@@ -12,20 +12,20 @@ import { useDashboard, useOrders, useBranches } from '@/lib/queries'
 import { fmtKES } from '@/lib/data'
 import type { Role } from '@/types'
 
-function StatCard({ label, value, sub, icon: Icon, accent = '#111827' }: {
-  label: string; value: string | number; sub?: string; icon: React.ElementType; accent?: string
+function StatCard({ label, value, sub, icon: Icon, amber = false }: {
+  label: string; value: string | number; sub?: string; icon: React.ElementType; amber?: boolean
 }) {
   return (
     <Card>
       <CardContent className="p-5 sm:p-6">
         <div className="flex justify-between items-start">
           <div>
-            <div className="text-xs text-gray-500 font-semibold mb-2 uppercase tracking-wide">{label}</div>
-            <div className="text-3xl sm:text-4xl font-bold text-gray-900 leading-none">{value}</div>
+            <div className="text-xs text-gray-400 font-medium mb-2 uppercase tracking-wider">{label}</div>
+            <div className="text-2xl sm:text-3xl font-bold text-gray-900 leading-none">{value}</div>
             {sub && <div className="text-sm text-gray-400 mt-1.5">{sub}</div>}
           </div>
-          <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: accent + '18' }}>
-            <Icon size={22} style={{ color: accent }} />
+          <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${amber ? 'bg-amber-50' : 'bg-gray-100'}`}>
+            <Icon size={20} className={amber ? 'text-amber-600' : 'text-gray-500'} />
           </div>
         </div>
       </CardContent>
@@ -38,15 +38,14 @@ interface QuickAction {
   description: string
   icon: React.ElementType
   path: string
-  accent: string
   roles: Role[]
 }
 
 const QUICK_ACTIONS: QuickAction[] = [
-  { label: 'New Sale',     description: 'Open POS register',     icon: Monitor,   path: '/pos',       accent: '#111827', roles: ['admin', 'manager', 'cashier'] },
-  { label: 'Add Product',  description: 'Stock a new item',       icon: Plus,      path: '/inventory', accent: '#8B5CF6', roles: ['admin', 'manager', 'stock'] },
-  { label: 'View Reports', description: 'Sales & analytics',      icon: BarChart3, path: '/reports',   accent: '#3B82F6', roles: ['admin', 'manager'] },
-  { label: 'Customers',    description: 'Manage credit accounts', icon: UserCheck, path: '/customers', accent: '#059669', roles: ['admin', 'manager', 'cashier'] },
+  { label: 'New Sale',     description: 'Open POS register',     icon: Monitor,   path: '/pos',       roles: ['admin', 'manager', 'cashier'] },
+  { label: 'Add Product',  description: 'Stock a new item',       icon: Plus,      path: '/inventory', roles: ['admin', 'manager', 'stock'] },
+  { label: 'View Reports', description: 'Sales & analytics',      icon: BarChart3, path: '/reports',   roles: ['admin', 'manager'] },
+  { label: 'Customers',    description: 'Manage credit accounts', icon: UserCheck, path: '/customers', roles: ['admin', 'manager', 'cashier'] },
 ]
 
 export function DashboardPage() {
@@ -90,12 +89,12 @@ export function DashboardPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-7">
-        <StatCard label="Today's Revenue" value={fmtKES(todayRevenue)} sub={`${todayTxCount} transactions`} icon={Receipt} accent="#3B82F6" />
-        <StatCard label="Items Sold" value={itemsSold} sub="today" icon={Package} accent="#8B5CF6" />
-        <StatCard label="Low Stock" value={lowStockCount} sub="need attention" icon={AlertTriangle} accent="#EF4444" />
+        <StatCard label="Today's Revenue" value={fmtKES(todayRevenue)} sub={`${todayTxCount} transactions`} icon={Receipt} amber />
+        <StatCard label="Items Sold" value={itemsSold} sub="today" icon={Package} />
+        <StatCard label="Low Stock" value={lowStockCount} sub="need attention" icon={AlertTriangle} />
         {isMultiBranch
-          ? <StatCard label="Active Branches" value={branches.filter((b) => b.is_active !== false).length} sub="locations" icon={Building2} accent="#059669" />
-          : <StatCard label="Customers Served" value={todayTxCount} sub="today" icon={Building2} accent="#059669" />
+          ? <StatCard label="Active Branches" value={branches.filter((b) => b.is_active !== false).length} sub="locations" icon={Building2} />
+          : <StatCard label="Customers Served" value={todayTxCount} sub="today" icon={Building2} />
         }
       </div>
 
@@ -110,17 +109,14 @@ export function DashboardPage() {
                 <button
                   key={action.path}
                   onClick={() => navigate(action.path)}
-                  className="group flex flex-col items-center justify-center gap-3 sm:gap-4 p-5 sm:p-7 bg-white border-2 border-gray-100 rounded-2xl text-center hover:border-gray-300 hover:shadow-md active:scale-[0.97] transition-all"
+                  className="group flex flex-col items-center justify-center gap-3 p-5 sm:p-6 bg-white border border-gray-200 rounded-xl text-center hover:border-amber-200 hover:shadow-sm active:scale-[0.98] transition-all"
                 >
-                  <div
-                    className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110"
-                    style={{ background: action.accent + '15' }}
-                  >
-                    <Icon size={28} sm-size={32} style={{ color: action.accent }} />
+                  <div className="w-12 h-12 rounded-xl bg-gray-50 group-hover:bg-amber-50 flex items-center justify-center transition-colors">
+                    <Icon size={22} className="text-gray-500 group-hover:text-amber-600 transition-colors" />
                   </div>
                   <div>
-                    <div className="text-base sm:text-lg font-bold text-gray-900 leading-tight">{action.label}</div>
-                    <div className="text-xs sm:text-sm text-gray-400 mt-0.5">{action.description}</div>
+                    <div className="text-[14px] font-semibold text-gray-900 leading-tight">{action.label}</div>
+                    <div className="text-[12px] text-gray-400 mt-0.5">{action.description}</div>
                   </div>
                 </button>
               )
@@ -217,7 +213,7 @@ export function DashboardPage() {
                       <span className="text-gray-500">{b.location}</span>
                     </div>
                     <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-gray-900 rounded-full" style={{ width: '50%' }} />
+                      <div className="h-full bg-amber-500 rounded-full" style={{ width: '50%' }} />
                     </div>
                   </div>
                 ))}

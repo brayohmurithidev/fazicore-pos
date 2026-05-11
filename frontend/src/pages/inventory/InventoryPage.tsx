@@ -272,21 +272,21 @@ function StatusPill({ qty, min }: { qty: number; min: number }) {
 
 function POStatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
-    pending: 'bg-yellow-100 text-yellow-800',
-    transit: 'bg-blue-100 text-blue-800',
-    received: 'bg-green-100 text-green-800',
-    cancelled: 'bg-gray-100 text-gray-600',
+    pending: 'bg-amber-50 text-amber-700',
+    transit: 'bg-gray-100 text-gray-700',
+    received: 'bg-emerald-50 text-emerald-700',
+    cancelled: 'bg-gray-100 text-gray-500',
   }
   return <Badge className={`${map[status] ?? 'bg-gray-100 text-gray-700'} border-0`}>{status}</Badge>
 }
 
 function TxTypeBadge({ type }: { type: string }) {
   const map: Record<string, string> = {
-    purchase: 'bg-blue-100 text-blue-800',
-    sale: 'bg-green-100 text-green-800',
-    adjustment: 'bg-purple-100 text-purple-800',
-    return: 'bg-orange-100 text-orange-800',
-    transfer: 'bg-cyan-100 text-cyan-800',
+    purchase: 'bg-amber-50 text-amber-700',
+    sale: 'bg-emerald-50 text-emerald-700',
+    adjustment: 'bg-gray-100 text-gray-600',
+    return: 'bg-gray-100 text-gray-700',
+    transfer: 'bg-gray-100 text-gray-700',
   }
   return <Badge className={`${map[type] ?? 'bg-gray-100 text-gray-700'} border-0 text-[11px]`}>{type}</Badge>
 }
@@ -474,7 +474,7 @@ function ProductFormModal({ open, onClose, initial, categories, allProducts, isP
                 <SelectContent>
                   <SelectItem value="">— None —</SelectItem>
                   {categories.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
-                  <SelectItem value="__new__" className="text-blue-600 font-semibold border-t border-gray-100 mt-1 rounded-none">+ New category</SelectItem>
+                  <SelectItem value="__new__" className="text-amber-600 font-semibold border-t border-gray-100 mt-1 rounded-none">+ New category</SelectItem>
                 </SelectContent>
               </Select>
             )}
@@ -574,7 +574,7 @@ function ProductFormModal({ open, onClose, initial, categories, allProducts, isP
                   onDrop={handleDrop}
                   className={`relative w-full rounded-xl border-2 border-dashed cursor-pointer transition-all overflow-hidden
                     ${imageDragging
-                      ? 'border-blue-400 bg-blue-50 scale-[1.01]'
+                      ? 'border-amber-400 bg-amber-50 scale-[1.01]'
                       : hasImage
                         ? 'border-gray-200 hover:border-gray-400'
                         : 'border-gray-200 hover:border-gray-400 bg-gray-50 hover:bg-gray-100'
@@ -606,7 +606,7 @@ function ProductFormModal({ open, onClose, initial, categories, allProducts, isP
                   ) : (
                     <div className="flex flex-col items-center justify-center py-6 gap-1.5 pointer-events-none select-none">
                       {imageDragging
-                        ? <Package size={28} className="text-blue-400" />
+                        ? <Package size={28} className="text-amber-400" />
                         : <Package size={28} className="text-gray-300" />
                       }
                       <span className="text-xs font-medium text-gray-500">
@@ -1160,7 +1160,7 @@ function ProductsTab({ branchId }: { branchId?: number }) {
                       key={p.id}
                       ref={isFocused ? focusedRowRef : undefined}
                       onClick={() => setSelectedProduct(isSelected ? null : p)}
-                      className={`cursor-pointer transition-colors ${s.rowBorderCls} ${isSelected ? 'bg-blue-50 hover:bg-blue-50' : isFocused ? 'bg-gray-50' : s.rowBgCls + ' hover:bg-gray-50/80'}`}
+                      className={`cursor-pointer transition-colors ${s.rowBorderCls} ${isSelected ? 'bg-amber-50 hover:bg-amber-50' : isFocused ? 'bg-gray-50' : s.rowBgCls + ' hover:bg-gray-50/80'}`}
                     >
                       <TableCell className="pl-4" onClick={(e) => e.stopPropagation()}>
                         <input type="checkbox" checked={isChecked}
@@ -1213,7 +1213,7 @@ function ProductsTab({ branchId }: { branchId?: number }) {
                           <button title="Adjust stock (A)" onClick={(e) => { e.currentTarget.blur(); setAdjustProduct(p) }}
                             className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"><SlidersHorizontal size={13} /></button>
                           <button title="Open detail" onClick={(e) => { e.currentTarget.blur(); setSelectedProduct(isSelected ? null : p) }}
-                            className={`p-1.5 rounded hover:bg-gray-100 transition-colors ${isSelected ? 'text-blue-600' : 'text-gray-400 hover:text-gray-700'}`}><ChevronRight size={13} /></button>
+                            className={`p-1.5 rounded hover:bg-gray-100 transition-colors ${isSelected ? 'text-amber-600' : 'text-gray-400 hover:text-gray-700'}`}><ChevronRight size={13} /></button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -1509,7 +1509,7 @@ function PurchaseOrdersTab({ products, branches }: { products: ApiProduct[]; bra
             ) : filtered.map((po) => (
               <TableRow key={po.id}>
                 <TableCell>
-                  <button onClick={() => setDetailPO(po)} className="font-mono font-bold text-gray-900 hover:text-blue-600 text-sm transition-colors">{po.po_number}</button>
+                  <button onClick={() => setDetailPO(po)} className="font-mono font-bold text-gray-900 hover:text-amber-600 text-sm transition-colors">{po.po_number}</button>
                 </TableCell>
                 <TableCell className="font-medium text-sm">{po.supplier}</TableCell>
                 <TableCell className="text-sm text-gray-500">{po.branch_name ?? '—'}</TableCell>
@@ -1638,7 +1638,7 @@ function NewTransferModal({ open, onClose, products, branches }: {
 }
 
 const TRANSFER_STATUS_META: Record<TransferStatus, { label: string; textCls: string; bgCls: string; dotCls: string }> = {
-  initiated: { label: 'Initiated', textCls: 'text-blue-700', bgCls: 'bg-blue-100', dotCls: 'bg-blue-500' },
+  initiated: { label: 'Initiated', textCls: 'text-gray-700', bgCls: 'bg-gray-100', dotCls: 'bg-gray-400' },
   in_transit: { label: 'In Transit', textCls: 'text-amber-700', bgCls: 'bg-amber-100', dotCls: 'bg-amber-400' },
   confirmed: { label: 'Confirmed', textCls: 'text-green-700', bgCls: 'bg-green-100', dotCls: 'bg-green-500' },
   cancelled: { label: 'Cancelled', textCls: 'text-gray-500', bgCls: 'bg-gray-100', dotCls: 'bg-gray-400' },
@@ -1874,7 +1874,7 @@ const AGING_META: Record<AgingBucket, { label: string; textCls: string; bgCls: s
   slow:       { label: 'Slow',       textCls: 'text-amber-700',  bgCls: 'bg-amber-100' },
   stale:      { label: 'Stale',      textCls: 'text-orange-700', bgCls: 'bg-orange-100' },
   dead:       { label: 'Dead Stock', textCls: 'text-red-700',    bgCls: 'bg-red-100' },
-  never_sold: { label: 'Never Sold', textCls: 'text-purple-700', bgCls: 'bg-purple-100' },
+  never_sold: { label: 'Never Sold', textCls: 'text-gray-600',   bgCls: 'bg-gray-100' },
 }
 
 function ReportsTab({ products, branchId, isMultiBranch }: { products: ApiProduct[]; branchId?: number; isMultiBranch: boolean }) {
@@ -2021,7 +2021,7 @@ function ReportsTab({ products, branchId, isMultiBranch }: { products: ApiProduc
                       </TableCell>
                       <TableCell className="text-right">
                         {r.suggested_reorder_qty > 0
-                          ? <span className="font-bold text-sm text-blue-700">{r.suggested_reorder_qty} {r.unit}</span>
+                          ? <span className="font-bold text-sm text-amber-700">{r.suggested_reorder_qty} {r.unit}</span>
                           : <span className="text-sm text-gray-400">—</span>}
                       </TableCell>
                       <TableCell>
@@ -2263,7 +2263,7 @@ export function InventoryPage() {
           <p className="text-sm text-gray-400 mt-0.5">
             Products, stock levels, purchase orders and reports
             {!isAdmin && user?.branch_name && (
-              <span className="ml-2 text-xs font-medium text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
+              <span className="ml-2 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
                 {user.branch_name}
               </span>
             )}
