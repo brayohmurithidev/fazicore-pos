@@ -685,7 +685,7 @@ export function POSPage() {
         </div>
 
         {/* Product grid */}
-        <div className="flex-1 overflow-y-auto p-3.5 pb-20 md:pb-3.5">
+        <div className="flex-1 overflow-y-auto p-3.5">
           {productsLoading ? (
             <div className="flex items-center justify-center h-32 text-gray-400 text-sm">Loading products...</div>
           ) : filtered.length === 0 ? (
@@ -710,7 +710,7 @@ export function POSPage() {
         </div>
 
         {/* Mobile cart button — only visible on small screens */}
-        <div className="md:hidden fixed bottom-0 left-0 right-0 p-3 bg-white border-t border-gray-200 z-30">
+        <div className="md:hidden flex-shrink-0 p-3 bg-white border-t border-gray-200">
           <button
             onClick={() => setMobileCartOpen(true)}
             className="w-full flex items-center justify-between bg-gray-900 text-white rounded-xl px-4 py-3"
