@@ -7,7 +7,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@shared-postgres:5432/${POSTGRES_DB}
       REDIS_URL: redis://shared-redis:6379/0
-      MINIO_ENDPOINT: minio:9000
+      MINIO_ENDPOINT: http://shared-minio:9000
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
       MINIO_SECURE: "false"
     restart: unless-stopped
