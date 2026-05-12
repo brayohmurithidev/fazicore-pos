@@ -6,14 +6,14 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@shared-postgres:5432/${POSTGRES_DB}
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://shared-redis:6379/0
       MINIO_ENDPOINT: minio:9000
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
       MINIO_SECURE: "false"
     depends_on:
-      db:
+      shared-postgres:
         condition: service_healthy
-      redis:
+      shared-redis:
         condition: service_healthy
       minio:
         condition: service_healthy
@@ -24,9 +24,9 @@ services:
     command: alembic upgrade head
     env_file: .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@shared-postgres:5432/${POSTGRES_DB}
     depends_on:
-      db:
+      shared-postgres:
         condition: service_healthy
 
   worker:
@@ -34,14 +34,15 @@ services:
     command: celery -A app.workers.celery_app worker --loglevel=info
     env_file: .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@shared-postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://shared-redis:6379/0
     depends_on:
-      db:
+      shared-postgres:
         condition: service_healthy
-      redis:
+      shared-redis:
         condition: service_healthy
     restart: unless-stopped
+  
 networks:
   default:
     external: true
