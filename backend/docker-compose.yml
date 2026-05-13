@@ -15,6 +15,8 @@ services:
   migrate:
     image: ${API_IMAGE}
     command: alembic upgrade head
+    profiles:
+      - migrate
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@shared-postgres:5432/${POSTGRES_DB}
