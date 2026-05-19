@@ -1877,7 +1877,7 @@ function NewPOModal({ open, onClose, products, branches }: {
                 {lines.map((line, i) => (
                   <tr key={i} className="border-t border-gray-100">
                     <td className="px-2 py-1.5">
-                      <Select value={line.product_id ?? ''} onValueChange={(v) => handleProductChange(i, v)}>
+                      <Select value={line.product_id ?? ''} onValueChange={(v) => v != null && handleProductChange(i, v)}>
                         <SelectTrigger className="h-8 text-xs">
                           <span className={line.product_id ? undefined : 'text-muted-foreground'}>
                             {line.product_id ? (products.find((p) => String(p.id) === line.product_id)?.name ?? line.product_name) : 'Select product'}
