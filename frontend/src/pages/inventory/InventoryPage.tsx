@@ -10,7 +10,7 @@ import {
   ShoppingCart, Upload, FileDown, ChevronDown, Tag,
 } from 'lucide-react'
 import JsBarcode from 'jsbarcode'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -19,7 +19,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Separator } from '@/components/ui/separator'
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { LimitReachedDialog, parseLimitError, type LimitError } from '@/components/shared/LimitReachedDialog'
 import {
   useProducts, useCategories, useCreateCategory, useCreateProduct, useUpdateProductById,
@@ -1333,10 +1333,8 @@ function ProductsTab({ branchId }: { branchId?: number }) {
         </Select>
         <div className="flex gap-1.5 ml-auto">
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <Download size={13} className="mr-1.5" />Export<ChevronDown size={11} className="ml-1 opacity-60" />
-              </Button>
+            <DropdownMenuTrigger className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+              <Download size={13} className="mr-1.5" />Export<ChevronDown size={11} className="ml-1 opacity-60" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={exportPDF}>
@@ -1355,10 +1353,8 @@ function ProductsTab({ branchId }: { branchId?: number }) {
             <>
               <input ref={importRef} type="file" accept=".csv" className="hidden" onChange={handleImportCSV} />
               <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <FileDown size={13} className="mr-1.5" />Template<ChevronDown size={11} className="ml-1 opacity-60" />
-                  </Button>
+                <DropdownMenuTrigger className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+                  <FileDown size={13} className="mr-1.5" />Template<ChevronDown size={11} className="ml-1 opacity-60" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={downloadTemplateXlsx}>
@@ -1881,7 +1877,7 @@ function NewPOModal({ open, onClose, products, branches }: {
                 {lines.map((line, i) => (
                   <tr key={i} className="border-t border-gray-100">
                     <td className="px-2 py-1.5">
-                      <Select value={line.product_id} onValueChange={(v) => handleProductChange(i, v)}>
+                      <Select value={line.product_id ?? ''} onValueChange={(v) => handleProductChange(i, v)}>
                         <SelectTrigger className="h-8 text-xs">
                           <span className={line.product_id ? undefined : 'text-muted-foreground'}>
                             {line.product_id ? (products.find((p) => String(p.id) === line.product_id)?.name ?? line.product_name) : 'Select product'}

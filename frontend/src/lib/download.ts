@@ -83,7 +83,7 @@ export async function downloadXlsx(
         toast.success('File saved')
       }
     } else {
-      const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as Uint8Array
+      const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as Uint8Array<ArrayBuffer>
       browserDownload(filename, new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
     }
   } catch (e) {
