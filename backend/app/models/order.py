@@ -56,6 +56,7 @@ class Order(Base, TimestampMixin):
     credit_customer_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     credit_customer_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True, index=True)
     voided_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
     voided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     void_reason: Mapped[str | None] = mapped_column(String(300), nullable=True)

@@ -13,7 +13,9 @@ import { useSettingsStore } from '@/stores/settings'
 import { useBranches, useDashboard, useOrgInfo, useClockOut } from '@/lib/queries'
 import { useFeatureFlags } from '@/hooks/useFeature'
 import { useInactivityLogout } from '@/hooks/useInactivityLogout'
+import { useOfflineSync } from '@/hooks/useOfflineSync'
 import { isTauri } from '@/hooks/useTauri'
+import { useOfflineStore } from '@/stores/offline'
 import { TitleBar } from '@/components/layout/TitleBar'
 import type { Role } from '@/types'
 import { cn } from '@/lib/utils'
@@ -83,6 +85,8 @@ export function AppShell() {
   const clockOutMutation = useClockOut()
 
   useInactivityLogout(15 * 60 * 1000)
+  useOfflineSync()
+  const { isOnline, syncStatus, syncNow, isSyncing } = useOfflineStore()
 
   useEffect(() => {
     if (orgInfo) seedFromOrg(orgInfo)
@@ -130,6 +134,29 @@ export function AppShell() {
     <div className="flex flex-col h-dvh overflow-hidden bg-white">
       {/* Native title bar — only in Tauri desktop */}
       {isTauri && <TitleBar />}
+
+      {/* Offline / pending-sync banner — Tauri only */}
+      {isTauri && (!isOnline || (syncStatus?.pending_count ?? 0) > 0) && (
+        <div className={cn(
+          'flex items-center justify-between px-4 py-1.5 text-xs font-semibold shrink-0',
+          !isOnline ? 'bg-amber-500 text-white' : 'bg-blue-50 text-blue-700 border-b border-blue-100'
+        )}>
+          <span>
+            {!isOnline
+              ? 'Offline — sales are queued and will sync when connected'
+              : `${syncStatus!.pending_count} order${syncStatus!.pending_count === 1 ? '' : 's'} pending sync`}
+          </span>
+          {isOnline && (
+            <button
+              onClick={() => syncNow()}
+              disabled={isSyncing}
+              className="underline underline-offset-2 disabled:opacity-50"
+            >
+              {isSyncing ? 'Syncing…' : 'Sync now'}
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-1 overflow-hidden">
       {/* Mobile backdrop */}

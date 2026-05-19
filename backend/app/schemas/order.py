@@ -48,6 +48,7 @@ class OrderCreate(BaseModel):
     credit_customer_name: str | None = None
     credit_customer_phone: str | None = None
     notes: str | None = None
+    idempotency_key: str | None = None
 
 
 class OrderItemOut(BaseModel):

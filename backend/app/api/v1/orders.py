@@ -55,6 +55,17 @@ async def create_order(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_active_user),
 ) -> OrderOut:
+    from app.models.order import Order as OrderModel
+    # Idempotency: return existing order if same key already processed
+    if data.idempotency_key:
+        existing = await session.scalar(
+            select(OrderModel).where(OrderModel.idempotency_key == data.idempotency_key)
+        )
+        if existing:
+            repo = OrderRepository(session)
+            loaded = await repo.get_with_items(existing.id)
+            return OrderOut.model_validate(loaded)
+
     org_repo = OrganizationRepository(session)
     org = await org_repo.get(current_user.org_id)
     if not org:
