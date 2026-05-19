@@ -64,7 +64,7 @@ const router = createBrowserRouter([
       { path: '/users',      element: <RequireRole allow={['admin']}><UsersPage /></RequireRole> },
       { path: '/audit',        element: <RequireRole allow={['admin']}><AuditPage /></RequireRole> },
       { path: '/expenditures', element: <RequireRole allow={['admin','manager']}><ExpendituresPage /></RequireRole> },
-      { path: '/settings',   element: <RequireRole allow={['admin']}><SettingsPage /></RequireRole> },
+      { path: '/settings',   element: <RequireRole allow={['admin','manager','cashier','stock']}><SettingsPage /></RequireRole> },
       { path: '/profile',    element: <RequireAuth><ProfilePage /></RequireAuth> },
     ],
   },
