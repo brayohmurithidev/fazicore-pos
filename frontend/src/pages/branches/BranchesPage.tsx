@@ -318,7 +318,7 @@ function AddBranchForm({ onClose, onDone }: { onClose: () => void; onDone: () =>
               </div>
               <div>
                 <Label className="mb-1 block text-xs text-gray-500">Role</Label>
-                <Select value={newUser.role} onValueChange={(v) => setNewUser((u) => ({ ...u, role: v }))}>
+                <Select value={newUser.role} onValueChange={(v) => v && setNewUser((u) => ({ ...u, role: v }))}>
                   <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="manager">Manager</SelectItem>
