@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
 from app.core.deps import get_current_active_user, require_roles
 from app.models.branch import Branch
+from app.models.inventory import Inventory
 from app.models.organization import Organization
+from app.models.product import Product
 from app.models.user import User, UserRole
 from app.repositories.branch import BranchRepository
 from app.schemas.branch import BranchCreate, BranchOut, BranchUpdate
@@ -48,6 +50,26 @@ async def create_branch(
     session.add(obj)
     await session.flush()
     await session.refresh(obj)
+
+    # Migrate any unassigned (NULL branch_id) inventory to the oldest branch.
+    # This handles the single-shop → multi-branch transition: stock that was
+    # recorded before branches existed gets anchored to the original location
+    # so new branches correctly start at zero.
+    oldest_branch_id = await session.scalar(
+        select(Branch.id)
+        .where(Branch.org_id == current_user.org_id, Branch.is_active == True)
+        .order_by(Branch.id.asc())
+        .limit(1)
+    )
+    if oldest_branch_id:
+        org_product_ids = select(Product.id).where(Product.org_id == current_user.org_id)
+        await session.execute(
+            update(Inventory)
+            .where(Inventory.branch_id == None, Inventory.product_id.in_(org_product_ids))
+            .values(branch_id=oldest_branch_id)
+        )
+    await session.commit()
+
     return BranchOut.model_validate(obj)
 
 

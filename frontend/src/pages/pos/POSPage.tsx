@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { PaymentModal } from './PaymentModal'
 import { ReceiptModal } from './ReceiptModal'
 import { ManagerApprovalModal } from '@/components/shared/ManagerApprovalModal'
@@ -642,21 +643,24 @@ export function POSPage() {
 
         {/* Admin branch picker — only shown when there are genuinely multiple branches to choose from */}
         {isAdmin && isMultiBranch && apiBranches.length > 1 && (
-          <div className={`px-4 py-2 border-b flex items-center gap-2 ${adminBranchId ? 'bg-amber-50 border-amber-100' : 'bg-red-50 border-red-200'}`}>
+          <div className={`px-4 py-1.5 border-b flex items-center gap-2.5 ${adminBranchId ? 'bg-amber-50 border-amber-100' : 'bg-red-50 border-red-200'}`}>
             <Building2 size={13} className={adminBranchId ? 'text-amber-600' : 'text-red-500'} />
-            <span className={`text-xs font-medium ${adminBranchId ? 'text-amber-700' : 'text-red-600'}`}>
+            <span className={`text-xs font-medium shrink-0 ${adminBranchId ? 'text-amber-700' : 'text-red-600'}`}>
               {adminBranchId ? 'Selling at:' : 'Select a branch to start selling:'}
             </span>
-            <select
-              value={adminBranchId ?? ''}
-              onChange={(e) => setAdminBranchId(e.target.value ? Number(e.target.value) : undefined)}
-              className={`text-xs border rounded-md px-2 py-1 bg-white text-gray-800 focus:outline-none focus:ring-1 ${adminBranchId ? 'border-amber-200 focus:ring-amber-400' : 'border-red-300 focus:ring-red-400'}`}
+            <Select
+              value={adminBranchId ? String(adminBranchId) : ''}
+              onValueChange={(v) => setAdminBranchId(v ? Number(v) : undefined)}
             >
-              <option value="" disabled>— pick a branch —</option>
-              {apiBranches.map((b) => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
+              <SelectTrigger className={`h-7 text-xs w-44 bg-white ${adminBranchId ? 'border-amber-200' : 'border-red-300'}`}>
+                <SelectValue placeholder="Pick a branch…" />
+              </SelectTrigger>
+              <SelectContent>
+                {apiBranches.map((b) => (
+                  <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         )}
 

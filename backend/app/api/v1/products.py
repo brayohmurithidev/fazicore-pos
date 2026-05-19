@@ -45,11 +45,7 @@ async def list_products(
         out = ProductOut.model_validate(p)
         if p.inventory:
             if effective_branch is not None:
-                # Include unassigned (NULL) inventory — covers stock from before branches were added
-                out.stock_quantity = sum(
-                    inv.quantity for inv in p.inventory
-                    if inv.branch_id == effective_branch or inv.branch_id is None
-                )
+                out.stock_quantity = sum(inv.quantity for inv in p.inventory if inv.branch_id == effective_branch)
             else:
                 out.stock_quantity = sum(inv.quantity for inv in p.inventory)
         if p.category:
