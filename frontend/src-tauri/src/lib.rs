@@ -10,8 +10,12 @@ use tauri::{
     Emitter, Manager,
 };
 
+use std::path::PathBuf;
+
 use db::{DbState, SyncStatus};
 use sync::{SyncConfig, SyncConfigState, SyncResult};
+
+pub struct ImageDirState(pub PathBuf);
 
 // ── Printing commands ─────────────────────────────────────────────────────────
 
@@ -124,9 +128,10 @@ fn set_sync_config(
     token: String,
     org_slug: String,
     branch_id: Option<i64>,
+    minio_public_url: String,
 ) {
     let mut guard = cfg.0.lock().unwrap();
-    *guard = Some(SyncConfig { base_url, token, org_slug, branch_id });
+    *guard = Some(SyncConfig { base_url, token, org_slug, branch_id, minio_public_url });
 }
 
 #[tauri::command]
@@ -141,12 +146,13 @@ fn clear_sync_config(cfg: tauri::State<SyncConfigState>) {
 async fn sync_now(
     db: tauri::State<'_, DbState>,
     cfg: tauri::State<'_, SyncConfigState>,
+    image_dir: tauri::State<'_, ImageDirState>,
 ) -> Result<SyncResult, String> {
     let config = cfg.0.lock().unwrap().clone();
     let Some(config) = config else {
         return Err("Not authenticated — call set_sync_config first".into());
     };
-    Ok(sync::run_sync(&db, &config).await)
+    Ok(sync::run_sync(&db, &config, &image_dir.0).await)
 }
 
 #[tauri::command]
@@ -177,20 +183,18 @@ fn start_sync_worker(app: tauri::AppHandle) {
             if !sync::check_online(&config.base_url).await { continue }
 
             let db = app.state::<DbState>();
-            let result = sync::run_sync(&db, &config).await;
+            let image_dir = app.state::<ImageDirState>();
+            let result = sync::run_sync(&db, &config, &image_dir.0).await;
 
-            if result.pushed > 0 || result.push_failed > 0 {
-                log::info!(
-                    "[sync] pushed={} failed={} products={} customers={} errors={:?}",
-                    result.pushed,
-                    result.push_failed,
-                    result.products_pulled,
-                    result.customers_pulled,
-                    result.errors,
-                );
-                // Notify frontend so it can refresh its query cache
-                let _ = app.emit("sync-complete", &result);
-            }
+            log::info!(
+                "[sync] pushed={} failed={} products={} customers={} errors={:?}",
+                result.pushed,
+                result.push_failed,
+                result.products_pulled,
+                result.customers_pulled,
+                result.errors,
+            );
+            let _ = app.emit("sync-complete", &result);
         }
     });
 }
@@ -250,6 +254,11 @@ pub fn run() {
                 .expect("failed to open SQLite database");
             db::init_db(&conn).expect("failed to initialize database schema");
             app.manage(DbState(Mutex::new(conn)));
+
+            // ── Image cache dir ──
+            let image_dir = data_dir.join("images");
+            std::fs::create_dir_all(&image_dir)?;
+            app.manage(ImageDirState(image_dir));
 
             // ── Background sync worker ──
             start_sync_worker(app.handle().clone());

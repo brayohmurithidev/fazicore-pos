@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use std::time::Duration;
 
+use std::path::Path;
+
 use crate::db::{
     self, DbState, LocalCustomer, LocalProduct,
 };
@@ -16,6 +18,7 @@ pub struct SyncConfig {
     pub token: String,
     pub org_slug: String,
     pub branch_id: Option<i64>,
+    pub minio_public_url: String,
 }
 
 pub struct SyncConfigState(pub Mutex<Option<SyncConfig>>);
@@ -71,6 +74,7 @@ impl From<ApiProductRaw> for LocalProduct {
             stock_quantity: r.stock_quantity,
             min_stock: r.min_stock,
             image_url: r.image_url,
+            local_image_path: None,
             vat_rate: r.vat_rate,
             is_active: r.is_active,
             track_inventory: r.track_inventory,
@@ -122,18 +126,15 @@ pub async fn pull_products(
     let limit = 200usize;
 
     loop {
-        let resp = client
+        let mut req = client
             .get(format!("{}/api/v1/products/", config.base_url))
             .bearer_auth(&config.token)
             .header("X-Org-Slug", &config.org_slug)
-            .query(&[
-                ("skip", skip.to_string()),
-                ("limit", limit.to_string()),
-                ("branch_id", config.branch_id.map(|b| b.to_string()).unwrap_or_default()),
-            ])
-            .send()
-            .await
-            .map_err(|e| e.to_string())?;
+            .query(&[("skip", skip.to_string()), ("limit", limit.to_string())]);
+        if let Some(branch_id) = config.branch_id {
+            req = req.query(&[("branch_id", branch_id.to_string())]);
+        }
+        let resp = req.send().await.map_err(|e| e.to_string())?;
 
         if !resp.status().is_success() {
             return Err(format!("products API {}", resp.status()));
@@ -229,13 +230,83 @@ pub struct SyncResult {
     pub push_failed: usize,
     pub products_pulled: usize,
     pub customers_pulled: usize,
+    pub images_downloaded: usize,
     pub errors: Vec<String>,
 }
 
-pub async fn run_sync(db: &DbState, config: &SyncConfig) -> SyncResult {
+const MINIO_INTERNAL: &str = "http://minio:9000/";
+
+fn resolve_image_url(url: &str, minio_public_url: &str) -> String {
+    if url.starts_with(MINIO_INTERNAL) {
+        let public_base = minio_public_url.trim_end_matches('/');
+        let path = &url[MINIO_INTERNAL.len()..];
+        format!("{public_base}/{path}")
+    } else {
+        url.to_string()
+    }
+}
+
+async fn download_images(
+    client: &Client,
+    products_needing_images: Vec<(i64, String)>,
+    image_dir: &Path,
+    minio_public_url: &str,
+    db: &DbState,
+) -> (usize, Vec<String>) {
+    let mut downloaded = 0;
+    let mut errors: Vec<String> = Vec::new();
+    let mut updates: Vec<(i64, String)> = Vec::new();
+
+    for (id, raw_url) in products_needing_images {
+        let url = resolve_image_url(&raw_url, minio_public_url);
+
+        // Derive file extension from URL path (strip query params)
+        let url_path = url.split('?').next().unwrap_or(&url);
+        let ext = url_path
+            .rsplit('.')
+            .next()
+            .filter(|e| e.len() <= 5 && e.chars().all(|c| c.is_alphanumeric()))
+            .unwrap_or("jpg");
+        let local_path = image_dir.join(format!("prod_{id}.{ext}"));
+
+        if local_path.exists() {
+            updates.push((id, local_path.to_string_lossy().into_owned()));
+            continue;
+        }
+
+        match client.get(&url).send().await {
+            Ok(resp) if resp.status().is_success() => {
+                match resp.bytes().await {
+                    Ok(bytes) => {
+                        if let Err(e) = std::fs::write(&local_path, &bytes) {
+                            errors.push(format!("write prod_{id}: {e}"));
+                        } else {
+                            updates.push((id, local_path.to_string_lossy().into_owned()));
+                            downloaded += 1;
+                        }
+                    }
+                    Err(e) => errors.push(format!("bytes prod_{id}: {e}")),
+                }
+            }
+            Ok(resp) => errors.push(format!("HTTP {} for prod_{id}", resp.status())),
+            Err(e) => errors.push(format!("fetch prod_{id}: {e}")),
+        }
+    }
+
+    if !updates.is_empty() {
+        let conn = db.0.lock().unwrap();
+        for (id, path) in updates {
+            let _ = db::update_product_local_image(&conn, id, &path);
+        }
+    }
+
+    (downloaded, errors)
+}
+
+pub async fn run_sync(db: &DbState, config: &SyncConfig, image_dir: &Path) -> SyncResult {
     let client = match make_client() {
         Ok(c) => c,
-        Err(e) => return SyncResult { pushed: 0, push_failed: 0, products_pulled: 0, customers_pulled: 0, errors: vec![e] },
+        Err(e) => return SyncResult { pushed: 0, push_failed: 0, products_pulled: 0, customers_pulled: 0, images_downloaded: 0, errors: vec![e] },
     };
 
     let mut result = SyncResult {
@@ -243,6 +314,7 @@ pub async fn run_sync(db: &DbState, config: &SyncConfig) -> SyncResult {
         push_failed: 0,
         products_pulled: 0,
         customers_pulled: 0,
+        images_downloaded: 0,
         errors: Vec::new(),
     };
 
@@ -276,12 +348,20 @@ pub async fn run_sync(db: &DbState, config: &SyncConfig) -> SyncResult {
     match pull_products(&client, config).await {
         Ok(products) => {
             result.products_pulled = products.len();
-            let conn = db.0.lock().unwrap();
-            if let Err(e) = db::upsert_products(&conn, &products) {
-                result.errors.push(format!("upsert products: {e}"));
-            } else {
-                let _ = db::set_meta(&conn, "products_last_sync", &Utc::now().to_rfc3339());
-            }
+            let to_download = {
+                let conn = db.0.lock().unwrap();
+                if let Err(e) = db::upsert_products(&conn, &products) {
+                    result.errors.push(format!("upsert products: {e}"));
+                    Vec::new()
+                } else {
+                    let _ = db::set_meta(&conn, "products_last_sync", &Utc::now().to_rfc3339());
+                    db::get_products_needing_images(&conn).unwrap_or_default()
+                }
+            };
+            // Download images outside the DB lock
+            let (n, errs) = download_images(&client, to_download, image_dir, &config.minio_public_url, db).await;
+            result.images_downloaded = n;
+            result.errors.extend(errs);
         }
         Err(e) => result.errors.push(format!("pull products: {e}")),
     }

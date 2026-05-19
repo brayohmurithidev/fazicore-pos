@@ -20,6 +20,7 @@ pub struct LocalProduct {
     pub stock_quantity: i64,
     pub min_stock: i64,
     pub image_url: Option<String>,
+    pub local_image_path: Option<String>,
     pub vat_rate: f64,
     pub is_active: bool,
     pub track_inventory: bool,
@@ -102,7 +103,10 @@ pub fn init_db(conn: &Connection) -> SqlResult<()> {
             value   TEXT NOT NULL
         );
         ",
-    )
+    )?;
+    // Additive migration — ignored if column already exists
+    let _ = conn.execute_batch("ALTER TABLE products ADD COLUMN local_image_path TEXT");
+    Ok(())
 }
 
 // ── Products ──────────────────────────────────────────────────────────────────
@@ -119,7 +123,10 @@ pub fn upsert_products(conn: &Connection, products: &[LocalProduct]) -> SqlResul
              sku=excluded.sku, barcode=excluded.barcode, unit=excluded.unit,
              category_id=excluded.category_id, category_name=excluded.category_name,
              stock_quantity=excluded.stock_quantity, min_stock=excluded.min_stock,
-             image_url=excluded.image_url, vat_rate=excluded.vat_rate,
+             image_url=excluded.image_url,
+             local_image_path = CASE WHEN excluded.image_url IS products.image_url
+                                     THEN products.local_image_path ELSE NULL END,
+             vat_rate=excluded.vat_rate,
              is_active=excluded.is_active, track_inventory=excluded.track_inventory,
              last_updated=excluded.last_updated",
     )?;
@@ -149,7 +156,8 @@ pub fn upsert_products(conn: &Connection, products: &[LocalProduct]) -> SqlResul
 pub fn get_products(conn: &Connection) -> SqlResult<Vec<LocalProduct>> {
     let mut stmt = conn.prepare(
         "SELECT id, name, price, cost, sku, barcode, unit, category_id, category_name,
-                stock_quantity, min_stock, image_url, vat_rate, is_active, track_inventory
+                stock_quantity, min_stock, image_url, local_image_path,
+                vat_rate, is_active, track_inventory
          FROM products WHERE is_active = 1 ORDER BY name",
     )?;
     let rows = stmt.query_map([], |row| {
@@ -166,12 +174,30 @@ pub fn get_products(conn: &Connection) -> SqlResult<Vec<LocalProduct>> {
             stock_quantity: row.get(9)?,
             min_stock: row.get(10)?,
             image_url: row.get(11)?,
-            vat_rate: row.get(12)?,
-            is_active: row.get::<_, i64>(13)? != 0,
-            track_inventory: row.get::<_, i64>(14)? != 0,
+            local_image_path: row.get(12)?,
+            vat_rate: row.get(13)?,
+            is_active: row.get::<_, i64>(14)? != 0,
+            track_inventory: row.get::<_, i64>(15)? != 0,
         })
     })?;
     rows.collect()
+}
+
+pub fn get_products_needing_images(conn: &Connection) -> SqlResult<Vec<(i64, String)>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, image_url FROM products
+         WHERE image_url IS NOT NULL AND local_image_path IS NULL AND is_active = 1",
+    )?;
+    let rows = stmt.query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)))?;
+    rows.collect()
+}
+
+pub fn update_product_local_image(conn: &Connection, id: i64, path: &str) -> SqlResult<()> {
+    conn.execute(
+        "UPDATE products SET local_image_path = ?1 WHERE id = ?2",
+        params![path, id],
+    )?;
+    Ok(())
 }
 
 pub fn decrement_stock(conn: &Connection, product_id: i64, qty: i64) -> SqlResult<()> {

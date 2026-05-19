@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
-import { Search, Trash2, Minus, Plus, Check, Receipt, SlidersHorizontal, BookmarkCheck, Bookmark, Keyboard, Building2, X as XIcon, ScanLine } from 'lucide-react'
+import { Search, Trash2, Minus, Plus, Check, Receipt, SlidersHorizontal, BookmarkCheck, Bookmark, Keyboard, Building2, X as XIcon, ScanLine, WifiOff } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -11,8 +11,11 @@ import { fmtKES } from '@/lib/data'
 import { resolveImageUrl } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
-import { useCategories, useProducts, useCreateOrder, useBranches, usePermissions } from '@/lib/queries'
+import { isTauri } from '@tauri-apps/api/core'
+import { useCategories, useCreateOrder, useBranches, usePermissions } from '@/lib/queries'
 import { useBarcodeScanner } from '@/hooks/useBarcodeScanner'
+import { usePOSProducts } from '@/hooks/usePOSProducts'
+import { useOfflineStore } from '@/stores/offline'
 import { printReceipt } from '@/lib/print'
 import { printESCPOS } from '@/lib/escpos'
 import type { CartItem, Product, SaleInfo } from '@/types'
@@ -283,6 +286,7 @@ export function POSPage() {
   const scanFeedbackTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   const createOrder = useCreateOrder()
+  const { isOnline, createOfflineOrder, setPosBranchOverride } = useOfflineStore()
   const isAdmin = user?.role === 'admin'
   const isCashier = user?.role === 'cashier'
   const CASHIER_DISCOUNT_LIMIT = 10
@@ -319,11 +323,24 @@ export function POSPage() {
   const { data: apiBranches = [] } = useBranches()
   const isMultiBranch = apiBranches.length > 1
 
-  // Admins in multi-branch shops can pick which branch they're selling at
-  const [adminBranchId, setAdminBranchId] = useState<number | undefined>(undefined)
+  // Admins in multi-branch shops can pick which branch they're selling at.
+  // Auto-select when there is exactly one branch so single-location admins
+  // are never asked to "pick" something with only one option.
+  const [adminBranchId, setAdminBranchId] = useState<number | undefined>(
+    () => apiBranches.length === 1 ? apiBranches[0]?.id : undefined
+  )
+  useEffect(() => {
+    if (apiBranches.length === 1 && !adminBranchId) setAdminBranchId(apiBranches[0].id)
+  }, [apiBranches])
   const effectiveBranchId = isAdmin && isMultiBranch ? adminBranchId : userBranchId
 
-  const { data: apiProducts = [], isLoading: productsLoading } = useProducts(undefined, undefined, effectiveBranchId)
+  // Keep offline sync scoped to the admin's chosen branch so SQLite stock is accurate
+  useEffect(() => {
+    if (isAdmin) setPosBranchOverride(adminBranchId ?? null)
+    return () => { if (isAdmin) setPosBranchOverride(null) }
+  }, [isAdmin, adminBranchId])
+
+  const { data: apiProducts = [], isLoading: productsLoading } = usePOSProducts(effectiveBranchId)
   const userBranch = apiBranches.find((b) => b.id === effectiveBranchId)
 
   // Category map for O(1) color lookup
@@ -551,7 +568,7 @@ export function POSPage() {
   const itemCount = cart.reduce((s, i) => s + i.qty, 0)
 
   // ── Payment complete ─────────────────────────────────────────────────────
-  const handlePaymentComplete = (payInfo: Record<string, unknown>) => {
+  const handlePaymentComplete = async (payInfo: Record<string, unknown>) => {
     const method = payInfo.method as SaleInfo['payment']
     const sale: SaleInfo = {
       id: `POS-${Date.now().toString(36).toUpperCase()}`,
@@ -566,34 +583,41 @@ export function POSPage() {
       ...(payInfo as Partial<SaleInfo>),
     }
 
-    createOrder.mutate(
-      {
-        payment_method: method,
-        branch_id: effectiveBranchId ?? null,
-        notes: orderNotes || undefined,
-        items: cart.map((item) => ({
-          product_id: Number(item.id) || undefined,
-          product_name: item.name,
-          product_sku: item.sku || undefined,
-          quantity: item.qty,
-          unit_price: item.price,
-          discount_amount: item.itemDiscount > 0
-            ? Math.round(item.price * item.qty * item.itemDiscount / 100)
-            : 0,
-        })),
-        discount_amount: cartDiscountAmt,
-        amount_paid: (payInfo.cashTendered as number) ?? total,
-        mpesa_ref: (payInfo.mpesaRef as string) ?? undefined,
-        mpesa_amount: (payInfo.mpesaAmount as number) ?? 0,
-        cash_amount: (payInfo.cashAmount as number) ?? 0,
-        credit_customer_name: (payInfo.creditName as string) ?? undefined,
-        credit_customer_phone: (payInfo.creditPhone as string) ?? undefined,
-      },
-      {
+    const orderPayload = {
+      payment_method: method,
+      branch_id: effectiveBranchId ?? null,
+      notes: orderNotes || undefined,
+      items: cart.map((item) => ({
+        product_id: Number(item.id) || undefined,
+        product_name: item.name,
+        product_sku: item.sku || undefined,
+        quantity: item.qty,
+        unit_price: item.price,
+        discount_amount: item.itemDiscount > 0
+          ? Math.round(item.price * item.qty * item.itemDiscount / 100)
+          : 0,
+      })),
+      discount_amount: cartDiscountAmt,
+      amount_paid: (payInfo.cashTendered as number) ?? total,
+      mpesa_ref: (payInfo.mpesaRef as string) ?? undefined,
+      mpesa_amount: (payInfo.mpesaAmount as number) ?? 0,
+      cash_amount: (payInfo.cashAmount as number) ?? 0,
+      credit_customer_name: (payInfo.creditName as string) ?? undefined,
+      credit_customer_phone: (payInfo.creditPhone as string) ?? undefined,
+    }
+
+    if (isTauri() && !isOnline) {
+      // Queue the sale locally; stock is decremented in SQLite immediately
+      const stockItems: [number, number][] = cart
+        .filter((item) => Number(item.id) > 0)
+        .map((item) => [Number(item.id), item.qty])
+      await createOfflineOrder(JSON.stringify(orderPayload), effectiveBranchId ?? null, stockItems)
+    } else {
+      createOrder.mutate(orderPayload, {
         onSuccess: (order) =>
           setLastSale((prev) => (prev ? { ...prev, id: order.order_number } : prev)),
-      }
-    )
+      })
+    }
 
     setLastSale(sale)
     setPayOpen(false)
@@ -616,17 +640,19 @@ export function POSPage() {
       {/* ── Left: Product catalog ─────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
 
-        {/* Admin branch picker — only shown in multi-branch shops */}
-        {isAdmin && isMultiBranch && (
-          <div className="px-4 py-2 bg-amber-50 border-b border-amber-100 flex items-center gap-2">
-            <Building2 size={13} className="text-amber-600 flex-shrink-0" />
-            <span className="text-xs text-amber-700 font-medium">Selling at:</span>
+        {/* Admin branch picker — only shown when there are genuinely multiple branches to choose from */}
+        {isAdmin && isMultiBranch && apiBranches.length > 1 && (
+          <div className={`px-4 py-2 border-b flex items-center gap-2 ${adminBranchId ? 'bg-amber-50 border-amber-100' : 'bg-red-50 border-red-200'}`}>
+            <Building2 size={13} className={adminBranchId ? 'text-amber-600' : 'text-red-500'} />
+            <span className={`text-xs font-medium ${adminBranchId ? 'text-amber-700' : 'text-red-600'}`}>
+              {adminBranchId ? 'Selling at:' : 'Select a branch to start selling:'}
+            </span>
             <select
               value={adminBranchId ?? ''}
               onChange={(e) => setAdminBranchId(e.target.value ? Number(e.target.value) : undefined)}
-              className="text-xs border border-amber-200 rounded-md px-2 py-1 bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-amber-400"
+              className={`text-xs border rounded-md px-2 py-1 bg-white text-gray-800 focus:outline-none focus:ring-1 ${adminBranchId ? 'border-amber-200 focus:ring-amber-400' : 'border-red-300 focus:ring-red-400'}`}
             >
-              <option value="">All branches (org-wide)</option>
+              <option value="" disabled>— pick a branch —</option>
               {apiBranches.map((b) => (
                 <option key={b.id} value={b.id}>{b.name}</option>
               ))}
@@ -686,7 +712,15 @@ export function POSPage() {
 
         {/* Product grid */}
         <div className="flex-1 overflow-y-auto p-3.5">
-          {productsLoading ? (
+          {isAdmin && isMultiBranch && !adminBranchId ? (
+            <div className="flex flex-col items-center justify-center h-full text-center px-6 py-16">
+              <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mb-4">
+                <Building2 size={24} className="text-red-500" />
+              </div>
+              <p className="font-semibold text-gray-700 mb-1">No branch selected</p>
+              <p className="text-sm text-gray-400">Choose a branch from the bar above to load products and start selling.</p>
+            </div>
+          ) : productsLoading ? (
             <div className="flex items-center justify-center h-32 text-gray-400 text-sm">Loading products...</div>
           ) : filtered.length === 0 ? (
             <div className="text-center py-14 text-gray-400">
@@ -909,9 +943,10 @@ export function POSPage() {
 
           <Button
             className="w-full h-11 text-base font-bold"
-            disabled={cart.length === 0 || createOrder.isPending}
+            disabled={cart.length === 0 || createOrder.isPending || (isAdmin && isMultiBranch && !adminBranchId)}
             onClick={() => setPayOpen(true)}
           >
+            {isTauri() && !isOnline && <WifiOff size={14} className="opacity-70" />}
             Charge {fmtKES(total)}
             <Kbd light>F2</Kbd>
           </Button>

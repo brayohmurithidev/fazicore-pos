@@ -143,7 +143,9 @@ export function AppShell() {
         )}>
           <span>
             {!isOnline
-              ? 'Offline — sales are queued and will sync when connected'
+              ? syncStatus?.products_last_sync
+                ? `Offline — last synced ${new Date(syncStatus.products_last_sync).toLocaleTimeString()}`
+                : 'Offline — no local data yet, connect to sync'
               : `${syncStatus!.pending_count} order${syncStatus!.pending_count === 1 ? '' : 's'} pending sync`}
           </span>
           {isOnline && (

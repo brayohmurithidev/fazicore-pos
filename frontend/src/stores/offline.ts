@@ -15,6 +15,7 @@ export interface LocalProduct {
   stock_quantity: number
   min_stock: number
   image_url: string | null
+  local_image_path: string | null
   vat_rate: number
   is_active: boolean
   track_inventory: boolean
@@ -48,8 +49,10 @@ interface OfflineState {
   isTauriApp: boolean
   syncStatus: SyncStatus | null
   isSyncing: boolean
+  posBranchOverride: number | null
 
   setOnline: (v: boolean) => void
+  setPosBranchOverride: (id: number | null) => void
   refreshSyncStatus: () => Promise<void>
   syncNow: () => Promise<SyncResult | null>
 
@@ -57,7 +60,7 @@ interface OfflineState {
   getCustomers: () => Promise<LocalCustomer[]>
   createOfflineOrder: (payload: string, branchId: number | null, items: [number, number][]) => Promise<string>
 
-  setSyncConfig: (baseUrl: string, token: string, orgSlug: string, branchId: number | null) => Promise<void>
+  setSyncConfig: (baseUrl: string, token: string, orgSlug: string, branchId: number | null, minioPublicUrl: string) => Promise<void>
   clearSyncConfig: () => Promise<void>
 
   // Call once on app mount to wire online/offline events + sync-complete listener
@@ -69,8 +72,10 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
   isTauriApp: isTauri(),
   syncStatus: null,
   isSyncing: false,
+  posBranchOverride: null,
 
   setOnline: (v) => set({ isOnline: v }),
+  setPosBranchOverride: (id) => set({ posBranchOverride: id }),
 
   refreshSyncStatus: async () => {
     if (!isTauri()) return
@@ -111,9 +116,9 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
     return invoke<string>('db_create_offline_order', { payload, branchId, items })
   },
 
-  setSyncConfig: async (baseUrl, token, orgSlug, branchId) => {
+  setSyncConfig: async (baseUrl, token, orgSlug, branchId, minioPublicUrl) => {
     if (!isTauri()) return
-    await invoke('set_sync_config', { baseUrl, token, orgSlug, branchId })
+    await invoke('set_sync_config', { baseUrl, token, orgSlug, branchId, minioPublicUrl })
     // Trigger an immediate sync now that we have credentials
     get().syncNow()
   },

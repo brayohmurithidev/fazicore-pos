@@ -1,15 +1,16 @@
-import { useState } from 'react'
-import { Plus, Building2, Receipt, CheckCircle2 } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { Plus, Building2, Receipt, CheckCircle2, Search, UserPlus, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { LimitReachedDialog, parseLimitError, type LimitError } from '@/components/shared/LimitReachedDialog'
-import { useBranches, useCreateBranch, useOrgInfo } from '@/lib/queries'
+import { useBranches, useCreateBranch, useCreateUser, useUpdateUserById, useUsers, useOrgInfo } from '@/lib/queries'
 import { toast } from '@/lib/toast'
-import type { ApiBranch } from '@/types/api'
+import type { ApiBranch, ApiUser } from '@/types/api'
 
 function StatCard({ label, value, icon: Icon, accent = '#111827' }: { label: string; value: string | number; icon: React.ElementType; accent?: string }) {
   return (
@@ -32,7 +33,6 @@ function StatCard({ label, value, icon: Icon, accent = '#111827' }: { label: str
 export function BranchesPage() {
   const { data: apiBranches } = useBranches()
   const { data: orgInfo } = useOrgInfo()
-  const createBranch = useCreateBranch()
   const [selected, setSelected] = useState<ApiBranch | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [limitError, setLimitError] = useState<LimitError | null>(null)
@@ -125,16 +125,7 @@ export function BranchesPage() {
           <DialogHeader><DialogTitle>Add New Branch</DialogTitle></DialogHeader>
           <AddBranchForm
             onClose={() => setAddOpen(false)}
-            onSave={(data) => {
-              createBranch.mutate(data, {
-                onSuccess: () => { setAddOpen(false); toast.success('Branch created') },
-                onError: (err) => {
-                  const limit = parseLimitError(err)
-                  if (limit) { setAddOpen(false); setLimitError(limit) }
-                  else toast.error('Failed to create branch')
-                },
-              })
-            }}
+            onDone={() => setAddOpen(false)}
           />
         </DialogContent>
       </Dialog>
@@ -144,27 +135,207 @@ export function BranchesPage() {
   )
 }
 
-function AddBranchForm({ onClose, onSave }: {
-  onClose: () => void
-  onSave: (data: Record<string, string>) => void
-}) {
-  const [form, setForm] = useState({ name: '', location: '', phone: '', manager_name: '' })
-  const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }))
+type ManagerMode = 'none' | 'existing' | 'new'
+
+function AddBranchForm({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [form, setForm] = useState({ name: '', location: '', phone: '' })
+  const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }))
+
+  // Manager picker state
+  const [managerMode, setManagerMode] = useState<ManagerMode>('none')
+  const [userSearch, setUserSearch] = useState('')
+  const [selectedUser, setSelectedUser] = useState<ApiUser | null>(null)
+  const [newUser, setNewUser] = useState({ name: '', pin: '', role: 'manager' as string })
+  const [pickerOpen, setPickerOpen] = useState(false)
+
+  const { data: allUsers = [] } = useUsers()
+  const createBranch = useCreateBranch()
+  const createUser = useCreateUser()
+  const updateUserById = useUpdateUserById()
+
+  const filteredUsers = useMemo(() => {
+    const q = userSearch.toLowerCase()
+    return allUsers.filter((u) => u.is_active && (!q || u.name.toLowerCase().includes(q) || u.role.includes(q)))
+  }, [allUsers, userSearch])
+
+  const managerName = managerMode === 'existing' ? (selectedUser?.name ?? '') : managerMode === 'new' ? newUser.name : ''
+  const canSubmit = !!form.name && (
+    managerMode === 'none' ||
+    (managerMode === 'existing' && !!selectedUser) ||
+    (managerMode === 'new' && !!newUser.name && newUser.pin.length >= 4)
+  )
+
+  const handleSubmit = async () => {
+    try {
+      const branch: ApiBranch = await createBranch.mutateAsync({
+        name: form.name,
+        location: form.location || undefined,
+        phone: form.phone || undefined,
+        manager_name: managerName || undefined,
+      })
+
+      if (managerMode === 'existing' && selectedUser) {
+        await updateUserById.mutateAsync({ id: selectedUser.id, data: { branch_id: branch.id } })
+      } else if (managerMode === 'new' && newUser.name) {
+        await createUser.mutateAsync({
+          name: newUser.name,
+          pin: newUser.pin,
+          role: newUser.role,
+          branch_id: branch.id,
+        })
+      }
+
+      toast.success('Branch created')
+      onDone()
+    } catch (err: unknown) {
+      const limit = parseLimitError(err as Error)
+      if (limit) { onClose(); throw err }
+      toast.error('Failed to create branch')
+    }
+  }
+
+  const busy = createBranch.isPending || createUser.isPending || updateUserById.isPending
 
   return (
-    <div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-        {([['Branch Name *', 'name', 'e.g. Ngong Road Branch', true], ['Location', 'location', 'e.g. Nairobi, Ngong Road', false], ['Phone', 'phone', '+254 7XX XXX XXX', false], ['Manager', 'manager_name', 'Full name', false]] as const).map(([label, key, ph, full]) => (
-          <div key={key} className={full ? 'col-span-2' : ''}>
-            <Label className="mb-1.5 block">{label}</Label>
-            <Input value={form[key as keyof typeof form]} onChange={(e) => set(key, e.target.value)} placeholder={ph} />
-          </div>
-        ))}
+    <div className="space-y-3.5">
+      {/* Branch details */}
+      <div className="col-span-2">
+        <Label className="mb-1.5 block text-xs text-gray-500">Branch Name *</Label>
+        <Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Ngong Road Branch" />
       </div>
-      <div className="flex gap-2">
-        <Button variant="outline" size="sm" className="flex-1" onClick={onClose}>Cancel</Button>
-        <Button size="sm" className="flex-1" disabled={!form.name} onClick={() => onSave(form)}>
-          Add Branch
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label className="mb-1.5 block text-xs text-gray-500">Location</Label>
+          <Input value={form.location} onChange={(e) => set('location', e.target.value)} placeholder="e.g. Nairobi, Ngong Road" />
+        </div>
+        <div>
+          <Label className="mb-1.5 block text-xs text-gray-500">Phone</Label>
+          <Input value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="+254 7XX XXX XXX" />
+        </div>
+      </div>
+
+      {/* Manager picker */}
+      <div>
+        <Label className="mb-1.5 block text-xs text-gray-500">Manager</Label>
+
+        {managerMode === 'none' && (
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => { setManagerMode('existing'); setPickerOpen(true) }}
+              className="flex-1 flex items-center gap-2 border border-dashed border-gray-300 rounded-md px-3 py-2 text-sm text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors"
+            >
+              <Search size={13} />
+              Select existing user
+            </button>
+            <button
+              type="button"
+              onClick={() => setManagerMode('new')}
+              className="flex-1 flex items-center gap-2 border border-dashed border-gray-300 rounded-md px-3 py-2 text-sm text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors"
+            >
+              <UserPlus size={13} />
+              Create new user
+            </button>
+          </div>
+        )}
+
+        {managerMode === 'existing' && (
+          <div className="space-y-2">
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setPickerOpen(!pickerOpen)}
+                className="w-full flex items-center justify-between border border-gray-200 rounded-md px-3 py-2 text-sm bg-white hover:border-gray-300 transition-colors"
+              >
+                <span className={selectedUser ? 'text-gray-900' : 'text-gray-400'}>
+                  {selectedUser ? `${selectedUser.name} (${selectedUser.role})` : 'Search users…'}
+                </span>
+                <ChevronDown size={14} className="text-gray-400" />
+              </button>
+
+              {pickerOpen && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+                  <div className="p-2 border-b border-gray-100">
+                    <div className="relative">
+                      <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        autoFocus
+                        className="w-full pl-7 pr-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-gray-400"
+                        placeholder="Search by name or role…"
+                        value={userSearch}
+                        onChange={(e) => setUserSearch(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="max-h-44 overflow-y-auto">
+                    {filteredUsers.length === 0 ? (
+                      <div className="px-3 py-4 text-xs text-gray-400 text-center">No users found</div>
+                    ) : filteredUsers.map((u) => (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => { setSelectedUser(u); setPickerOpen(false); setUserSearch('') }}
+                        className="w-full flex items-center justify-between px-3 py-2.5 text-sm hover:bg-gray-50 transition-colors"
+                      >
+                        <span className="font-medium text-gray-900">{u.name}</span>
+                        <span className="text-xs capitalize text-right">
+                          <span className="text-gray-400">{u.role}</span>
+                          {u.branch_name && (
+                            <span className="ml-1.5 text-amber-600 font-medium">· {u.branch_name}</span>
+                          )}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            {selectedUser?.branch_name && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1.5">
+                <strong>{selectedUser.name}</strong> is currently at <strong>{selectedUser.branch_name}</strong>. Saving will move them to this new branch.
+              </p>
+            )}
+            <button type="button" onClick={() => { setManagerMode('none'); setSelectedUser(null) }} className="text-xs text-gray-400 hover:text-gray-600">
+              ← Remove manager
+            </button>
+          </div>
+        )}
+
+        {managerMode === 'new' && (
+          <div className="border border-gray-200 rounded-lg p-3 space-y-2.5 bg-gray-50">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-medium text-gray-600">New user details</span>
+              <button type="button" onClick={() => { setManagerMode('none'); setNewUser({ name: '', pin: '', role: 'manager' }) }} className="text-xs text-gray-400 hover:text-gray-600">Remove</button>
+            </div>
+            <div>
+              <Label className="mb-1 block text-xs text-gray-500">Full Name *</Label>
+              <Input className="bg-white" value={newUser.name} onChange={(e) => setNewUser((u) => ({ ...u, name: e.target.value }))} placeholder="e.g. Jane Wanjiku" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="mb-1 block text-xs text-gray-500">PIN * (min 4 digits)</Label>
+                <Input className="bg-white" type="password" inputMode="numeric" value={newUser.pin} onChange={(e) => setNewUser((u) => ({ ...u, pin: e.target.value }))} placeholder="••••" maxLength={8} />
+              </div>
+              <div>
+                <Label className="mb-1 block text-xs text-gray-500">Role</Label>
+                <Select value={newUser.role} onValueChange={(v) => setNewUser((u) => ({ ...u, role: v }))}>
+                  <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="manager">Manager</SelectItem>
+                    <SelectItem value="cashier">Cashier</SelectItem>
+                    <SelectItem value="stock">Stock</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-2 pt-1">
+        <Button variant="outline" size="sm" className="flex-1" onClick={onClose} disabled={busy}>Cancel</Button>
+        <Button size="sm" className="flex-1" disabled={!canSubmit || busy} onClick={handleSubmit}>
+          {busy ? 'Creating…' : 'Add Branch'}
         </Button>
       </div>
     </div>
