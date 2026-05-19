@@ -39,8 +39,9 @@ type TabId = 'general' | 'payments' | 'users' | 'permissions' | 'audit' | 'plan'
 
 // ── Shared primitives ─────────────────────────────────────────────────────────
 
-function Toggle({ label, sub, value, onChange, locked }: {
-  label: string; sub?: string; value: boolean; onChange: (v: boolean) => void; locked?: boolean
+function Toggle({ label, sub, value, onChange, locked, lockedReason = 'Upgrade' }: {
+  label: string; sub?: string; value: boolean; onChange: (v: boolean) => void
+  locked?: boolean; lockedReason?: string
 }) {
   return (
     <div className={`flex justify-between items-center py-3.5 border-b border-gray-100 last:border-0 ${locked ? 'opacity-60' : ''}`}>
@@ -49,7 +50,7 @@ function Toggle({ label, sub, value, onChange, locked }: {
           <div className="text-sm font-medium text-gray-900">{label}</div>
           {locked && (
             <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full">
-              <Lock size={9} /> Upgrade
+              <Lock size={9} /> {lockedReason}
             </span>
           )}
         </div>
@@ -519,18 +520,20 @@ function PrinterSetupSection() {
 
 function GeneralTab() {
   const { settings, update } = useSettingsStore()
+  const { user } = useAuthStore()
   const flags = useFeatureFlags()
   const patch = <K extends keyof SettingsType>(k: K, v: SettingsType[K]) => update({ [k]: v })
+  const isAdmin = user?.role === 'admin'
 
   return (
     <div className="p-4 sm:p-6 max-w-2xl">
-      <BusinessInfoSection />
+      {isAdmin && <BusinessInfoSection />}
       <Section title="POS Behaviour">
-        <Toggle label="Require Cashier PIN" sub="Cashier must enter PIN to start a shift" value={settings.requirePin} onChange={(v) => patch('requirePin', v)} />
-        <Toggle label="Print Receipt by Default" sub="Auto-open receipt after every sale" value={settings.autoPrint} onChange={(v) => patch('autoPrint', v)} />
-        <Toggle label="Low Stock Alerts" sub="Show warnings when stock is below minimum" value={settings.lowStockAlerts} onChange={(v) => patch('lowStockAlerts', v)} />
-        <Toggle label="Expiry Date Tracking" sub="Alert when products near expiry" value={settings.expiryTracking} onChange={(v) => patch('expiryTracking', v)} />
-        <Toggle label="Barcode Scanner Mode" sub="Enable barcode input field on POS screen" value={settings.barcodeMode} onChange={(v) => patch('barcodeMode', v)} locked={flags.barcode_mode === false} />
+        <Toggle label="Require Cashier PIN" sub="Cashier must enter PIN to start a shift" value={settings.requirePin} onChange={(v) => patch('requirePin', v)} locked={!isAdmin} lockedReason="Admin only" />
+        <Toggle label="Print Receipt by Default" sub="Auto-open receipt after every sale" value={settings.autoPrint} onChange={(v) => patch('autoPrint', v)} locked={!isAdmin} lockedReason="Admin only" />
+        <Toggle label="Low Stock Alerts" sub="Show warnings when stock is below minimum" value={settings.lowStockAlerts} onChange={(v) => patch('lowStockAlerts', v)} locked={!isAdmin} lockedReason="Admin only" />
+        <Toggle label="Expiry Date Tracking" sub="Alert when products near expiry" value={settings.expiryTracking} onChange={(v) => patch('expiryTracking', v)} locked={!isAdmin} lockedReason="Admin only" />
+        <Toggle label="Barcode Scanner Mode" sub="Enable barcode input field on POS screen" value={settings.barcodeMode} onChange={(v) => patch('barcodeMode', v)} locked={!isAdmin || flags.barcode_mode === false} lockedReason={!isAdmin ? 'Admin only' : 'Upgrade'} />
       </Section>
       <Section title="Receipt Settings">
         <div className="flex items-center justify-between py-2">
@@ -548,16 +551,18 @@ function GeneralTab() {
             <option value="a4">A4 / Letter</option>
           </select>
         </div>
-        <Toggle label="Show VAT Breakdown" sub="Print VAT amounts on receipt" value={settings.showVat} onChange={(v) => patch('showVat', v)} />
-        <Toggle label="Show Business Logo" sub="Include logo on printed receipts" value={settings.showLogo} onChange={(v) => patch('showLogo', v)} />
-        <Toggle label="Digital Receipt (SMS)" sub="Send receipt via SMS to customer" value={settings.smsReceipt} onChange={(v) => patch('smsReceipt', v)} locked={flags.sms_receipts === false} />
+        <Toggle label="Show VAT Breakdown" sub="Print VAT amounts on receipt" value={settings.showVat} onChange={(v) => patch('showVat', v)} locked={!isAdmin} lockedReason="Admin only" />
+        <Toggle label="Show Business Logo" sub="Include logo on printed receipts" value={settings.showLogo} onChange={(v) => patch('showLogo', v)} locked={!isAdmin} lockedReason="Admin only" />
+        <Toggle label="Digital Receipt (SMS)" sub="Send receipt via SMS to customer" value={settings.smsReceipt} onChange={(v) => patch('smsReceipt', v)} locked={!isAdmin || flags.sms_receipts === false} lockedReason={!isAdmin ? 'Admin only' : 'Upgrade'} />
       </Section>
       {(isTauri || flags.thermal_printing !== false) && <PrinterSetupSection />}
-      <Section title="Branches">
-        <Toggle label="Branch-level Inventory" sub="Each branch tracks its own stock separately" value={settings.branchInventory} onChange={(v) => patch('branchInventory', v)} locked={flags.multi_branch === false} />
-        <Toggle label="Consolidated Reports" sub="Combined reports across all branches" value={settings.consolidatedReports} onChange={(v) => patch('consolidatedReports', v)} locked={flags.multi_branch === false} />
-        <Toggle label="Inter-branch Stock Transfer" sub="Allow moving stock between branches" value={settings.stockTransfer} onChange={(v) => patch('stockTransfer', v)} locked={flags.multi_branch === false} />
-      </Section>
+      {isAdmin && (
+        <Section title="Branches">
+          <Toggle label="Branch-level Inventory" sub="Each branch tracks its own stock separately" value={settings.branchInventory} onChange={(v) => patch('branchInventory', v)} locked={flags.multi_branch === false} />
+          <Toggle label="Consolidated Reports" sub="Combined reports across all branches" value={settings.consolidatedReports} onChange={(v) => patch('consolidatedReports', v)} locked={flags.multi_branch === false} />
+          <Toggle label="Inter-branch Stock Transfer" sub="Allow moving stock between branches" value={settings.stockTransfer} onChange={(v) => patch('stockTransfer', v)} locked={flags.multi_branch === false} />
+        </Section>
+      )}
     </div>
   )
 }
@@ -1154,14 +1159,17 @@ export function SettingsPage() {
 
   const isAdmin = user?.role === 'admin'
 
+  const isManagerOrAbove = isAdmin || user?.role === 'manager'
+
   const TABS = ([
-    { id: 'general',     label: 'General',      icon: Settings },
-    { id: 'payments',    label: 'Payments',     icon: CreditCard },
-    { id: 'users',       label: 'Users',        icon: Users,        adminOnly: true },
-    { id: 'permissions', label: 'Permissions',  icon: Shield,       adminOnly: true, hidden: flags.permissions_mgmt === false },
-    { id: 'audit',       label: 'Audit Log',    icon: ClipboardList, adminOnly: true, hidden: flags.audit_logs === false },
-    { id: 'plan',        label: 'Plan & Billing', icon: Sparkles },
-  ] as { id: TabId; label: string; icon: React.ElementType; adminOnly?: boolean; hidden?: boolean }[]).filter((t) => !t.hidden && (!t.adminOnly || isAdmin))
+    { id: 'general',     label: 'General',        icon: Settings },
+    { id: 'payments',    label: 'Payments',        icon: CreditCard,    managerOnly: true },
+    { id: 'users',       label: 'Users',           icon: Users,          adminOnly: true },
+    { id: 'permissions', label: 'Permissions',     icon: Shield,         adminOnly: true, hidden: flags.permissions_mgmt === false },
+    { id: 'audit',       label: 'Audit Log',       icon: ClipboardList,  adminOnly: true, hidden: flags.audit_logs === false },
+    { id: 'plan',        label: 'Plan & Billing',  icon: Sparkles,       adminOnly: true },
+  ] as { id: TabId; label: string; icon: React.ElementType; adminOnly?: boolean; managerOnly?: boolean; hidden?: boolean }[])
+    .filter((t) => !t.hidden && (!t.adminOnly || isAdmin) && (!t.managerOnly || isManagerOrAbove))
 
   return (
     <div className="h-full flex flex-col overflow-hidden">

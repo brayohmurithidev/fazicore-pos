@@ -37,7 +37,7 @@ const NAV: NavItem[] = [
   { id: 'reports',       label: 'Reports',       icon: BarChart3,    path: '/reports',       roles: ['admin', 'manager', 'stock'] },
   { id: 'expenditures', label: 'Expenditures', icon: TrendingDown, path: '/expenditures', roles: ['admin', 'manager'] },
   { id: 'branches',     label: 'Branches',     icon: Building2,    path: '/branches',     roles: ['admin'] },
-  { id: 'settings',   label: 'Settings',   icon: Settings,        path: '/settings',   roles: ['admin'] },
+  { id: 'settings',   label: 'Settings',   icon: Settings,        path: '/settings',   roles: ['admin', 'manager', 'cashier', 'stock'] },
 ]
 
 function fmtTime(iso: string | null): string | null {
