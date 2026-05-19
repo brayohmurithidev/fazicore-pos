@@ -24,7 +24,7 @@ export function TitleBar() {
   return (
     <div
       data-tauri-drag-region
-      className="h-9 flex items-center flex-shrink-0 bg-white border-b border-gray-200 select-none z-50"
+      className="h-9 flex items-center flex-shrink-0 bg-gradient-to-r from-amber-50 to-white border-b border-amber-100 select-none z-50"
     >
       {/* Brand */}
       <div

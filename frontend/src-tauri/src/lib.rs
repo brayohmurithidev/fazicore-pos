@@ -36,6 +36,35 @@ fn print_raw_cups(printer: String, data: Vec<u8>) -> Result<(), String> {
     if status.success() { Ok(()) } else { Err(format!("lp failed: {status}")) }
 }
 
+#[tauri::command]
+fn save_text_file(path: String, content: String) -> Result<(), String> {
+    std::fs::write(&path, content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn save_binary_file(path: String, data: Vec<u8>) -> Result<(), String> {
+    std::fs::write(&path, data).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn open_html_preview(html: String) -> Result<(), String> {
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let path = std::env::temp_dir().join(format!("fazi_print_{millis}.html"));
+    std::fs::write(&path, html.as_bytes()).map_err(|e| e.to_string())?;
+
+    #[cfg(target_os = "macos")]
+    std::process::Command::new("open").arg(&path).spawn().map_err(|e| e.to_string())?;
+    #[cfg(target_os = "windows")]
+    std::process::Command::new("cmd").args(["/c", "start", "", &path.to_string_lossy().to_string()]).spawn().map_err(|e| e.to_string())?;
+    #[cfg(target_os = "linux")]
+    std::process::Command::new("xdg-open").arg(&path).spawn().map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_serialplugin::init())
@@ -63,6 +92,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_system_printers,
             print_raw_cups,
+            save_text_file,
+            save_binary_file,
+            open_html_preview,
         ])
         .setup(|app| {
             let quit = MenuItem::with_id(app, "quit", "Quit Fazi POS", true, None::<&str>)?;

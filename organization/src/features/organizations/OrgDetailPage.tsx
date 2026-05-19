@@ -355,8 +355,11 @@ function ChangePlanModal({
   async function onSubmit(data: ChangePlanForm) {
     try {
       await api.post(`/admin/organizations/${orgId}/subscription`, data);
-      qc.invalidateQueries({ queryKey: ["admin", "org-subscription", orgId] });
-      qc.invalidateQueries({ queryKey: ["admin", "org", orgId] });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["admin", "org-subscription", orgId] }),
+        qc.invalidateQueries({ queryKey: ["admin", "org", orgId] }),
+        qc.invalidateQueries({ queryKey: ["admin", "orgs"] }),
+      ]);
       onClose();
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
@@ -769,8 +772,18 @@ function Stat({ label, value }: { label: string; value: string | number }) {
 }
 
 function UsageBar({ label, used, max, icon: Icon }: {
-  label: string; used: number; max: number; icon: React.ElementType;
+  label: string; used: number; max: number | null; icon: React.ElementType;
 }) {
+  if (max === null) {
+    return (
+      <div className="flex items-center justify-between text-xs">
+        <span className="flex items-center gap-1.5 text-slate-500">
+          <Icon className="h-3 w-3" />{label}
+        </span>
+        <span className="font-medium text-indigo-600">Unlimited</span>
+      </div>
+    );
+  }
   const pct = max > 0 ? Math.min(Math.round((used / max) * 100), 100) : 0;
   const isHigh = pct >= 80;
   return (

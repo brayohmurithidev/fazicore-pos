@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -169,3 +170,85 @@ async def delete_product(
     if not product or product.org_id != current_user.org_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
     await repo.delete(product)
+
+
+# ── Price adjustment ──────────────────────────────────────────────────────────
+
+class PriceAdjustIn(BaseModel):
+    new_price: float
+    reason: str | None = None
+
+
+class PriceHistoryOut(BaseModel):
+    id: int
+    old_price: float
+    new_price: float
+    reason: str | None
+    changed_by_name: str | None
+    created_at: str
+
+    model_config = {"from_attributes": True}
+
+
+@router.post("/{product_id}/price", response_model=ProductOut)
+async def adjust_price(
+    product_id: int,
+    data: PriceAdjustIn,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_active_user),
+) -> ProductOut:
+    from app.models.price_history import PriceHistory
+    repo = ProductRepository(session)
+    product = await repo.get(product_id)
+    if not product or product.org_id != current_user.org_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    if data.new_price <= 0:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Price must be greater than zero")
+
+    history = PriceHistory(
+        product_id=product_id,
+        old_price=float(product.price),
+        new_price=data.new_price,
+        changed_by=current_user.id,
+        reason=data.reason or None,
+    )
+    session.add(history)
+    product.price = data.new_price
+    session.add(product)
+    await session.flush()
+    await session.refresh(product)
+    return ProductOut.model_validate(product)
+
+
+@router.get("/{product_id}/price-history", response_model=list[PriceHistoryOut])
+async def get_price_history(
+    product_id: int,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_active_user),
+) -> list[PriceHistoryOut]:
+    from app.models.price_history import PriceHistory
+    from app.models.user import User as UserModel
+    repo = ProductRepository(session)
+    product = await repo.get(product_id)
+    if not product or product.org_id != current_user.org_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+
+    result = await session.execute(
+        select(PriceHistory, UserModel)
+        .outerjoin(UserModel, UserModel.id == PriceHistory.changed_by)
+        .where(PriceHistory.product_id == product_id)
+        .order_by(PriceHistory.created_at.desc())
+        .limit(50)
+    )
+    rows = result.all()
+    return [
+        PriceHistoryOut(
+            id=h.id,
+            old_price=float(h.old_price),
+            new_price=float(h.new_price),
+            reason=h.reason,
+            changed_by_name=u.full_name if u else None,
+            created_at=h.created_at.isoformat(),
+        )
+        for h, u in rows
+    ]

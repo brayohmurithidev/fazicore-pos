@@ -48,6 +48,14 @@
   * {
     @apply border-border outline-ring/50;
   }
+
+  button:not(:disabled),
+  a[href],
+  [role="button"]:not([aria-disabled="true"]),
+  label[for],
+  select:not(:disabled) {
+    cursor: pointer;
+  }
   html {
     @apply font-sans;
   }

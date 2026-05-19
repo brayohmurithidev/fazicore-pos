@@ -16,6 +16,7 @@ from app.models.attendance import Attendance
 from app.models.audit_log import AuditLog
 from app.models.mpesa import MpesaCredentials, MpesaTransaction
 from app.models.expenditure import Expenditure
+from app.models.price_history import PriceHistory
 
 __all__ = [
     "Organization",
@@ -41,4 +42,5 @@ __all__ = [
     "MpesaCredentials",
     "MpesaTransaction",
     "Expenditure",
+    "PriceHistory",
 ]

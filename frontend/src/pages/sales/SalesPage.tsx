@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { downloadTextFile } from '@/lib/download'
 import { Receipt, Download, Search, X, TrendingUp, ShoppingCart, CreditCard, Printer, Pencil, Ban, Loader2, Trash2, Plus } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -484,11 +485,9 @@ function downloadCSV(orders: ApiOrder[]) {
       (o.notes ?? '').replace(/,/g, ' '),
     ]
   })
-  const csv = [headers, ...rows].map((r) => r.join(',')).join('\n')
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
-  a.download = `sales-${new Date().toISOString().slice(0, 10)}.csv`
-  a.click()
+  const escape = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`
+  const csv = [headers.map(escape).join(','), ...rows.map((r) => r.map(escape).join(','))].join('\n')
+  void downloadTextFile(`sales-${new Date().toISOString().slice(0, 10)}.csv`, csv)
 }
 
 export function SalesPage() {

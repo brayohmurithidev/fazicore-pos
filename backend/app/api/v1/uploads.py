@@ -12,7 +12,7 @@ from app.models.user import User
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"}
-MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB
+MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10 MB
 
 
 class UploadResult(BaseModel):
@@ -32,10 +32,10 @@ async def upload_product_image(
         raise HTTPException(status_code=404, detail="Product not found")
 
     content_type = file.content_type or ""
-    if not content_type and file.filename:
+    if content_type not in ALLOWED_IMAGE_TYPES and file.filename:
         ext = file.filename.rsplit(".", 1)[-1].lower()
         content_type = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
-                        "webp": "image/webp", "gif": "image/gif", "avif": "image/avif"}.get(ext, "")
+                        "webp": "image/webp", "gif": "image/gif", "avif": "image/avif"}.get(ext, content_type)
     if content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(status_code=400, detail="Only JPEG, PNG, WebP, GIF, or AVIF images allowed")
 
@@ -64,10 +64,10 @@ async def upload_avatar(
     current_user: User = Depends(get_current_active_user),
 ) -> UploadResult:
     content_type = file.content_type or ""
-    if not content_type and file.filename:
+    if content_type not in ALLOWED_IMAGE_TYPES and file.filename:
         ext = file.filename.rsplit(".", 1)[-1].lower()
         content_type = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
-                        "webp": "image/webp", "avif": "image/avif"}.get(ext, "")
+                        "webp": "image/webp", "avif": "image/avif"}.get(ext, content_type)
     if content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(status_code=400, detail="Only JPEG, PNG, WebP, or AVIF images allowed")
 

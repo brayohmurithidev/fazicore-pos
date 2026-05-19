@@ -8,6 +8,7 @@ import { useSettingsStore } from '@/stores/settings'
 export function NotificationBell() {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState({ top: 0, right: 0 })
+  const [seenTotal, setSeenTotal] = useState<number | null>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const panelRef   = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
@@ -17,11 +18,17 @@ export function NotificationBell() {
   const lowCount = data?.low_stock_count ?? 0
   const outCount = data?.out_of_stock_count ?? 0
   const total = lowCount + outCount
+  const hasUnread = total > 0 && (seenTotal === null || total > seenTotal)
+
+  // Re-surface badge when new alerts arrive after the panel was already read
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (seenTotal !== null && total > seenTotal) setSeenTotal(null) }, [total])
 
   const handleOpen = () => {
     if (!open && triggerRef.current) {
       const r = triggerRef.current.getBoundingClientRect()
       setPos({ top: r.bottom + 8, right: window.innerWidth - r.right })
+      setSeenTotal(total)
     }
     setOpen(o => !o)
   }
@@ -46,7 +53,7 @@ export function NotificationBell() {
         className="relative flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-100 transition-colors"
       >
         <Bell size={16} className="text-gray-600" />
-        {total > 0 && (
+        {hasUnread && (
           <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
             {total > 9 ? '9+' : total}
           </span>

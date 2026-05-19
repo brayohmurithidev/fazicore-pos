@@ -1,8 +1,14 @@
 import type { SaleInfo, Settings } from '@/types'
+import { isTauri } from '@/hooks/useTauri'
+import { openPrintHtml } from '@/lib/download'
 
 export function printReceipt(sale: SaleInfo, settings: Settings) {
-  const win = window.open('', '_blank', 'width=420,height=700,toolbar=0,menubar=0,scrollbars=1')
-  if (!win) { window.print(); return }
+  void _printReceipt(sale, settings)
+}
+
+async function _printReceipt(sale: SaleInfo, settings: Settings) {
+  const win = isTauri ? null : window.open('', '_blank', 'width=420,height=700,toolbar=0,menubar=0,scrollbars=1')
+  if (!isTauri && !win) { window.print(); return }
 
   const paper = settings.receiptPaper ?? '80mm'
   const isA4 = paper === 'a4'
@@ -190,13 +196,17 @@ export function printReceipt(sale: SaleInfo, settings: Settings) {
 </body>
 </html>`
 
-  win.document.write(html)
-  win.document.close()
-  setTimeout(() => {
-    win.focus()
-    win.print()
-    win.onafterprint = () => win.close()
-  }, 250)
+  if (isTauri) {
+    await openPrintHtml(html)
+  } else {
+    win!.document.write(html)
+    win!.document.close()
+    setTimeout(() => {
+      win!.focus()
+      win!.print()
+      win!.onafterprint = () => win!.close()
+    }, 250)
+  }
 }
 
 function esc(s: string): string {

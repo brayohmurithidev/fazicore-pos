@@ -473,13 +473,10 @@ async def set_org_subscription(
         period_end = now + timedelta(days=365 if data.billing_interval == "annual" else 30)
         org.trial_ends_at = None
 
-    # Apply plan resource limits to org
-    if plan.max_users is not None:
-        org.max_users = plan.max_users
-    if plan.max_products is not None:
-        org.max_products = plan.max_products
-    if plan.max_branches is not None:
-        org.max_branches = plan.max_branches
+    # Always sync org resource limits from the plan (null = unlimited)
+    org.max_users = plan.max_users
+    org.max_products = plan.max_products
+    org.max_branches = plan.max_branches
 
     # Keep org.plan enum in sync when the slug matches an enum value
     try:

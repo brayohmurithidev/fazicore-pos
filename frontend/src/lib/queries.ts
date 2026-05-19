@@ -1,5 +1,27 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
+
+function compressImage(file: File, maxPx = 1200, quality = 0.82): Promise<File> {
+  return new Promise((resolve) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const scale = Math.min(1, maxPx / Math.max(img.naturalWidth, img.naturalHeight))
+      const w = Math.round(img.naturalWidth * scale)
+      const h = Math.round(img.naturalHeight * scale)
+      const canvas = document.createElement('canvas')
+      canvas.width = w; canvas.height = h
+      canvas.getContext('2d')!.drawImage(img, 0, 0, w, h)
+      canvas.toBlob(
+        (blob) => resolve(new File([blob!], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' })),
+        'image/jpeg', quality,
+      )
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file) }
+    img.src = url
+  })
+}
 import type {
   ApiBranch, ApiAttendance, ApiCategory, ApiCustomer, ApiCreditInvoice, ApiCreditPayment, ApiAuditLog,
   ApiInventoryItem, ApiInventoryTransaction, ApiOrder, ApiProduct,
@@ -264,11 +286,12 @@ export function useUpdateMe() {
 
 export function useUploadAvatar() {
   return useMutation({
-    mutationFn: (file: File) => {
+    mutationFn: async (file: File) => {
+      const compressed = await compressImage(file)
       const form = new FormData()
-      form.append('file', file)
+      form.append('file', compressed)
       return api.post('/uploads/avatar', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+        headers: { 'Content-Type': undefined },
       }).then((r) => r.data as { url: string; object_name: string })
     },
   })
@@ -530,12 +553,42 @@ export function useUploadProductImage() {
   const qc = useQueryClient()
   return useMutation<{ url: string; object_name: string }, Error, { productId: number; file: File }>({
     mutationFn: async ({ productId, file }) => {
+      const compressed = await compressImage(file)
       const form = new FormData()
-      form.append('file', file)
+      form.append('file', compressed)
       return api.post(`/uploads/product-image/${productId}`, form, {
         headers: { 'Content-Type': undefined },
       }).then((r) => r.data)
     },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['products'] }),
+  })
+}
+
+// ── Price history ─────────────────────────────────────────────────────────
+
+export interface ApiPriceHistory {
+  id: number
+  old_price: number
+  new_price: number
+  reason: string | null
+  changed_by_name: string | null
+  created_at: string
+}
+
+export function usePriceHistory(productId: number | null) {
+  return useQuery<ApiPriceHistory[]>({
+    queryKey: ['price-history', productId],
+    queryFn: () => api.get(`/products/${productId}/price-history`).then((r) => r.data),
+    enabled: productId !== null,
+    staleTime: 30_000,
+  })
+}
+
+export function useAdjustPrice() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ productId, newPrice, reason }: { productId: number; newPrice: number; reason?: string }) =>
+      api.post(`/products/${productId}/price`, { new_price: newPrice, reason: reason || null }).then((r) => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['products'] }),
   })
 }

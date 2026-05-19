@@ -128,11 +128,21 @@ async def update_po_status(
     await session.flush()
 
     if new_status == POStatus.RECEIVED:
+        from sqlalchemy import func
         from app.repositories.inventory import InventoryRepository
         from app.models.inventory import TransactionType, Inventory
+        from app.models.product import Product
         inv_repo = InventoryRepository(session)
         for item in po.items:
             if item.product_id:
+                # Snapshot total stock across all branches BEFORE this receipt
+                total_qty_result = await session.execute(
+                    select(func.sum(Inventory.quantity)).where(
+                        Inventory.product_id == item.product_id
+                    )
+                )
+                total_qty_before = total_qty_result.scalar_one() or 0
+
                 inv = await inv_repo.get_by_product_branch(item.product_id, po.branch_id)
                 if inv is None:
                     inv = Inventory(
@@ -149,6 +159,17 @@ async def update_po_status(
                     inv, item.quantity, TransactionType.PURCHASE, current_user.id,
                     f"PO {po.po_number} received"
                 )
+
+                # Update product cost using Weighted Average Cost
+                product = await session.get(Product, item.product_id)
+                if product is not None:
+                    old_cost = float(product.cost) if product.cost is not None else float(item.unit_cost)
+                    if total_qty_before > 0:
+                        wac = (total_qty_before * old_cost + item.quantity * float(item.unit_cost)) / (total_qty_before + item.quantity)
+                    else:
+                        wac = float(item.unit_cost)
+                    product.cost = round(wac, 2)
+                    session.add(product)
 
     await session.refresh(po)
     return PurchaseOrderOut.model_validate(po)

@@ -196,7 +196,7 @@ export function AppShell() {
                       'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors',
                       isActive ? 'bg-amber-100' : 'bg-gray-100'
                     )}>
-                      <Icon size={20} className="text-amber-500" />
+                      <Icon size={20} className="text-gray-900" />
                     </div>
                     {!collapsed && <span className="flex-1 whitespace-nowrap">{item.label}</span>}
                     {showBadge && !collapsed && (
