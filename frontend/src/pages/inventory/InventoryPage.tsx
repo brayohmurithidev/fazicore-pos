@@ -640,21 +640,31 @@ function ProductFormModal({ open, onClose, initial, categories, allProducts, isP
 
 // ── Stock Adjust Modal ─────────────────────────────────────────────────────
 
-function StockAdjustModal({ product, onClose, onSave, isPending }: {
+function StockAdjustModal({ product, onClose, onSave, isPending, branches, defaultBranchId }: {
   product: ApiProduct | null; onClose: () => void
   onSave: (data: Record<string, unknown>) => void; isPending: boolean
+  branches?: { id: number; name: string }[]; defaultBranchId?: number
 }) {
   const [type, setType] = useState<'adjustment' | 'return' | 'purchase'>('adjustment')
   const [dir, setDir] = useState<'add' | 'remove'>('add')
   const [qty, setQty] = useState('')
   const [notes, setNotes] = useState('')
+  const [pickedBranch, setPickedBranch] = useState<number | undefined>(defaultBranchId)
+
+  useEffect(() => {
+    setPickedBranch(defaultBranchId)
+    setQty(''); setDir('add'); setType('adjustment'); setNotes('')
+  }, [product?.id, defaultBranchId])
+
+  const needsBranchPicker = !!branches && branches.length > 1 && !defaultBranchId
+  const effectiveBranchId = defaultBranchId ?? pickedBranch
 
   if (!product) return null
   const parsed = parseInt(qty) || 0
   const change = parsed * (dir === 'remove' ? -1 : 1)
   const newQty = product.stock_quantity + change
   const overRemove = dir === 'remove' && parsed > product.stock_quantity
-  const canSave = parsed > 0 && !overRemove && !isPending
+  const canSave = parsed > 0 && !overRemove && !isPending && (!needsBranchPicker || !!pickedBranch)
 
   return (
     <Dialog open={!!product} onOpenChange={(v) => !v && onClose()}>
@@ -671,6 +681,20 @@ function StockAdjustModal({ product, onClose, onSave, isPending }: {
 
         <div className="space-y-4">
           {/* Direction first so the dropdown never overlaps it */}
+          {needsBranchPicker && (
+            <div>
+              <Label className="mb-1.5 block text-xs text-gray-500">Branch *</Label>
+              <Select value={pickedBranch ? String(pickedBranch) : ''} onValueChange={(v) => setPickedBranch(Number(v))}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select branch…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {branches!.map((b) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div>
             <Label className="mb-1.5 block text-xs text-gray-500">Action</Label>
             <div className="grid grid-cols-2 gap-2">
@@ -740,7 +764,7 @@ function StockAdjustModal({ product, onClose, onSave, isPending }: {
         <div className="flex gap-2 mt-1">
           <Button variant="outline" className="flex-1" onClick={onClose}>Cancel</Button>
           <Button className="flex-1" disabled={!canSave}
-            onClick={() => onSave({ product_id: product.id, qty_change: change, type, notes: notes || undefined })}>
+            onClick={() => onSave({ product_id: product.id, qty_change: change, type, notes: notes || undefined, branch_id: effectiveBranchId ?? null })}>
             {isPending && <Loader2 size={13} className="animate-spin mr-1.5" />}Save Adjustment
           </Button>
         </div>
@@ -1068,6 +1092,7 @@ type StockFilter = 'all' | 'in-stock' | 'low' | 'out'
 function ProductsTab({ branchId }: { branchId?: number }) {
   const { user } = useAuthStore()
   const { data: permsData } = usePermissions()
+  const { data: rawBranches = [] } = useBranches()
   const role = user?.role
   const canManage = role === 'admin' || role === 'manager'
     || (role === 'cashier' && permsData?.permissions?.cashier?.manage_inventory === true)
@@ -1256,6 +1281,8 @@ function ProductsTab({ branchId }: { branchId?: number }) {
   }
 
   const handleAdjust = async (data: Record<string, unknown>) => {
+    // branch_id comes from the modal (admin branch picker or defaultBranchId);
+    // backend also enforces current_user.branch_id for non-admins as a safety net
     await adjustInventory.mutateAsync(data)
     toast.success('Stock adjusted')
     setAdjustProduct(null)
@@ -1561,7 +1588,14 @@ function ProductsTab({ branchId }: { branchId?: number }) {
         initial={editProduct} categories={categories} allProducts={products}
         isPending={createProduct.isPending || updateProduct.isPending} onSave={handleSave}
         onSelectExisting={(p) => { setEditProduct(p); }} />
-      <StockAdjustModal product={adjustProduct} onClose={() => setAdjustProduct(null)} onSave={handleAdjust} isPending={adjustInventory.isPending} />
+      <StockAdjustModal
+        product={adjustProduct}
+        onClose={() => setAdjustProduct(null)}
+        onSave={handleAdjust}
+        isPending={adjustInventory.isPending}
+        branches={role === 'admin' ? rawBranches.map((b) => ({ id: b.id, name: b.name })) : undefined}
+        defaultBranchId={branchId}
+      />
       <LimitReachedDialog limit={limitError} onClose={() => setLimitError(null)} />
       <BarcodePrintModal products={products} open={barcodeModalOpen} onClose={() => setBarcodeModalOpen(false)} />
 

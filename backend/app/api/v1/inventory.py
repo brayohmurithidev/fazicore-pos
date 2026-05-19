@@ -82,10 +82,12 @@ async def adjust_inventory(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_active_user),
 ) -> InventoryOut:
+    # Non-admins are always scoped to their own branch, regardless of what the client sends
+    effective_branch = data.branch_id if current_user.role == UserRole.ADMIN else current_user.branch_id
     service = InventoryService(session)
     inv = await service.adjust(
         product_id=data.product_id,
-        branch_id=data.branch_id,
+        branch_id=effective_branch,
         qty_change=data.qty_change,
         type=data.type,
         performed_by=current_user.id,
