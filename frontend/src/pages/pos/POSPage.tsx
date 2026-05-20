@@ -14,6 +14,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import { isTauri } from '@tauri-apps/api/core'
 import { useCategories, useCreateOrder, useBranches, usePermissions } from '@/lib/queries'
+import { isLocalMode } from '@/lib/local-mode'
 import { useBarcodeScanner } from '@/hooks/useBarcodeScanner'
 import { usePOSProducts } from '@/hooks/usePOSProducts'
 import { useOfflineStore } from '@/stores/offline'
@@ -607,8 +608,8 @@ export function POSPage() {
       credit_customer_phone: (payInfo.creditPhone as string) ?? undefined,
     }
 
-    if (isTauri() && !isOnline) {
-      // Queue the sale locally; stock is decremented in SQLite immediately
+    if (!isLocalMode && isTauri() && !isOnline) {
+      // Queue the sale locally for later sync; stock is decremented in SQLite immediately
       const stockItems: [number, number][] = cart
         .filter((item) => Number(item.id) > 0)
         .map((item) => [Number(item.id), item.qty])

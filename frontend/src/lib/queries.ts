@@ -1,5 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
+import { isLocalMode } from '@/lib/local-mode'
+import {
+  localGetProducts, localCreateProduct, localUpdateProduct, localDeleteProduct,
+  localGetCategories, localCreateCategory,
+  localGetCustomers, localCreateCustomer, localUpdateCustomer,
+  localGetOrders, localCommitOrder, localAdjustInventory,
+  localGetUsers, localCreateUser, localGetSalesReport,
+  type LocalProduct, type LocalOrder, type LocalCategory, type LocalCustomer, type LocalUser,
+} from '@/lib/local-commands'
 
 function compressImage(file: File, maxPx = 1200, quality = 0.82): Promise<File> {
   return new Promise((resolve) => {
@@ -29,6 +38,69 @@ import type {
   ApiPermissions, ApiNotifications, ApiAnalyticsDailyItem, ReorderSuggestion, AgingItem, DashboardData, TokenResponse,
   ApiExpenditure, ApiExpenditureSummary,
 } from '@/types/api'
+
+// ── Local-mode adapters ───────────────────────────────────────────────────────
+
+function hashUUID(uuid: string): number {
+  let h = 5381
+  for (let i = 0; i < uuid.length; i++) {
+    h = ((h << 5) + h) ^ uuid.charCodeAt(i)
+  }
+  return Math.abs(h)
+}
+
+function localProductToApi(p: LocalProduct): ApiProduct {
+  return {
+    id: p.id, name: p.name, description: null, sku: p.sku, barcode: p.barcode,
+    price: p.price, cost: p.cost, category_id: p.category_id, category_name: p.category_name,
+    image_url: p.local_image_path ?? p.image_url, unit: p.unit, vat_rate: p.vat_rate,
+    expiry_date: null, min_stock: p.min_stock, is_active: p.is_active,
+    track_inventory: p.track_inventory, stock_quantity: p.stock_quantity,
+    parent_product_id: null, attributes: null, created_at: '',
+  }
+}
+
+function localCategoryToApi(c: LocalCategory): ApiCategory {
+  return { id: c.id, org_id: 0, name: c.name, color: null, is_active: true, created_at: '' }
+}
+
+function localCustomerToApi(c: LocalCustomer): ApiCustomer {
+  return {
+    id: c.id, name: c.name, email: c.email, phone: c.phone,
+    address: null, notes: null, loyalty_points: 0, total_spent: 0, total_orders: 0,
+    credit_balance: c.credit_balance, is_active: true, created_at: '',
+  }
+}
+
+function localOrderToApi(o: LocalOrder): ApiOrder {
+  return {
+    id: hashUUID(o.id), org_id: 0, branch_id: o.branch_id,
+    order_number: o.id.slice(0, 8).toUpperCase(),
+    customer_id: o.customer_id, cashier_id: o.cashier_id ?? 0, cashier_name: o.cashier_name,
+    status: 'completed', payment_method: o.payment_method as ApiOrder['payment_method'],
+    payment_status: 'paid', subtotal: o.subtotal, tax_amount: o.tax,
+    discount_amount: o.discount, total: o.total,
+    amount_paid: o.amount_tendered ?? o.total, change_given: o.change_due ?? 0,
+    mpesa_ref: null, mpesa_amount: 0,
+    cash_amount: o.payment_method === 'cash' ? (o.amount_tendered ?? o.total) : 0,
+    credit_customer_name: null, credit_customer_phone: null,
+    notes: o.notes, voided_by: null, voided_at: null, void_reason: null,
+    edited_by: null, edited_at: null,
+    items: o.items.map((it, idx) => ({
+      id: idx + 1, product_id: it.product_id, product_name: it.name, product_sku: it.sku,
+      quantity: it.qty, unit_price: it.price, discount_amount: 0, total: it.subtotal,
+    })),
+    created_at: o.created_at,
+  }
+}
+
+function localUserToApi(u: LocalUser): ApiUser {
+  return {
+    id: u.id, org_id: 0, name: u.name, email: null,
+    role: u.role as ApiUser['role'], branch_id: null, branch_name: null,
+    avatar: null, photo_url: null, is_active: u.is_active, created_at: '',
+  }
+}
 
 export const FEATURE_CATALOG = [
   { key: 'mpesa_manual',        label: 'M-Pesa Manual Entry',     group: 'Payments',   description: 'Accept M-Pesa with manual reference entry' },
@@ -137,10 +209,15 @@ export function useDashboard(branchId?: number) {
 export function useProducts(q?: string, categoryId?: number, branchId?: number) {
   return useQuery<ApiProduct[]>({
     queryKey: ['products', q, categoryId, branchId],
-    queryFn: () =>
-      api
+    queryFn: async () => {
+      if (isLocalMode) {
+        const products = await localGetProducts()
+        return products.map(localProductToApi)
+      }
+      return api
         .get('/products/', { params: { q: q || undefined, category_id: categoryId || undefined, branch_id: branchId || undefined, limit: 200 } })
-        .then((r) => r.data),
+        .then((r) => r.data)
+    },
     staleTime: 30_000,
   })
 }
@@ -148,7 +225,26 @@ export function useProducts(q?: string, categoryId?: number, branchId?: number) 
 export function useCreateProduct() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: Record<string, unknown>) => api.post('/products/', data).then((r) => r.data),
+    mutationFn: async (data: Record<string, unknown>) => {
+      if (isLocalMode) {
+        const p = await localCreateProduct({
+          name: data.name as string,
+          price: data.price as number,
+          cost: (data.cost as number) ?? null,
+          sku: (data.sku as string) ?? null,
+          barcode: (data.barcode as string) ?? null,
+          unit: (data.unit as string) ?? 'pcs',
+          categoryId: (data.category_id as number) ?? null,
+          categoryName: (data.category_name as string) ?? null,
+          stockQuantity: (data.stock_quantity as number) ?? 0,
+          minStock: (data.min_stock as number) ?? 0,
+          vatRate: (data.vat_rate as number) ?? 0,
+          trackInventory: (data.track_inventory as boolean) ?? true,
+        })
+        return localProductToApi(p)
+      }
+      return api.post('/products/', data).then((r) => r.data)
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['products'] }),
   })
 }
@@ -165,8 +261,26 @@ export function useUpdateProduct(id: number) {
 export function useUpdateProductById() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Record<string, unknown> }) =>
-      api.patch(`/products/${id}`, data).then((r) => r.data),
+    mutationFn: async ({ id, data }: { id: number; data: Record<string, unknown> }) => {
+      if (isLocalMode) {
+        return localUpdateProduct({
+          id,
+          name: data.name as string,
+          price: data.price as number,
+          cost: (data.cost as number) ?? null,
+          sku: (data.sku as string) ?? null,
+          barcode: (data.barcode as string) ?? null,
+          unit: (data.unit as string) ?? 'pcs',
+          categoryId: (data.category_id as number) ?? null,
+          categoryName: (data.category_name as string) ?? null,
+          minStock: (data.min_stock as number) ?? 0,
+          vatRate: (data.vat_rate as number) ?? 0,
+          isActive: (data.is_active as boolean) ?? true,
+          trackInventory: (data.track_inventory as boolean) ?? true,
+        })
+      }
+      return api.patch(`/products/${id}`, data).then((r) => r.data)
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['products'] }),
   })
 }
@@ -174,7 +288,9 @@ export function useUpdateProductById() {
 export function useDeleteProduct() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (id: number) => api.delete(`/products/${id}`).then((r) => r.data),
+    mutationFn: (id: number) => isLocalMode
+      ? localDeleteProduct(id)
+      : api.delete(`/products/${id}`).then((r) => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['products'] }),
   })
 }
@@ -192,7 +308,13 @@ export function useBulkCreateProducts() {
 export function useCategories() {
   return useQuery<ApiCategory[]>({
     queryKey: ['categories'],
-    queryFn: () => api.get('/categories/').then((r) => r.data),
+    queryFn: async () => {
+      if (isLocalMode) {
+        const cats = await localGetCategories()
+        return cats.map(localCategoryToApi)
+      }
+      return api.get('/categories/').then((r) => r.data)
+    },
     staleTime: 60_000,
   })
 }
@@ -200,8 +322,13 @@ export function useCategories() {
 export function useCreateCategory() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: { name: string; color?: string }) =>
-      api.post('/categories/', data).then((r) => r.data),
+    mutationFn: async (data: { name: string; color?: string }) => {
+      if (isLocalMode) {
+        const cat = await localCreateCategory(data.name)
+        return localCategoryToApi(cat)
+      }
+      return api.post('/categories/', data).then((r) => r.data)
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['categories'] }),
   })
 }
@@ -246,7 +373,13 @@ export function useDeleteBranch() {
 export function useUsers() {
   return useQuery<ApiUser[]>({
     queryKey: ['users'],
-    queryFn: () => api.get('/users/').then((r) => r.data),
+    queryFn: async () => {
+      if (isLocalMode) {
+        const users = await localGetUsers()
+        return users.map(localUserToApi)
+      }
+      return api.get('/users/').then((r) => r.data)
+    },
     staleTime: 30_000,
   })
 }
@@ -254,7 +387,17 @@ export function useUsers() {
 export function useCreateUser() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: Record<string, unknown>) => api.post('/users/', data).then((r) => r.data),
+    mutationFn: async (data: Record<string, unknown>) => {
+      if (isLocalMode) {
+        const u = await localCreateUser(
+          data.name as string,
+          data.pin as string,
+          data.role as string,
+        )
+        return localUserToApi(u)
+      }
+      return api.post('/users/', data).then((r) => r.data)
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
   })
 }
@@ -322,15 +465,58 @@ export function useOrders(filters: OrderFilters | number = {}) {
   if (!params.limit) params.limit = 50
   return useQuery<ApiOrder[]>({
     queryKey: ['orders', params],
-    queryFn: () => api.get('/orders/', { params }).then((r) => r.data),
-    refetchInterval: 30_000,
+    queryFn: async () => {
+      if (isLocalMode) {
+        const orders = await localGetOrders(params.limit, 0, params.date_from, params.date_to)
+        return orders.map(localOrderToApi)
+      }
+      return api.get('/orders/', { params }).then((r) => r.data)
+    },
+    refetchInterval: isLocalMode ? false : 30_000,
   })
 }
 
 export function useCreateOrder() {
   const qc = useQueryClient()
   return useMutation<ApiOrder, Error, Record<string, unknown>>({
-    mutationFn: (data) => api.post('/orders/', data).then((r) => r.data),
+    mutationFn: async (data) => {
+      if (isLocalMode) {
+        const apiItems = (data.items as Array<Record<string, unknown>>) ?? []
+        const subtotal = apiItems.reduce(
+          (s, it) => s + (it.unit_price as number) * (it.quantity as number) - ((it.discount_amount as number) ?? 0),
+          0,
+        )
+        const discount = (data.discount_amount as number) ?? 0
+        const total = subtotal - discount
+        const order: LocalOrder = {
+          id: crypto.randomUUID(),
+          total, subtotal, tax: 0, discount,
+          payment_method: (data.payment_method as string) ?? 'cash',
+          amount_tendered: (data.amount_paid as number) ?? total,
+          change_due: ((data.amount_paid as number) ?? total) - total,
+          customer_id: (data.customer_id as number) ?? null,
+          customer_name: null,
+          cashier_id: null,
+          cashier_name: null,
+          branch_id: (data.branch_id as number) ?? null,
+          notes: (data.notes as string) ?? null,
+          items: apiItems.map((it) => ({
+            product_id: (it.product_id as number) ?? 0,
+            name: (it.product_name as string) ?? '',
+            sku: (it.product_sku as string) ?? null,
+            qty: (it.quantity as number) ?? 1,
+            price: (it.unit_price as number) ?? 0,
+            cost: null,
+            vat_rate: 0,
+            subtotal: ((it.unit_price as number) ?? 0) * ((it.quantity as number) ?? 1) - ((it.discount_amount as number) ?? 0),
+          })),
+          created_at: new Date().toISOString(),
+        }
+        await localCommitOrder(order)
+        return localOrderToApi(order)
+      }
+      return api.post('/orders/', data).then((r) => r.data)
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['orders'] })
       qc.invalidateQueries({ queryKey: ['dashboard'] })
@@ -404,8 +590,9 @@ export function useProductInventory(productId: number) {
 export function useAdjustInventory() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: Record<string, unknown>) =>
-      api.post('/inventory/adjust', data).then((r) => r.data),
+    mutationFn: (data: Record<string, unknown>) => isLocalMode
+      ? localAdjustInventory(data.product_id as number, data.qty_change as number)
+      : api.post('/inventory/adjust', data).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['inventory'] })
       qc.invalidateQueries({ queryKey: ['products'] })
@@ -598,7 +785,13 @@ export function useAdjustPrice() {
 export function useCustomers(q?: string) {
   return useQuery<ApiCustomer[]>({
     queryKey: ['customers', q],
-    queryFn: () => api.get('/customers/', { params: q ? { q, limit: 100 } : { limit: 100 } }).then((r) => r.data),
+    queryFn: async () => {
+      if (isLocalMode) {
+        const customers = await localGetCustomers()
+        return customers.map(localCustomerToApi)
+      }
+      return api.get('/customers/', { params: q ? { q, limit: 100 } : { limit: 100 } }).then((r) => r.data)
+    },
     staleTime: 30_000,
   })
 }
@@ -606,7 +799,17 @@ export function useCustomers(q?: string) {
 export function useCreateCustomer() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: Record<string, unknown>) => api.post('/customers/', data).then((r) => r.data),
+    mutationFn: async (data: Record<string, unknown>) => {
+      if (isLocalMode) {
+        const c = await localCreateCustomer(
+          data.name as string,
+          (data.phone as string) ?? null,
+          (data.email as string) ?? null,
+        )
+        return localCustomerToApi(c)
+      }
+      return api.post('/customers/', data).then((r) => r.data)
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['customers'] }),
   })
 }
@@ -614,8 +817,17 @@ export function useCreateCustomer() {
 export function useUpdateCustomer() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Record<string, unknown> }) =>
-      api.patch(`/customers/${id}`, data).then((r) => r.data),
+    mutationFn: async ({ id, data }: { id: number; data: Record<string, unknown> }) => {
+      if (isLocalMode) {
+        return localUpdateCustomer(
+          id,
+          data.name as string,
+          (data.phone as string) ?? null,
+          (data.email as string) ?? null,
+        )
+      }
+      return api.patch(`/customers/${id}`, data).then((r) => r.data)
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['customers'] }),
   })
 }
@@ -722,7 +934,21 @@ export function useAnalyticsSummary(params: {
 }) {
   return useQuery<ApiAnalyticsDailyItem[]>({
     queryKey: ['analytics-summary', params],
-    queryFn: () => api.get('/analytics/summary', { params }).then((r) => r.data),
+    queryFn: async () => {
+      if (isLocalMode) {
+        const now = new Date()
+        const from = params.date_from ?? new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
+        const to = params.date_to ?? now.toISOString().slice(0, 10)
+        const report = await localGetSalesReport(from, to)
+        return report.daily_totals.map((d) => ({
+          date: d.date,
+          revenue: d.total,
+          transactions: d.orders,
+          discount_total: 0,
+        }))
+      }
+      return api.get('/analytics/summary', { params }).then((r) => r.data)
+    },
     staleTime: 30_000,
   })
 }
