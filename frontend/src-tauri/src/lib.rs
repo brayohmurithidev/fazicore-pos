@@ -95,8 +95,6 @@ fn db_get_customers(db: tauri::State<DbState>) -> Result<Vec<db::LocalCustomer>,
 }
 
 /// Queue a sale for later sync. Also decrements local stock immediately.
-/// `payload` is the JSON-stringified OrderCreate body.
-/// `items` is a list of (product_id, quantity) pairs for local stock decrement.
 #[tauri::command]
 fn db_create_offline_order(
     db: tauri::State<DbState>,
@@ -117,6 +115,203 @@ fn db_create_offline_order(
 fn db_get_sync_status(db: tauri::State<DbState>) -> Result<SyncStatus, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     db::get_sync_status(&conn).map_err(|e| e.to_string())
+}
+
+// ── Standalone / local-mode commands ─────────────────────────────────────────
+
+// Auth
+
+#[tauri::command]
+fn local_count_users(db: tauri::State<DbState>) -> Result<i64, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::count_local_users(&conn).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn local_get_users(db: tauri::State<DbState>) -> Result<Vec<db::LocalUser>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::get_local_users(&conn).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn local_create_user(
+    db: tauri::State<DbState>,
+    name: String,
+    pin: String,
+    role: String,
+) -> Result<db::LocalUser, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::create_local_user(&conn, &name, &pin, &role).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn local_update_user(
+    db: tauri::State<DbState>,
+    id: i64,
+    name: String,
+    pin: Option<String>,
+    role: String,
+    is_active: bool,
+) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::update_local_user(&conn, id, &name, pin.as_deref(), &role, is_active)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn local_verify_pin(
+    db: tauri::State<DbState>,
+    user_id: i64,
+    pin: String,
+) -> Result<Option<db::LocalUser>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::verify_local_pin(&conn, user_id, &pin).map_err(|e| e.to_string())
+}
+
+// Products
+
+#[tauri::command]
+fn local_create_product(
+    db: tauri::State<DbState>,
+    name: String,
+    price: f64,
+    cost: Option<f64>,
+    sku: Option<String>,
+    barcode: Option<String>,
+    unit: String,
+    category_id: Option<i64>,
+    category_name: Option<String>,
+    stock_quantity: i64,
+    min_stock: i64,
+    vat_rate: f64,
+    track_inventory: bool,
+) -> Result<db::LocalProduct, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::local_create_product(
+        &conn, &name, price, cost, sku.as_deref(), barcode.as_deref(),
+        &unit, category_id, category_name.as_deref(),
+        stock_quantity, min_stock, vat_rate, track_inventory,
+    ).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn local_update_product(
+    db: tauri::State<DbState>,
+    id: i64,
+    name: String,
+    price: f64,
+    cost: Option<f64>,
+    sku: Option<String>,
+    barcode: Option<String>,
+    unit: String,
+    category_id: Option<i64>,
+    category_name: Option<String>,
+    min_stock: i64,
+    vat_rate: f64,
+    is_active: bool,
+    track_inventory: bool,
+) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::local_update_product(
+        &conn, id, &name, price, cost, sku.as_deref(), barcode.as_deref(),
+        &unit, category_id, category_name.as_deref(),
+        min_stock, vat_rate, is_active, track_inventory,
+    ).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn local_delete_product(db: tauri::State<DbState>, id: i64) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::local_delete_product(&conn, id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn local_adjust_inventory(
+    db: tauri::State<DbState>,
+    product_id: i64,
+    qty_change: i64,
+) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::local_adjust_inventory(&conn, product_id, qty_change).map_err(|e| e.to_string())
+}
+
+// Categories
+
+#[tauri::command]
+fn local_get_categories(db: tauri::State<DbState>) -> Result<Vec<db::LocalCategory>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::get_local_categories(&conn).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn local_create_category(db: tauri::State<DbState>, name: String) -> Result<db::LocalCategory, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::create_local_category(&conn, &name).map_err(|e| e.to_string())
+}
+
+// Customers
+
+#[tauri::command]
+fn local_create_customer(
+    db: tauri::State<DbState>,
+    name: String,
+    phone: Option<String>,
+    email: Option<String>,
+) -> Result<db::LocalCustomer, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::local_create_customer(&conn, &name, phone.as_deref(), email.as_deref())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn local_update_customer(
+    db: tauri::State<DbState>,
+    id: i64,
+    name: String,
+    phone: Option<String>,
+    email: Option<String>,
+) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::local_update_customer(&conn, id, &name, phone.as_deref(), email.as_deref())
+        .map_err(|e| e.to_string())
+}
+
+// Orders
+
+#[tauri::command]
+fn local_commit_order(
+    db: tauri::State<DbState>,
+    order: db::LocalOrder,
+) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    // Decrement stock for each item
+    for item in &order.items {
+        db::decrement_stock(&conn, item.product_id, item.qty).map_err(|e| e.to_string())?;
+    }
+    db::commit_local_order(&conn, &order).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn local_get_orders(
+    db: tauri::State<DbState>,
+    limit: i64,
+    offset: i64,
+    from_date: Option<String>,
+    to_date: Option<String>,
+) -> Result<Vec<db::LocalOrder>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::get_local_orders(&conn, limit, offset, from_date.as_deref(), to_date.as_deref())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn local_get_sales_report(
+    db: tauri::State<DbState>,
+    from_date: String,
+    to_date: String,
+) -> Result<db::LocalSalesReport, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::get_local_sales_report(&conn, &from_date, &to_date).map_err(|e| e.to_string())
 }
 
 // ── Sync config (call this on login / token refresh) ─────────────────────────
@@ -233,7 +428,7 @@ pub fn run() {
             save_text_file,
             save_binary_file,
             open_html_preview,
-            // offline db
+            // offline db (sync mode)
             db_get_products,
             db_get_customers,
             db_create_offline_order,
@@ -243,6 +438,23 @@ pub fn run() {
             clear_sync_config,
             sync_now,
             check_online,
+            // standalone / local-mode
+            local_count_users,
+            local_get_users,
+            local_create_user,
+            local_update_user,
+            local_verify_pin,
+            local_create_product,
+            local_update_product,
+            local_delete_product,
+            local_adjust_inventory,
+            local_get_categories,
+            local_create_category,
+            local_create_customer,
+            local_update_customer,
+            local_commit_order,
+            local_get_orders,
+            local_get_sales_report,
         ])
         .setup(|app| {
             // ── Init SQLite ──

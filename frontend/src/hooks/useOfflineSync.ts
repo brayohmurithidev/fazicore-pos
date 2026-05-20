@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { isTauri } from '@tauri-apps/api/core'
 import { useAuthStore } from '@/stores/auth'
 import { useOfflineStore } from '@/stores/offline'
+import { isLocalMode } from '@/lib/local-mode'
 
 /**
  * Mount once at the app root (AppShell or equivalent).
@@ -24,7 +25,7 @@ export function useOfflineSync() {
   // For admins: use the branch they selected at POS (posBranchOverride).
   // For everyone else: use their assigned branch from the user profile.
   useEffect(() => {
-    if (!isTauri()) return
+    if (!isTauri() || isLocalMode) return
 
     if (accessToken && orgSlug) {
       const baseUrl = import.meta.env.VITE_API_URL ?? ''

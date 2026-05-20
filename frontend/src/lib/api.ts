@@ -18,7 +18,7 @@ api.interceptors.request.use((config) => {
   const raw = localStorage.getItem('fazi-auth')
   if (raw) {
     const state = JSON.parse(raw)?.state
-    if (state?.accessToken) {
+    if (state?.accessToken && state.accessToken !== 'local') {
       config.headers.Authorization = `Bearer ${state.accessToken}`
     }
     if (state?.orgSlug) {

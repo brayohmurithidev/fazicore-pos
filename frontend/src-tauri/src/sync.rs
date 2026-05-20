@@ -78,6 +78,7 @@ impl From<ApiProductRaw> for LocalProduct {
             vat_rate: r.vat_rate,
             is_active: r.is_active,
             track_inventory: r.track_inventory,
+            is_local: false,
         }
     }
 }
