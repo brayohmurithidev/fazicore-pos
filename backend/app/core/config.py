@@ -14,7 +14,15 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
+    # Superuser URL — used only by Alembic migrations (bypasses RLS intentionally).
     DATABASE_URL: str = "postgresql+asyncpg://fazipos:fazipos_secret@localhost:5432/fazipos"
+    # Restricted app-user URL — no BYPASSRLS, no superuser. RLS policies apply.
+    # Falls back to DATABASE_URL when not set (e.g. local dev before migration runs).
+    DATABASE_URL_APP: str | None = None
+
+    @property
+    def app_database_url(self) -> str:
+        return self.DATABASE_URL_APP or self.DATABASE_URL
 
     REDIS_URL: str = "redis://localhost:6379/0"
 

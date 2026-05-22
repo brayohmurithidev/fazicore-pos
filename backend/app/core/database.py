@@ -8,7 +8,7 @@ from starlette.requests import Request
 from app.core.config import settings
 
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    settings.app_database_url,
     echo=settings.APP_ENV == "development",
     pool_pre_ping=True,
     pool_size=10,
@@ -31,14 +31,13 @@ class Base(DeclarativeBase):
 async def get_session(request: Request) -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         org_id: int | None = getattr(request.state, "org_id", None)
-        if org_id is not None:
-            # SET LOCAL so the value is scoped to this transaction only.
-            # PostgreSQL RLS policies read app.current_org_id to enforce
-            # row-level tenant isolation on all org-scoped tables.
-            await session.execute(
-                text("SELECT set_config('app.current_org_id', :v, true)"),
-                {"v": str(org_id)},
-            )
+        # Always set the GUC (even to empty string) so connection-pool reuse
+        # can never bleed a previous tenant's org_id into this request.
+        # is_local=true resets the value at transaction end.
+        await session.execute(
+            text("SELECT set_config('app.current_org_id', :v, true)"),
+            {"v": str(org_id) if org_id is not None else ""},
+        )
         try:
             yield session
             await session.commit()

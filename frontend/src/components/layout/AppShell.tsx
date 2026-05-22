@@ -11,6 +11,7 @@ import { NotificationBell } from '@/components/shared/NotificationBell'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import { useBranches, useDashboard, useOrgInfo, useClockOut } from '@/lib/queries'
+import { useQueryClient } from '@tanstack/react-query'
 import { useFeatureFlags } from '@/hooks/useFeature'
 import { useInactivityLogout } from '@/hooks/useInactivityLogout'
 import { useOfflineSync } from '@/hooks/useOfflineSync'
@@ -48,6 +49,7 @@ function fmtTime(iso: string | null): string | null {
 export function AppShell() {
   const { user, logout, attendanceId, clockInTime, setClockOut } = useAuthStore()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const location = useLocation()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -119,6 +121,7 @@ export function AppShell() {
 
   const handleLogout = () => {
     logout()
+    queryClient.clear()
     navigate('/login')
   }
 

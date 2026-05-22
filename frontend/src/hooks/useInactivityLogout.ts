@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router'
+import { useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/auth'
 
 const EVENTS = ['mousemove', 'keydown', 'click', 'touchstart', 'scroll'] as const
@@ -8,6 +9,7 @@ export function useInactivityLogout(timeoutMs = 15 * 60 * 1000) {
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -17,6 +19,7 @@ export function useInactivityLogout(timeoutMs = 15 * 60 * 1000) {
       if (timer.current) clearTimeout(timer.current)
       timer.current = setTimeout(() => {
         logout()
+        queryClient.clear()
         navigate('/login')
       }, timeoutMs)
     }
