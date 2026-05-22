@@ -10,9 +10,9 @@ class OrganizationCreate(BaseModel):
     slug: str
     type: OrgType = OrgType.OTHER
     plan: SubscriptionPlan = SubscriptionPlan.STARTER
-    max_branches: int = 1
-    max_users: int = 5
-    max_products: int = 500
+    max_branches: int | None = 1
+    max_users: int | None = 5
+    max_products: int | None = 500
 
 
 class OrganizationUpdate(BaseModel):
@@ -33,9 +33,9 @@ class OrganizationOut(BaseModel):
     type: OrgType
     status: OrgStatus
     plan: SubscriptionPlan
-    max_branches: int
-    max_users: int
-    max_products: int
+    max_branches: int | None
+    max_users: int | None
+    max_products: int | None
     is_active: bool
     branch_count: int = 0
     user_count: int = 0

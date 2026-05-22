@@ -61,9 +61,9 @@ class OrgInfo(BaseModel):
     email: str | None = None
     phone: str | None = None
     country: str | None = None
-    max_branches: int
-    max_users: int
-    max_products: int
+    max_branches: int | None
+    max_users: int | None
+    max_products: int | None
     branch_count: int
     user_count: int
     active_product_count: int
@@ -167,9 +167,9 @@ class PlanInfo(BaseModel):
     name: str
     price_monthly: int
     price_annual: int
-    max_branches: int
-    max_users: int
-    max_products: int
+    max_branches: int | None
+    max_users: int | None
+    max_products: int | None
     features: list[str]
     is_current: bool
     is_recommended: bool = False
@@ -180,9 +180,9 @@ class SubscriptionInfo(BaseModel):
     plan_name: str
     status: str
     trial_ends_at: str | None
-    max_branches: int
-    max_users: int
-    max_products: int
+    max_branches: int | None
+    max_users: int | None
+    max_products: int | None
     branch_count: int
     user_count: int
     active_product_count: int
@@ -241,9 +241,9 @@ async def get_subscription(
                 name=p.name,
                 price_monthly=int(p.price_monthly),
                 price_annual=int(p.price_annual),
-                max_branches=p.max_branches if p.max_branches is not None else -1,
-                max_users=p.max_users if p.max_users is not None else -1,
-                max_products=p.max_products if p.max_products is not None else -1,
+                max_branches=p.max_branches,
+                max_users=p.max_users,
+                max_products=p.max_products,
                 features=[f["label"] for f in FEATURE_CATALOG if (p.features or {}).get(f["key"])],
                 is_current=p.slug == current_slug,
                 is_recommended=p.is_recommended,
