@@ -70,6 +70,7 @@ class MpesaTransaction(Base, TimestampMixin):
     # STK Push request identifiers
     merchant_request_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     checkout_request_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    account_reference: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     sender_name: Mapped[str | None] = mapped_column(String(100), nullable=True)

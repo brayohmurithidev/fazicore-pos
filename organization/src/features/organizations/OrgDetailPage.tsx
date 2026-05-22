@@ -606,9 +606,9 @@ export default function OrgDetailPage() {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mt-5 sm:mt-6 pt-4 sm:pt-5 border-t border-slate-100">
-            <Stat label="Users"    value={`${org.user_count} / ${org.max_users}`} />
-            <Stat label="Branches" value={org.max_branches === 1 ? "Single" : `${org.branch_count} / ${org.max_branches}`} />
-            <Stat label="Products" value={`${org.active_product_count} / ${org.max_products}`} />
+            <Stat label="Users"    value={org.max_users    === null ? `${org.user_count} / ∞`             : `${org.user_count} / ${org.max_users}`} />
+            <Stat label="Branches" value={org.max_branches === 1    ? "Single"                             : org.max_branches === null ? `${org.branch_count} / ∞` : `${org.branch_count} / ${org.max_branches}`} />
+            <Stat label="Products" value={org.max_products === null ? `${org.active_product_count} / ∞`    : `${org.active_product_count} / ${org.max_products}`} />
             <Stat label="Status"   value={cfg.label} />
             <Stat label="Joined"   value={fmtDate(org.created_at)} />
             {org.trial_ends_at

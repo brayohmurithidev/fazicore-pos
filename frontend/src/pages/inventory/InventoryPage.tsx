@@ -1202,7 +1202,7 @@ function ProductsTab({ branchId }: { branchId?: number }) {
     return list
   }, [products, search, catFilter, stockFilter])
 
-  const atLimit = orgInfo ? products.filter((p) => p.is_active).length >= orgInfo.max_products : false
+  const atLimit = orgInfo ? (orgInfo.max_products !== null && products.filter((p) => p.is_active).length >= orgInfo.max_products) : false
   const isLargeScreen = useMediaQuery('(min-width: 1024px)')
   const detailOpen = !!currentSelected
 
@@ -1518,7 +1518,7 @@ function ProductsTab({ branchId }: { branchId?: number }) {
           {/* Footer */}
           <div className="flex items-center justify-between px-4 py-2.5 border-t border-gray-100 bg-gray-50/50 text-xs text-gray-400 shrink-0">
             <span>{filtered.length} products {stockFilter !== 'all' || search ? '(filtered)' : ''}</span>
-            {orgInfo && <span>{products.filter((p) => p.is_active).length} / {orgInfo.max_products} slots used</span>}
+            {orgInfo && <span>{products.filter((p) => p.is_active).length} / {orgInfo.max_products === null ? '∞' : orgInfo.max_products} slots used</span>}
           </div>
         </div>
 
@@ -3106,7 +3106,7 @@ export function InventoryPage() {
               </SelectContent>
             </Select>
           )}
-          {orgInfo && <span className="text-xs text-gray-400">{activeProducts.length}/{orgInfo.max_products} products</span>}
+          {orgInfo && <span className="text-xs text-gray-400">{activeProducts.length}/{orgInfo.max_products === null ? '∞' : orgInfo.max_products} products</span>}
         </div>
       </div>
 

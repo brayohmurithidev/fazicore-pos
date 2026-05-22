@@ -61,7 +61,7 @@ export function UsersPage() {
   const [limitError, setLimitError] = useState<LimitError | null>(null)
 
   const activeUsers = users.filter((u) => u.is_active)
-  const atLimit = orgInfo ? activeUsers.length >= orgInfo.max_users : false
+  const atLimit = orgInfo ? (orgInfo.max_users !== null && activeUsers.length >= orgInfo.max_users) : false
 
   const roleCount = (r: ApiRole) => users.filter((u) => u.role === r).length
 
@@ -95,7 +95,7 @@ export function UsersPage() {
         <div className="flex items-center gap-3">
           {orgInfo && (
             <span className={`text-xs font-medium ${atLimit ? 'text-amber-600' : 'text-gray-400'}`}>
-              {activeUsers.length}/{orgInfo.max_users} users
+              {activeUsers.length}/{orgInfo.max_users === null ? '∞' : orgInfo.max_users} users
               {atLimit && ' — limit reached'}
             </span>
           )}

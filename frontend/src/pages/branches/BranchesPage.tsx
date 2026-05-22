@@ -38,7 +38,7 @@ export function BranchesPage() {
   const [limitError, setLimitError] = useState<LimitError | null>(null)
 
   const branches: ApiBranch[] = apiBranches ?? []
-  const atLimit = orgInfo ? branches.filter((b) => b.is_active).length >= orgInfo.max_branches : false
+  const atLimit = orgInfo ? (orgInfo.max_branches !== null && branches.filter((b) => b.is_active).length >= orgInfo.max_branches) : false
 
   return (
     <div className="p-4 sm:p-6 overflow-y-auto h-full">
@@ -52,7 +52,7 @@ export function BranchesPage() {
             <span className={`text-xs font-medium ${atLimit ? 'text-amber-600' : 'text-gray-400'}`}>
               {orgInfo.max_branches === 1
                 ? `Single business${atLimit ? ' — limit reached' : ''}`
-                : `${branches.filter((b) => b.is_active).length}/${orgInfo.max_branches} branches${atLimit ? ' — limit reached' : ''}`
+                : `${branches.filter((b) => b.is_active).length}/${orgInfo.max_branches === null ? '∞' : orgInfo.max_branches} branches${atLimit ? ' — limit reached' : ''}`
               }
             </span>
           )}

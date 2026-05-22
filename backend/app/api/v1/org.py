@@ -1,16 +1,21 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import datetime, timedelta, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_session
 from app.core.deps import get_current_active_user
 from app.core.features import FEATURE_CATALOG, resolve_flags
 from app.models.branch import Branch
-from app.models.organization import Organization
+from app.models.mpesa import MpesaTransaction, MpesaTransactionStatus, MpesaTransactionType
+from app.models.organization import Organization, OrgStatus, SubscriptionPlan
 from app.models.product import Product
-from app.models.subscription import Plan, Subscription
+from app.models.subscription import BillingInterval, Plan, Subscription, SubscriptionStatus
 from app.models.user import User
+from app.services.mpesa import DarajaClient
 
 router = APIRouter(prefix="/org", tags=["org"])
 
@@ -380,6 +385,114 @@ async def update_permissions(
     org.permissions = data.permissions
     await session.commit()
     return PermissionsOut(permissions=data.permissions)
+
+
+# ── Subscription upgrade via M-Pesa STK Push ──────────────────────────────────
+
+def _platform_client() -> DarajaClient | None:
+    s = settings
+    if not all([s.MPESA_PLATFORM_SHORTCODE, s.MPESA_PLATFORM_CONSUMER_KEY,
+                s.MPESA_PLATFORM_CONSUMER_SECRET, s.MPESA_PLATFORM_PASSKEY]):
+        return None
+    return DarajaClient(
+        consumer_key=s.MPESA_PLATFORM_CONSUMER_KEY,   # type: ignore[arg-type]
+        consumer_secret=s.MPESA_PLATFORM_CONSUMER_SECRET,  # type: ignore[arg-type]
+        passkey=s.MPESA_PLATFORM_PASSKEY,              # type: ignore[arg-type]
+        shortcode=s.MPESA_PLATFORM_SHORTCODE,          # type: ignore[arg-type]
+        environment=s.MPESA_PLATFORM_ENV,
+    )
+
+
+class UpgradeRequest(BaseModel):
+    plan_slug: str
+    billing_interval: str = "monthly"  # "monthly" | "annual"
+    phone: str
+
+
+class UpgradeInitiated(BaseModel):
+    checkout_request_id: str
+    amount: int
+    plan_name: str
+    billing_interval: str
+    customer_message: str
+
+
+@router.post("/subscription/upgrade", response_model=UpgradeInitiated)
+async def initiate_subscription_upgrade(
+    body: UpgradeRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_active_user),
+) -> UpgradeInitiated:
+    if current_user.role.value not in ("admin", "manager"):
+        raise HTTPException(status_code=403, detail="Only admins or managers can upgrade the plan")
+
+    client = _platform_client()
+    if client is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Self-serve upgrade is not configured. Contact sales@fazilabs.com.",
+        )
+
+    if body.billing_interval not in ("monthly", "annual"):
+        raise HTTPException(status_code=422, detail="billing_interval must be 'monthly' or 'annual'")
+
+    plan = await session.scalar(
+        select(Plan).where(Plan.slug == body.plan_slug, Plan.is_active == True)  # noqa: E712
+    )
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    if float(plan.price_monthly) == 0:
+        raise HTTPException(status_code=400, detail="Cannot upgrade to a free plan via M-Pesa")
+
+    amount = int(plan.price_annual if body.billing_interval == "annual" else plan.price_monthly)
+
+    org = await session.get(Organization, current_user.org_id)
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    callback_url = (
+        str(request.base_url).rstrip("/")
+        + f"/api/v1/hooks/{org.slug}/stk"
+    )
+
+    try:
+        result = await client.stk_push(
+            phone=body.phone,
+            amount=amount,
+            account_ref=f"SUBSUP:{body.plan_slug}:{body.billing_interval}",
+            description=f"Fazi POS {plan.name} subscription",
+            callback_url=callback_url,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"M-Pesa error: {e}")
+
+    if result.get("ResponseCode") != "0":
+        raise HTTPException(
+            status_code=400,
+            detail=result.get("ResponseDescription", "STK push failed"),
+        )
+
+    tx = MpesaTransaction(
+        org_id=current_user.org_id,
+        transaction_type=MpesaTransactionType.STK_PUSH,
+        status=MpesaTransactionStatus.PENDING,
+        merchant_request_id=result.get("MerchantRequestID"),
+        checkout_request_id=result.get("CheckoutRequestID"),
+        phone=body.phone,
+        amount=amount,
+        account_reference=f"SUBSUP:{body.plan_slug}:{body.billing_interval}",
+    )
+    session.add(tx)
+    await session.commit()
+
+    return UpgradeInitiated(
+        checkout_request_id=result["CheckoutRequestID"],
+        amount=amount,
+        plan_name=plan.name,
+        billing_interval=body.billing_interval,
+        customer_message=result.get("CustomerMessage", "Check your phone to complete payment"),
+    )
 
 
 # ── Notifications ─────────────────────────────────────────────────────────────

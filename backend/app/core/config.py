@@ -39,6 +39,14 @@ class Settings(BaseSettings):
     CURRENCY: str = "USD"
     TAX_RATE: float = 0.08
 
+    # Platform-level M-Pesa credentials used to collect subscription payments.
+    # Leave unset to disable the self-serve upgrade flow (users see "Contact sales").
+    MPESA_PLATFORM_SHORTCODE: str | None = None
+    MPESA_PLATFORM_CONSUMER_KEY: str | None = None
+    MPESA_PLATFORM_CONSUMER_SECRET: str | None = None
+    MPESA_PLATFORM_PASSKEY: str | None = None
+    MPESA_PLATFORM_ENV: str = "sandbox"  # "sandbox" or "production"
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def parse_cors(cls, v: str | list) -> list:

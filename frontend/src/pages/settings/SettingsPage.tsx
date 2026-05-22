@@ -22,8 +22,8 @@ import {
   useSubscription, usePermissions, useUpdatePermissions, FEATURE_CATALOG,
   useMpesaCredentials, useSaveMpesaCredentials, useDeleteMpesaCredentials,
   useSetLiveMpesaEnvironment, useRegisterC2bUrls, useSimulateC2b,
-  useOrgInfo,
-  type MpesaCredentialsOut,
+  useOrgInfo, useUpgradeSubscription, useStkStatus,
+  type MpesaCredentialsOut, type UpgradeInitiated,
 } from '@/lib/queries'
 import { useFeatureFlags } from '@/hooks/useFeature'
 import { useAuthStore } from '@/stores/auth'
@@ -961,6 +961,137 @@ function UsageBar({ label, current, max }: { label: string; current: number; max
 
 const PLAN_ORDER = ['free', 'starter', 'growth', 'business', 'enterprise']
 
+// ── Upgrade Modal ──────────────────────────────────────────────────────────────
+
+type UpgradeStep = 'idle' | 'waiting' | 'polling' | 'success' | 'failed'
+
+function UpgradeModal({ plan, onClose }: { plan: ApiPlanInfo; onClose: () => void }) {
+  const [interval, setInterval] = useState<'monthly' | 'annual'>('monthly')
+  const [phone, setPhone] = useState('')
+  const [step, setStep] = useState<UpgradeStep>('idle')
+  const [initiated, setInitiated] = useState<UpgradeInitiated | null>(null)
+  const [errorMsg, setErrorMsg] = useState('')
+
+  const upgrade = useUpgradeSubscription()
+  const amount = interval === 'annual' ? plan.price_annual : plan.price_monthly
+
+  const pollEnabled = step === 'polling' && !!initiated
+  const { data: stkStatus } = useStkStatus(initiated?.checkout_request_id ?? null, pollEnabled)
+
+  useEffect(() => {
+    if (step !== 'polling' || !stkStatus) return
+    if (stkStatus.status === 'completed') {
+      setStep('success')
+    } else if (stkStatus.status === 'failed' || stkStatus.status === 'cancelled' || stkStatus.status === 'timeout') {
+      setStep('failed')
+      setErrorMsg(stkStatus.result_desc ?? 'Payment failed. Please try again.')
+    }
+  }, [stkStatus, step])
+
+  async function handlePay() {
+    if (!phone.trim()) return
+    setErrorMsg('')
+    setStep('waiting')
+    try {
+      const result = await upgrade.mutateAsync({ plan_slug: plan.slug, billing_interval: interval, phone: phone.trim() })
+      setInitiated(result)
+      setStep('polling')
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Failed to initiate payment.'
+      setErrorMsg(msg)
+      setStep('idle')
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 relative">
+        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-700">
+          <X size={18} />
+        </button>
+
+        {step === 'success' ? (
+          <div className="flex flex-col items-center gap-4 py-6 text-center">
+            <CheckCircle2 size={48} className="text-green-500" />
+            <div>
+              <div className="font-bold text-lg text-gray-900">Payment Successful!</div>
+              <div className="text-sm text-gray-500 mt-1">
+                You are now on the <span className="font-semibold">{plan.name}</span> plan.
+              </div>
+            </div>
+            <button onClick={onClose} className="mt-2 w-full py-2.5 bg-gray-900 text-white rounded-xl text-sm font-bold hover:bg-gray-700 transition-colors">
+              Done
+            </button>
+          </div>
+        ) : step === 'polling' ? (
+          <div className="flex flex-col items-center gap-4 py-6 text-center">
+            <Loader2 size={40} className="text-amber-500 animate-spin" />
+            <div>
+              <div className="font-bold text-base text-gray-900">Waiting for payment…</div>
+              <div className="text-sm text-gray-500 mt-1">Check your phone ({phone}) and enter your M-Pesa PIN.</div>
+            </div>
+            <div className="text-xs text-gray-400">KES {amount.toLocaleString()} · {interval}</div>
+          </div>
+        ) : (
+          <>
+            <div className="mb-5">
+              <div className="font-bold text-base text-gray-900">Upgrade to {plan.name}</div>
+              <div className="text-xs text-gray-400 mt-0.5">Pay via M-Pesa STK Push</div>
+            </div>
+
+            {/* Billing interval toggle */}
+            <div className="flex rounded-lg border border-gray-200 p-0.5 mb-4 text-xs font-semibold">
+              {(['monthly', 'annual'] as const).map((iv) => (
+                <button
+                  key={iv}
+                  onClick={() => setInterval(iv)}
+                  className={cn(
+                    'flex-1 py-1.5 rounded-md transition-colors capitalize',
+                    interval === iv ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-800'
+                  )}
+                >
+                  {iv === 'annual' ? `Annual · save ${Math.round(100 - (plan.price_annual / (plan.price_monthly * 12)) * 100)}%` : 'Monthly'}
+                </button>
+              ))}
+            </div>
+
+            {/* Amount */}
+            <div className="bg-gray-50 rounded-xl p-4 mb-4 text-center">
+              <div className="text-2xl font-extrabold text-gray-900">KES {amount.toLocaleString()}</div>
+              <div className="text-xs text-gray-400 mt-0.5">{interval === 'annual' ? 'per year' : 'per month'}</div>
+            </div>
+
+            {/* Phone */}
+            <div className="mb-4">
+              <Label htmlFor="upgrade-phone" className="text-xs font-semibold text-gray-700 mb-1 block">M-Pesa Phone Number</Label>
+              <Input
+                id="upgrade-phone"
+                type="tel"
+                placeholder="07XX XXX XXX"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="text-sm"
+              />
+            </div>
+
+            {errorMsg && (
+              <div className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 mb-3">{errorMsg}</div>
+            )}
+
+            <button
+              onClick={handlePay}
+              disabled={!phone.trim() || step === 'waiting'}
+              className="w-full py-2.5 bg-gray-900 text-white rounded-xl text-sm font-bold hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+            >
+              {step === 'waiting' ? <><Loader2 size={14} className="animate-spin" /> Sending prompt…</> : `Pay KES ${amount.toLocaleString()}`}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function PlanCollapsible({ title, defaultOpen = true, children }: {
   title: string; defaultOpen?: boolean; children: React.ReactNode
 }) {
@@ -982,6 +1113,7 @@ function PlanCollapsible({ title, defaultOpen = true, children }: {
 function PlanCard({ plan, isCurrent }: { plan: ApiPlanInfo; isCurrent: boolean }) {
   const isEnterprise = plan.slug === 'enterprise'
   const isRecommended = plan.is_recommended && !isCurrent
+  const [showModal, setShowModal] = useState(false)
   return (
     <div className={cn(
       'rounded-xl border-2 p-4 flex flex-col gap-3 transition-all',
@@ -1046,7 +1178,7 @@ function PlanCard({ plan, isCurrent }: { plan: ApiPlanInfo; isCurrent: boolean }
 
       {!isCurrent && (
         <button
-          onClick={() => alert(`Contact sales@fazilabs.com to upgrade to ${plan.name}.`)}
+          onClick={() => isEnterprise ? window.open('mailto:sales@fazilabs.com') : setShowModal(true)}
           className={cn(
             'mt-auto w-full py-2 rounded-lg text-xs font-bold text-white transition-colors',
             isRecommended ? 'bg-amber-500 hover:bg-amber-600' : 'bg-gray-900 hover:bg-gray-700'
@@ -1054,6 +1186,10 @@ function PlanCard({ plan, isCurrent }: { plan: ApiPlanInfo; isCurrent: boolean }
         >
           {isEnterprise ? 'Contact Sales' : `Upgrade to ${plan.name}`}
         </button>
+      )}
+
+      {showModal && (
+        <UpgradeModal plan={plan} onClose={() => setShowModal(false)} />
       )}
     </div>
   )

@@ -9,6 +9,7 @@ Registered paths (use these in Daraja portal):
 """
 
 import json
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select
@@ -16,7 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
 from app.models.mpesa import MpesaTransaction, MpesaTransactionStatus, MpesaTransactionType
-from app.models.organization import Organization
+from app.models.organization import Organization, OrgStatus, SubscriptionPlan
+from app.models.subscription import BillingInterval, Plan, Subscription, SubscriptionStatus
 
 router = APIRouter(prefix="/hooks", tags=["hooks"])
 
@@ -65,12 +67,64 @@ async def stk_hook(
             }
             tx.mpesa_receipt_number = str(items.get("MpesaReceiptNumber", ""))
             tx.phone = str(items.get("PhoneNumber", tx.phone or ""))
+
+            if tx.account_reference and tx.account_reference.startswith("SUBSUP:"):
+                await _activate_subscription(tx, session)
         else:
             tx.status = MpesaTransactionStatus.FAILED
 
         await session.commit()
 
     return {"ResultCode": "0", "ResultDesc": "Accepted"}
+
+
+async def _activate_subscription(tx: MpesaTransaction, session: AsyncSession) -> None:
+    """Upgrade the org's subscription after a successful SUBSUP payment."""
+    try:
+        _, plan_slug, billing_interval_str = tx.account_reference.split(":", 2)  # type: ignore[union-attr]
+    except ValueError:
+        return
+
+    plan = await session.scalar(
+        select(Plan).where(Plan.slug == plan_slug, Plan.is_active == True)  # noqa: E712
+    )
+    if not plan:
+        return
+
+    org = await session.get(Organization, tx.org_id)
+    if not org:
+        return
+
+    now = datetime.now(tz=timezone.utc)
+    if billing_interval_str == "annual":
+        period_end = now + timedelta(days=365)
+        billing_interval = BillingInterval.ANNUAL
+    else:
+        period_end = now + timedelta(days=30)
+        billing_interval = BillingInterval.MONTHLY
+
+    sub = Subscription(
+        organization_id=tx.org_id,
+        plan_id=plan.id,
+        status=SubscriptionStatus.ACTIVE,
+        billing_interval=billing_interval,
+        current_period_start=now,
+        current_period_end=period_end,
+        billing_phone=tx.phone,
+        last_payment_at=now,
+        last_payment_amount=tx.amount,
+    )
+    session.add(sub)
+
+    # Mirror limits onto org row so feature gates read fast without a join.
+    org.max_branches = plan.max_branches
+    org.max_users = plan.max_users
+    org.max_products = plan.max_products
+    org.status = OrgStatus.ACTIVE
+    try:
+        org.plan = SubscriptionPlan(plan_slug)
+    except ValueError:
+        pass  # plan slug not in enum (e.g. future plans) — leave as-is
 
 
 @router.post("/{org_slug}/c2b/validate", include_in_schema=False)

@@ -1096,6 +1096,25 @@ export function useInitiateStkPush() {
   })
 }
 
+export interface UpgradeInitiated {
+  checkout_request_id: string
+  amount: number
+  plan_name: string
+  billing_interval: string
+  customer_message: string
+}
+
+export function useUpgradeSubscription() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { plan_slug: string; billing_interval: 'monthly' | 'annual'; phone: string }) =>
+      api.post('/org/subscription/upgrade', data).then((r) => r.data as UpgradeInitiated),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['subscription'] })
+    },
+  })
+}
+
 export function useStkStatus(checkoutRequestId: string | null, enabled: boolean) {
   return useQuery({
     queryKey: ['stk-status', checkoutRequestId],
