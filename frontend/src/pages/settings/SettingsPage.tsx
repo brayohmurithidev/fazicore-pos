@@ -942,17 +942,18 @@ function PermissionsTab() {
 
 // ── Plan tab ──────────────────────────────────────────────────────────────────
 
-function UsageBar({ label, current, max }: { label: string; current: number; max: number }) {
-  const pct = max <= 0 ? 0 : Math.min(100, Math.round((current / max) * 100))
+function UsageBar({ label, current, max }: { label: string; current: number; max: number | null }) {
+  const unlimited = max === null || max < 0
+  const pct = unlimited ? 0 : Math.min(100, Math.round((current / max) * 100))
   const color = pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-gray-900'
   return (
     <div className="mb-3">
       <div className="flex justify-between text-xs mb-1">
         <span className="text-gray-500">{label}</span>
-        <span className="font-medium">{max < 0 ? `${current} / Unlimited` : `${current} / ${max}`}</span>
+        <span className="font-medium">{unlimited ? `${current} / Unlimited` : `${current} / ${max}`}</span>
       </div>
       <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${max < 0 ? 20 : pct}%` }} />
+        <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${unlimited ? 20 : pct}%` }} />
       </div>
     </div>
   )
@@ -1026,7 +1027,7 @@ function PlanCard({ plan, isCurrent }: { plan: ApiPlanInfo; isCurrent: boolean }
         {[{ label: 'Branches', value: plan.max_branches }, { label: 'Users', value: plan.max_users }, { label: 'Products', value: plan.max_products }].map(({ label, value }) => (
           <div key={label} className="text-center">
             <div className="text-sm font-bold text-gray-900">
-              {label === 'Branches' && value === 1 ? 'Single' : value < 0 ? '∞' : value.toLocaleString()}
+              {label === 'Branches' && value === 1 ? 'Single' : (value === null || value < 0) ? '∞' : value.toLocaleString()}
             </div>
             <div className="text-[10px] text-gray-400 mt-0.5">{label}</div>
           </div>
