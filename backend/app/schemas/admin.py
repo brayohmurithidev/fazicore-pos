@@ -36,9 +36,9 @@ class AdminOrgOut(BaseModel):
     user_count: int = 0
     branch_count: int = 0
     active_product_count: int = 0
-    max_branches: int = 1
-    max_users: int = 5
-    max_products: int = 500
+    max_branches: int | None = 1
+    max_users: int | None = 5
+    max_products: int | None = 500
 
 
 class AdminOrgCreate(BaseModel):
@@ -47,9 +47,9 @@ class AdminOrgCreate(BaseModel):
     email: str = ""
     phone: str | None = None
     country: str = "Kenya"
-    max_branches: int = 1
-    max_users: int = 5
-    max_products: int = 500
+    max_branches: int | None = 1
+    max_users: int | None = 5
+    max_products: int | None = 500
 
 
 class AdminOrgUpdate(BaseModel):
