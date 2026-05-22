@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, type SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
@@ -276,13 +276,13 @@ function EditLimitsModal({ org, onClose }: { org: Organization; onClose: () => v
   } = useForm<EditLimitsForm>({
     resolver: zodResolver(editLimitsSchema),
     defaultValues: {
-      max_branches: org.max_branches,
-      max_users:    org.max_users,
-      max_products: org.max_products,
+      max_branches: org.max_branches ?? undefined,
+      max_users:    org.max_users    ?? undefined,
+      max_products: org.max_products ?? undefined,
     },
   });
 
-  async function onSubmit(data: EditLimitsForm) {
+  const onSubmit: SubmitHandler<EditLimitsForm> = async (data) => {
     try {
       await api.patch(`/admin/organizations/${org.id}`, data);
       qc.invalidateQueries({ queryKey: ["admin", "org", org.id] });
@@ -292,7 +292,7 @@ function EditLimitsModal({ org, onClose }: { org: Organization; onClose: () => v
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       setError("root", { message: detail ?? "Failed to update limits." });
     }
-  }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
