@@ -15,6 +15,7 @@ FEATURE_CATALOG: list[dict] = [
     {"key": "thermal_printing",    "label": "Thermal Printing",         "group": "Operations", "description": "Direct USB/Serial ESC/POS thermal printer support"},
     {"key": "product_images",      "label": "Product Images",           "group": "Operations", "description": "Upload and display product photos in inventory"},
     {"key": "api_access",          "label": "API Access",               "group": "Developer",  "description": "REST API access for third-party integrations"},
+    {"key": "attendance_tracking", "label": "Attendance Tracking",      "group": "HR",         "description": "Staff clock in/out and attendance reporting"},
 ]
 
 ALL_FEATURE_KEYS: set[str] = {f["key"] for f in FEATURE_CATALOG}
