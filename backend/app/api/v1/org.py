@@ -451,10 +451,8 @@ async def initiate_subscription_upgrade(
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
 
-    callback_url = (
-        str(request.base_url).rstrip("/")
-        + f"/api/v1/hooks/{org.slug}/stk"
-    )
+    base = (settings.MPESA_CALLBACK_BASE_URL or str(request.base_url).rstrip("/"))
+    callback_url = f"{base}/api/v1/hooks/{org.slug}/stk"
 
     try:
         result = await client.stk_push(
@@ -493,6 +491,69 @@ async def initiate_subscription_upgrade(
         billing_interval=body.billing_interval,
         customer_message=result.get("CustomerMessage", "Check your phone to complete payment"),
     )
+
+
+@router.post("/subscription/upgrade/query/{checkout_request_id}")
+async def query_upgrade_status(
+    checkout_request_id: str,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_active_user),
+) -> dict:
+    """Query Daraja directly for the STK push result.
+    Used when the callback hasn't arrived (e.g. dev/localhost, or Safaricom delay).
+    Resolves the transaction in DB if the query confirms payment or cancellation.
+    """
+    tx = await session.scalar(
+        select(MpesaTransaction).where(
+            MpesaTransaction.org_id == current_user.org_id,
+            MpesaTransaction.checkout_request_id == checkout_request_id,
+        )
+    )
+    if not tx:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    # Already resolved — return current status
+    if tx.status != MpesaTransactionStatus.PENDING:
+        return {
+            "status": tx.status.value,
+            "result_desc": tx.result_desc,
+            "mpesa_receipt_number": tx.mpesa_receipt_number,
+        }
+
+    client = _platform_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="Platform M-Pesa not configured")
+
+    try:
+        resp = await client.stk_query(checkout_request_id)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Daraja query error: {e}")
+
+    result_code = resp.get("ResultCode")
+    result_desc = resp.get("ResultDesc", "")
+
+    if result_code == "0":
+        # Payment confirmed — activate subscription
+        tx.status = MpesaTransactionStatus.COMPLETED
+        tx.result_code = 0
+        tx.result_desc = result_desc
+        if tx.account_reference and tx.account_reference.startswith("SUBSUP:"):
+            from app.api.v1.hooks import _activate_subscription  # noqa: PLC0415
+            await _activate_subscription(tx, session)
+        await session.commit()
+        return {"status": "completed", "result_desc": result_desc, "mpesa_receipt_number": tx.mpesa_receipt_number}
+
+    if result_code is not None and str(result_code) != "0":
+        # Definitive failure (e.g. 1032 = cancelled, 1037 = timeout)
+        tx.status = MpesaTransactionStatus.FAILED
+        tx.result_code = int(result_code) if str(result_code).isdigit() else None
+        tx.result_desc = result_desc
+        await session.commit()
+        return {"status": "failed", "result_desc": result_desc, "mpesa_receipt_number": None}
+
+    # Safaricom returned an error (e.g. still processing)
+    error_msg = resp.get("errorMessage", "Still processing")
+    return {"status": "pending", "result_desc": error_msg, "mpesa_receipt_number": None}
 
 
 # ── Notifications ─────────────────────────────────────────────────────────────

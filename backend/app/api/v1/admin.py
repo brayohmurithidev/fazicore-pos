@@ -649,7 +649,8 @@ async def prompt_payment(
         environment=s.MPESA_PLATFORM_ENV,
     )
 
-    callback_url = f"https://fazistore-api.fazilabs.com/api/v1/hooks/{org.slug}/stk"
+    callback_base = settings.MPESA_CALLBACK_BASE_URL or "https://fazistore-api.fazilabs.com"
+    callback_url = f"{callback_base}/api/v1/hooks/{org.slug}/stk"
     try:
         result = await client.stk_push(
             phone=phone,

@@ -22,7 +22,7 @@ import {
   useSubscription, usePermissions, useUpdatePermissions, FEATURE_CATALOG,
   useMpesaCredentials, useSaveMpesaCredentials, useDeleteMpesaCredentials,
   useSetLiveMpesaEnvironment, useRegisterC2bUrls, useSimulateC2b,
-  useOrgInfo, useUpgradeSubscription, useStkStatus,
+  useOrgInfo, useUpgradeSubscription, useStkStatus, useQueryUpgradeStatus,
   type MpesaCredentialsOut, type UpgradeInitiated,
 } from '@/lib/queries'
 import { useFeatureFlags } from '@/hooks/useFeature'
@@ -963,7 +963,9 @@ const PLAN_ORDER = ['free', 'starter', 'growth', 'business', 'enterprise']
 
 // ── Upgrade Modal ──────────────────────────────────────────────────────────────
 
-type UpgradeStep = 'idle' | 'waiting' | 'polling' | 'success' | 'failed'
+type UpgradeStep = 'idle' | 'waiting' | 'polling' | 'success' | 'failed' | 'timed_out'
+
+const POLL_TIMEOUT_SECS = 120
 
 function UpgradeModal({ plan, onClose }: { plan: ApiPlanInfo; onClose: () => void }) {
   const [interval, setInterval] = useState<'monthly' | 'annual'>('monthly')
@@ -971,13 +973,28 @@ function UpgradeModal({ plan, onClose }: { plan: ApiPlanInfo; onClose: () => voi
   const [step, setStep] = useState<UpgradeStep>('idle')
   const [initiated, setInitiated] = useState<UpgradeInitiated | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
+  const [elapsed, setElapsed] = useState(0)
 
   const upgrade = useUpgradeSubscription()
+  const queryStatus = useQueryUpgradeStatus()
   const amount = interval === 'annual' ? plan.price_annual : plan.price_monthly
 
   const pollEnabled = step === 'polling' && !!initiated
   const { data: stkStatus } = useStkStatus(initiated?.checkout_request_id ?? null, pollEnabled)
 
+  // Elapsed timer while polling
+  useEffect(() => {
+    if (step !== 'polling') { setElapsed(0); return }
+    const t = setInterval(() => setElapsed((e) => e + 1), 1000)
+    return () => clearInterval(t)
+  }, [step])
+
+  // Timeout after POLL_TIMEOUT_SECS
+  useEffect(() => {
+    if (step === 'polling' && elapsed >= POLL_TIMEOUT_SECS) setStep('timed_out')
+  }, [elapsed, step])
+
+  // React to callback-based poll result
   useEffect(() => {
     if (step !== 'polling' || !stkStatus) return
     if (stkStatus.status === 'completed') {
@@ -987,6 +1004,18 @@ function UpgradeModal({ plan, onClose }: { plan: ApiPlanInfo; onClose: () => voi
       setErrorMsg(stkStatus.result_desc ?? 'Payment failed. Please try again.')
     }
   }, [stkStatus, step])
+
+  async function handleCheckStatus() {
+    if (!initiated) return
+    try {
+      const result = await queryStatus.mutateAsync(initiated.checkout_request_id)
+      if (result.status === 'completed') setStep('success')
+      else if (result.status === 'failed') { setStep('failed'); setErrorMsg(result.result_desc ?? 'Payment failed.') }
+      else setErrorMsg('Payment still processing — try again in a moment.')
+    } catch {
+      setErrorMsg('Could not reach M-Pesa. Please try again.')
+    }
+  }
 
   async function handlePay() {
     if (!phone.trim()) return
@@ -1031,7 +1060,44 @@ function UpgradeModal({ plan, onClose }: { plan: ApiPlanInfo; onClose: () => voi
               <div className="text-sm text-gray-500 mt-1">Check your phone ({phone}) and enter your M-Pesa PIN.</div>
             </div>
             <div className="text-xs text-gray-400">KES {amount.toLocaleString()} · {interval}</div>
+            <div className="w-full bg-gray-100 rounded-full h-1 overflow-hidden">
+              <div
+                className="h-full bg-amber-400 rounded-full transition-all"
+                style={{ width: `${Math.min(100, (elapsed / POLL_TIMEOUT_SECS) * 100)}%` }}
+              />
+            </div>
+            <div className="text-[11px] text-gray-400">{POLL_TIMEOUT_SECS - elapsed}s remaining</div>
           </div>
+
+        ) : step === 'timed_out' ? (
+          <div className="flex flex-col items-center gap-4 py-6 text-center">
+            <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
+              <Loader2 size={24} className="text-amber-500" />
+            </div>
+            <div>
+              <div className="font-bold text-base text-gray-900">No confirmation yet</div>
+              <div className="text-sm text-gray-500 mt-1">
+                We haven't received a response from M-Pesa. If you completed the prompt, tap <strong>Check Status</strong> to confirm.
+              </div>
+            </div>
+            {errorMsg && <div className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 w-full">{errorMsg}</div>}
+            <div className="flex flex-col gap-2 w-full mt-1">
+              <button
+                onClick={handleCheckStatus}
+                disabled={queryStatus.isPending}
+                className="w-full py-2.5 bg-gray-900 text-white rounded-xl text-sm font-bold hover:bg-gray-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              >
+                {queryStatus.isPending ? <><Loader2 size={14} className="animate-spin" /> Checking…</> : 'Check Status'}
+              </button>
+              <button
+                onClick={() => { setStep('idle'); setInitiated(null); setErrorMsg('') }}
+                className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                Try Again
+              </button>
+            </div>
+          </div>
+
         ) : (
           <>
             <div className="mb-5">

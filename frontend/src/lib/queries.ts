@@ -1115,6 +1115,19 @@ export function useUpgradeSubscription() {
   })
 }
 
+export function useQueryUpgradeStatus() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (checkoutRequestId: string) =>
+      api.post(`/org/subscription/upgrade/query/${checkoutRequestId}`).then((r) => r.data as StkStatusResult),
+    onSuccess: (data) => {
+      if (data.status === 'completed') {
+        qc.invalidateQueries({ queryKey: ['subscription'] })
+      }
+    },
+  })
+}
+
 export function useStkStatus(checkoutRequestId: string | null, enabled: boolean) {
   return useQuery({
     queryKey: ['stk-status', checkoutRequestId],

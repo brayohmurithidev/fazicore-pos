@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     MPESA_PLATFORM_CONSUMER_SECRET: str | None = None
     MPESA_PLATFORM_PASSKEY: str | None = None
     MPESA_PLATFORM_ENV: str = "sandbox"  # "sandbox" or "production"
+    # Public base URL used for M-Pesa callback URLs (no trailing slash).
+    # Must be reachable by Safaricom — set this in production/staging.
+    # Falls back to the request's base_url when unset (fine only if the API is public).
+    MPESA_CALLBACK_BASE_URL: str | None = None
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
