@@ -967,7 +967,7 @@ type UpgradeStep = 'idle' | 'waiting' | 'polling' | 'success' | 'failed' | 'time
 
 const POLL_TIMEOUT_SECS = 120
 
-function UpgradeModal({ plan, onClose }: { plan: ApiPlanInfo; onClose: () => void }) {
+function UpgradeModal({ plan, isDowngrade, onClose }: { plan: ApiPlanInfo; isDowngrade: boolean; onClose: () => void }) {
   const [billing, setBilling] = useState<'monthly' | 'annual'>('monthly')
   const [phone, setPhone] = useState('')
   const [step, setStep] = useState<UpgradeStep>('idle')
@@ -1045,7 +1045,7 @@ function UpgradeModal({ plan, onClose }: { plan: ApiPlanInfo; onClose: () => voi
             <div>
               <div className="font-bold text-lg text-gray-900">Payment Successful!</div>
               <div className="text-sm text-gray-500 mt-1">
-                You are now on the <span className="font-semibold">{plan.name}</span> plan.
+                You have {isDowngrade ? 'switched to' : 'upgraded to'} the <span className="font-semibold">{plan.name}</span> plan.
               </div>
             </div>
             <button onClick={onClose} className="mt-2 w-full py-2.5 bg-gray-900 text-white rounded-xl text-sm font-bold hover:bg-gray-700 transition-colors">
@@ -1101,8 +1101,10 @@ function UpgradeModal({ plan, onClose }: { plan: ApiPlanInfo; onClose: () => voi
         ) : (
           <>
             <div className="mb-5">
-              <div className="font-bold text-base text-gray-900">Upgrade to {plan.name}</div>
-              <div className="text-xs text-gray-400 mt-0.5">Pay via M-Pesa STK Push</div>
+              <div className="font-bold text-base text-gray-900">{isDowngrade ? 'Downgrade to' : 'Upgrade to'} {plan.name}</div>
+              <div className="text-xs text-gray-400 mt-0.5">
+                {isDowngrade ? 'New limits apply immediately after payment.' : 'Pay via M-Pesa STK Push'}
+              </div>
             </div>
 
             {/* Billing interval toggle */}
@@ -1176,10 +1178,15 @@ function PlanCollapsible({ title, defaultOpen = true, children }: {
   )
 }
 
-function PlanCard({ plan, isCurrent }: { plan: ApiPlanInfo; isCurrent: boolean }) {
+function PlanCard({ plan, isCurrent, currentPlanSlug }: { plan: ApiPlanInfo; isCurrent: boolean; currentPlanSlug?: string }) {
   const isEnterprise = plan.slug === 'enterprise'
   const isRecommended = plan.is_recommended && !isCurrent
   const [showModal, setShowModal] = useState(false)
+
+  const currentIdx = PLAN_ORDER.indexOf(currentPlanSlug ?? '')
+  const thisIdx = PLAN_ORDER.indexOf(plan.slug)
+  const isDowngrade = currentIdx > -1 && thisIdx > -1 && thisIdx < currentIdx
+
   return (
     <div className={cn(
       'rounded-xl border-2 p-4 flex flex-col gap-3 transition-all',
@@ -1246,16 +1253,20 @@ function PlanCard({ plan, isCurrent }: { plan: ApiPlanInfo; isCurrent: boolean }
         <button
           onClick={() => isEnterprise ? window.open('mailto:sales@fazilabs.com') : setShowModal(true)}
           className={cn(
-            'mt-auto w-full py-2 rounded-lg text-xs font-bold text-white transition-colors',
-            isRecommended ? 'bg-amber-500 hover:bg-amber-600' : 'bg-gray-900 hover:bg-gray-700'
+            'mt-auto w-full py-2 rounded-lg text-xs font-bold transition-colors',
+            isDowngrade
+              ? 'text-gray-600 border border-gray-300 hover:bg-gray-100'
+              : isRecommended
+                ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                : 'bg-gray-900 hover:bg-gray-700 text-white'
           )}
         >
-          {isEnterprise ? 'Contact Sales' : `Upgrade to ${plan.name}`}
+          {isEnterprise ? 'Contact Sales' : isDowngrade ? `Downgrade to ${plan.name}` : `Upgrade to ${plan.name}`}
         </button>
       )}
 
       {showModal && (
-        <UpgradeModal plan={plan} onClose={() => setShowModal(false)} />
+        <UpgradeModal plan={plan} isDowngrade={isDowngrade} onClose={() => setShowModal(false)} />
       )}
     </div>
   )
@@ -1344,7 +1355,7 @@ function PlanTab() {
       <PlanCollapsible title="Available Plans" defaultOpen={false}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {sortedPlans.map((plan) => (
-            <PlanCard key={plan.slug} plan={plan} isCurrent={plan.is_current} />
+            <PlanCard key={plan.slug} plan={plan} isCurrent={plan.is_current} currentPlanSlug={sub.current_plan} />
           ))}
         </div>
       </PlanCollapsible>
