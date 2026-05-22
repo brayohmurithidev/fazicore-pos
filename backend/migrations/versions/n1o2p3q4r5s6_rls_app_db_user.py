@@ -14,6 +14,22 @@ The running API must connect as fazipos_app via DATABASE_URL_APP.
 Alembic migrations continue to use DATABASE_URL (superuser) so schema
 changes can run without RLS restrictions.
 
+IMPORTANT — CREATEROLE required:
+  The CREATE ROLE statement requires the Alembic DB user to have the
+  CREATEROLE attribute (or be a superuser). If your DATABASE_URL user
+  lacks this, create the role manually first as the postgres superuser:
+
+    psql -U postgres -d fazipos -c "
+      CREATE ROLE fazipos_app
+        WITH LOGIN PASSWORD '<strong-password>'
+        NOSUPERUSER NOCREATEDB NOCREATEROLE
+        NOINHERIT NOREPLICATION;
+    "
+
+  Then re-run `alembic upgrade head` — the IF NOT EXISTS guard will skip
+  CREATE ROLE and the grants will succeed (as long as the Alembic user
+  owns the tables or has GRANT OPTION).
+
 Production setup:
   1. After running this migration, change fazipos_app's password:
        ALTER ROLE fazipos_app PASSWORD '<strong-password>';
