@@ -35,6 +35,7 @@ from app.schemas.admin import (
     PlanOut,
     PlanUpdate,
     PlatformStats,
+    BillingPhoneUpdate,
     SubscriptionOut,
     SubscriptionUpdate,
 )
@@ -453,6 +454,26 @@ async def get_org_subscription(
     plan = await session.get(Plan, sub.plan_id)
     if not plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
+    return _sub_out(sub, plan)
+
+
+@router.patch("/organizations/{org_id}/subscription/billing-phone", response_model=SubscriptionOut)
+async def update_billing_phone(
+    org_id: int,
+    data: BillingPhoneUpdate,
+    session: AsyncSession = Depends(get_session),
+    _: PlatformAdmin = Depends(require_admin),
+) -> SubscriptionOut:
+    result = await session.execute(
+        select(Subscription).where(Subscription.organization_id == org_id).limit(1)
+    )
+    sub = result.scalar_one_or_none()
+    if not sub:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No subscription found")
+    sub.billing_phone = data.billing_phone
+    session.add(sub)
+    await session.flush()
+    plan = await session.get(Plan, sub.plan_id)
     return _sub_out(sub, plan)
 
 

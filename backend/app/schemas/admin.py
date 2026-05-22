@@ -157,6 +157,10 @@ class SubscriptionUpdate(BaseModel):
     billing_interval: str = "monthly"
 
 
+class BillingPhoneUpdate(BaseModel):
+    billing_phone: str | None = None
+
+
 class InvoiceOut(BaseModel):
     id: int
     invoice_number: str | None

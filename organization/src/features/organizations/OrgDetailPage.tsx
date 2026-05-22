@@ -422,6 +422,16 @@ export default function OrgDetailPage() {
       setPromptMsg(`Error: ${msg}`)
     },
   })
+  const [editingPhone, setEditingPhone]   = useState(false)
+  const [phoneInput,   setPhoneInput]     = useState("")
+  const billingPhoneMutation = useMutation({
+    mutationFn: (phone: string | null) =>
+      api.patch(`/admin/organizations/${id}/subscription/billing-phone`, { billing_phone: phone || null }).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "org-subscription", id] })
+      setEditingPhone(false)
+    },
+  })
   const markPaidMutation = useMutation({
     mutationFn: (invoiceId: number) => api.post(`/admin/organizations/${id}/invoices/${invoiceId}/mark-paid`),
     onSuccess: () => {
@@ -710,28 +720,71 @@ export default function OrgDetailPage() {
                 </div>
               </div>
 
-              {/* Paybill info */}
-              <div className="px-5 py-3 bg-zinc-50 border-b border-zinc-100 flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-zinc-500">
-                <span>
-                  <span className="font-medium text-zinc-700">Paybill account:</span>{" "}
-                  <code className="bg-white border border-zinc-200 rounded px-1 py-0.5 font-mono">{org.slug}</code>
-                </span>
-                {subscription?.billing_phone && (
-                  <span className="flex items-center gap-1.5">
+              {/* Billing info */}
+              <div className="px-5 py-3 bg-zinc-50 border-b border-zinc-100 space-y-2 text-xs text-zinc-500">
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
+                  <span>
+                    <span className="font-medium text-zinc-700">Paybill account:</span>{" "}
+                    <code className="bg-white border border-zinc-200 rounded px-1 py-0.5 font-mono">{org.slug}</code>
+                  </span>
+
+                  {/* Billing phone */}
+                  <span className="flex items-center gap-2">
                     <span className="font-medium text-zinc-700">Billing phone:</span>
-                    {subscription.billing_phone}
-                    <Input
-                      className="h-6 w-32 text-xs px-2"
-                      placeholder="Override…"
+                    {editingPhone ? (
+                      <span className="flex items-center gap-1">
+                        <input
+                          autoFocus
+                          className="h-6 w-36 rounded border border-zinc-300 bg-white px-2 text-xs outline-none focus:border-zinc-500"
+                          placeholder="+254700000000"
+                          value={phoneInput}
+                          onChange={(e) => setPhoneInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") billingPhoneMutation.mutate(phoneInput)
+                            if (e.key === "Escape") setEditingPhone(false)
+                          }}
+                        />
+                        <button
+                          onClick={() => billingPhoneMutation.mutate(phoneInput)}
+                          disabled={billingPhoneMutation.isPending}
+                          className="text-zinc-900 hover:underline font-medium disabled:opacity-50"
+                        >
+                          Save
+                        </button>
+                        <button onClick={() => setEditingPhone(false)} className="text-zinc-400 hover:text-zinc-700">Cancel</button>
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1.5">
+                        {subscription?.billing_phone
+                          ? <span className="font-mono text-zinc-700">{subscription.billing_phone}</span>
+                          : <span className="italic text-zinc-400">not set</span>
+                        }
+                        <button
+                          onClick={() => { setPhoneInput(subscription?.billing_phone ?? ""); setEditingPhone(true) }}
+                          className="text-zinc-400 hover:text-zinc-700 transition-colors"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                      </span>
+                    )}
+                  </span>
+
+                  {/* Prompt override */}
+                  <span className="flex items-center gap-1.5">
+                    <span className="font-medium text-zinc-700">Prompt to:</span>
+                    <input
+                      className="h-6 w-32 rounded border border-zinc-300 bg-white px-2 text-xs outline-none focus:border-zinc-500 placeholder:text-zinc-400"
+                      placeholder={subscription?.billing_phone ?? "phone…"}
                       value={promptPhone}
                       onChange={(e) => setPromptPhone(e.target.value)}
                     />
                   </span>
-                )}
+                </div>
+
                 {promptMsg && (
-                  <span className={cn("font-medium", promptMsg.startsWith("Error") ? "text-red-600" : "text-green-600")}>
+                  <p className={cn("font-medium", promptMsg.startsWith("Error") ? "text-red-600" : "text-green-600")}>
                     {promptMsg}
-                  </span>
+                  </p>
                 )}
               </div>
 
