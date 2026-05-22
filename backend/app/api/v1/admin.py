@@ -16,6 +16,10 @@ from app.models.platform_admin import PlatformAdmin
 from app.models.product import Product
 from app.models.subscription import BillingInterval, Plan, Subscription, SubscriptionStatus
 from app.models.user import User, UserRole
+from app.core.billing import create_invoice, renew_subscription
+from app.core.config import settings
+from app.models.invoice import InvoiceStatus, SubscriptionInvoice
+from app.models.mpesa import MpesaTransaction, MpesaTransactionStatus, MpesaTransactionType
 from app.schemas.admin import (
     AdminLoginRequest,
     AdminLoginResponse,
@@ -25,6 +29,8 @@ from app.schemas.admin import (
     AdminUserCreate,
     AdminUserOut,
     AdminUserUpdate,
+    InvoiceOut,
+    PaymentPromptIn,
     PlanCreate,
     PlanOut,
     PlanUpdate,
@@ -32,6 +38,7 @@ from app.schemas.admin import (
     SubscriptionOut,
     SubscriptionUpdate,
 )
+from app.services.mpesa import DarajaClient
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -506,8 +513,177 @@ async def set_org_subscription(
         session.add(sub)
     session.add(org)
     await session.flush()
+
+    # Create an open invoice for paid plans; skip for trial
+    if not is_trial and float(plan.price_monthly) > 0:
+        await create_invoice(
+            session=session,
+            org_id=org_id,
+            subscription_id=sub.id,
+            plan=plan,
+            billing_interval=data.billing_interval,
+            period_start=now,
+            period_end=period_end,
+            status=InvoiceStatus.OPEN,
+            notes="Created by platform admin",
+        )
+
     await session.refresh(sub)
     return _sub_out(sub, plan)
+
+
+# ── Invoices ───────────────────────────────────────────────────────────────────
+
+def _invoice_out(inv: SubscriptionInvoice) -> InvoiceOut:
+    return InvoiceOut(
+        id=inv.id,
+        invoice_number=inv.invoice_number,
+        organization_id=inv.organization_id,
+        subscription_id=inv.subscription_id,
+        plan_name=inv.plan_name,
+        amount=str(inv.amount),
+        currency=inv.currency,
+        billing_interval=inv.billing_interval,
+        period_start=inv.period_start,
+        period_end=inv.period_end,
+        due_date=inv.due_date,
+        status=inv.status.value,
+        paid_at=inv.paid_at,
+        payment_method=inv.payment_method,
+        mpesa_receipt=inv.mpesa_receipt,
+        mpesa_phone=inv.mpesa_phone,
+        notes=inv.notes,
+        created_at=inv.created_at,
+    )
+
+
+@router.get("/organizations/{org_id}/invoices", response_model=list[InvoiceOut])
+async def list_org_invoices(
+    org_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: PlatformAdmin = Depends(require_admin),
+) -> list[InvoiceOut]:
+    rows = (await session.scalars(
+        select(SubscriptionInvoice)
+        .where(SubscriptionInvoice.organization_id == org_id)
+        .order_by(SubscriptionInvoice.created_at.desc())
+    )).all()
+    return [_invoice_out(inv) for inv in rows]
+
+
+@router.get("/invoices", response_model=list[InvoiceOut])
+async def list_all_invoices(
+    status: str | None = None,
+    limit: int = 100,
+    session: AsyncSession = Depends(get_session),
+    _: PlatformAdmin = Depends(require_admin),
+) -> list[InvoiceOut]:
+    q = select(SubscriptionInvoice).order_by(SubscriptionInvoice.created_at.desc()).limit(limit)
+    if status:
+        q = q.where(SubscriptionInvoice.status == status)
+    rows = (await session.scalars(q)).all()
+    return [_invoice_out(inv) for inv in rows]
+
+
+@router.post("/organizations/{org_id}/invoices/{invoice_id}/mark-paid", response_model=InvoiceOut)
+async def mark_invoice_paid(
+    org_id: int,
+    invoice_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: PlatformAdmin = Depends(require_admin),
+) -> InvoiceOut:
+    inv = await session.get(SubscriptionInvoice, invoice_id)
+    if not inv or inv.organization_id != org_id:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    inv.status = InvoiceStatus.PAID
+    inv.paid_at = datetime.now(timezone.utc)
+    inv.payment_method = inv.payment_method or "manual"
+    await session.commit()
+    return _invoice_out(inv)
+
+
+@router.post("/organizations/{org_id}/invoices/prompt")
+async def prompt_payment(
+    org_id: int,
+    body: PaymentPromptIn,
+    session: AsyncSession = Depends(get_session),
+    _: PlatformAdmin = Depends(require_admin),
+) -> dict:
+    """Send an M-Pesa STK push to the org's billing phone as a payment reminder."""
+    s = settings
+    if not all([s.MPESA_PLATFORM_SHORTCODE, s.MPESA_PLATFORM_CONSUMER_KEY,
+                s.MPESA_PLATFORM_CONSUMER_SECRET, s.MPESA_PLATFORM_PASSKEY]):
+        raise HTTPException(status_code=503, detail="Platform M-Pesa not configured")
+
+    org = await session.get(Organization, org_id)
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    sub = await session.scalar(
+        select(Subscription)
+        .where(Subscription.organization_id == org_id)
+        .order_by(Subscription.created_at.desc())
+        .limit(1)
+    )
+    if not sub:
+        raise HTTPException(status_code=400, detail="No subscription found for this organization")
+
+    plan = await session.get(Plan, sub.plan_id)
+    if not plan or float(plan.price_monthly) == 0:
+        raise HTTPException(status_code=400, detail="Cannot prompt payment for a free plan")
+
+    phone = body.phone or sub.billing_phone
+    if not phone:
+        raise HTTPException(status_code=422, detail="No billing phone on file. Provide phone in request body.")
+
+    amount = int(
+        float(plan.price_annual) if sub.billing_interval.value == "annual" else float(plan.price_monthly)
+    )
+    billing_interval_str = sub.billing_interval.value
+
+    client = DarajaClient(
+        consumer_key=s.MPESA_PLATFORM_CONSUMER_KEY,       # type: ignore[arg-type]
+        consumer_secret=s.MPESA_PLATFORM_CONSUMER_SECRET, # type: ignore[arg-type]
+        passkey=s.MPESA_PLATFORM_PASSKEY,                  # type: ignore[arg-type]
+        shortcode=s.MPESA_PLATFORM_SHORTCODE,              # type: ignore[arg-type]
+        environment=s.MPESA_PLATFORM_ENV,
+    )
+
+    callback_url = f"https://fazistore-api.fazilabs.com/api/v1/hooks/{org.slug}/stk"
+    try:
+        result = await client.stk_push(
+            phone=phone,
+            amount=amount,
+            account_ref=f"SUBSUP:{plan.slug}:{billing_interval_str}",
+            description=f"Fazi POS {plan.name} renewal",
+            callback_url=callback_url,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"M-Pesa error: {e}")
+
+    if result.get("ResponseCode") != "0":
+        raise HTTPException(status_code=400, detail=result.get("ResponseDescription", "STK push failed"))
+
+    tx = MpesaTransaction(
+        org_id=org_id,
+        transaction_type=MpesaTransactionType.STK_PUSH,
+        status=MpesaTransactionStatus.PENDING,
+        merchant_request_id=result.get("MerchantRequestID"),
+        checkout_request_id=result.get("CheckoutRequestID"),
+        phone=phone,
+        amount=amount,
+        account_reference=f"SUBSUP:{plan.slug}:{billing_interval_str}",
+    )
+    session.add(tx)
+    await session.commit()
+
+    return {
+        "ok": True,
+        "checkout_request_id": result["CheckoutRequestID"],
+        "message": result.get("CustomerMessage", "STK push sent"),
+        "amount": amount,
+        "phone": phone,
+    }
 
 
 # ── Plans ──────────────────────────────────────────────────────────────────────

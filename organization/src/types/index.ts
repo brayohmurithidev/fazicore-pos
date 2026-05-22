@@ -14,9 +14,9 @@ export interface Organization {
   user_count: number;
   branch_count: number;
   active_product_count: number;
-  max_branches: number;
-  max_users: number;
-  max_products: number;
+  max_branches: number | null;
+  max_users: number | null;
+  max_products: number | null;
 }
 
 export interface PlatformStats {
@@ -59,6 +59,29 @@ export interface Subscription {
   billing_phone: string | null;
   last_payment_at: string | null;
   last_payment_amount: string | null;
+  created_at: string;
+}
+
+export type InvoiceStatus = "open" | "paid" | "overdue" | "void";
+
+export interface Invoice {
+  id: number;
+  invoice_number: string | null;
+  organization_id: number;
+  subscription_id: number | null;
+  plan_name: string;
+  amount: string;
+  currency: string;
+  billing_interval: string;
+  period_start: string;
+  period_end: string;
+  due_date: string;
+  status: InvoiceStatus;
+  paid_at: string | null;
+  payment_method: string | null;
+  mpesa_receipt: string | null;
+  mpesa_phone: string | null;
+  notes: string | null;
   created_at: string;
 }
 

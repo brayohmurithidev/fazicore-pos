@@ -13,11 +13,11 @@ import {
 import {
   ArrowLeft, Building2, Users, CreditCard, Mail, Phone, Globe,
   CheckCircle2, Clock, AlertTriangle, XCircle, Plus, X, Loader2,
-  Package, Pencil, BarChart2, Trash2,
+  Package, Pencil, BarChart2, Trash2, Receipt, Send, RefreshCw,
 } from "lucide-react";
 import api from "@/lib/api";
 import { cn, fmtDate, fmtMoney } from "@/lib/utils";
-import type { Organization, OrgUser, Subscription, SubscriptionPlan, OrgStatus } from "@/types";
+import type { Organization, OrgUser, Subscription, SubscriptionPlan, OrgStatus, Invoice } from "@/types";
 
 const STATUS_CFG: Record<OrgStatus, { label: string; badge: string; icon: React.ElementType }> = {
   trial:     { label: "Trial",     badge: "bg-amber-100 text-amber-700",     icon: Clock },
@@ -472,6 +472,17 @@ function buildUserColumns(
   ];
 }
 
+function InvoiceBadge({ status }: { status: string }) {
+  const cfg: Record<string, { label: string; cls: string }> = {
+    open:    { label: "Open",    cls: "bg-blue-100 text-blue-700" },
+    paid:    { label: "Paid",    cls: "bg-emerald-100 text-emerald-700" },
+    overdue: { label: "Overdue", cls: "bg-red-100 text-red-700" },
+    void:    { label: "Void",    cls: "bg-slate-100 text-slate-500" },
+  };
+  const { label, cls } = cfg[status] ?? { label: status, cls: "bg-slate-100 text-slate-500" };
+  return <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${cls}`}>{label}</span>;
+}
+
 /* ── Main page ──────────────────────────────────────────────────── */
 export default function OrgDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -505,6 +516,33 @@ export default function OrgDetailPage() {
   const { data: plans = [] } = useQuery<SubscriptionPlan[]>({
     queryKey: ["admin", "plans"],
     queryFn: () => api.get("/admin/plans").then((r) => r.data),
+  });
+
+  const { data: invoices = [], isLoading: invoicesLoading, refetch: refetchInvoices } = useQuery<Invoice[]>({
+    queryKey: ["admin", "org-invoices", id],
+    queryFn: () => api.get(`/admin/organizations/${id}/invoices`).then((r) => r.data),
+    enabled: !!id,
+  });
+
+  const [promptPhone, setPromptPhone] = useState("");
+  const [promptMsg, setPromptMsg] = useState<string | null>(null);
+  const promptMutation = useMutation({
+    mutationFn: (phone?: string) =>
+      api.post(`/admin/organizations/${id}/invoices/prompt`, { phone: phone || undefined }).then((r) => r.data),
+    onSuccess: (data) => setPromptMsg(data.message ?? "STK push sent"),
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? "Failed to send prompt";
+      setPromptMsg(`Error: ${msg}`);
+    },
+  });
+
+  const markPaidMutation = useMutation({
+    mutationFn: (invoiceId: number) =>
+      api.post(`/admin/organizations/${id}/invoices/${invoiceId}/mark-paid`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "org-invoices", id] });
+      qc.invalidateQueries({ queryKey: ["admin", "org-subscription", id] });
+    },
   });
 
   const suspendMutation = useMutation({
@@ -677,6 +715,121 @@ export default function OrgDetailPage() {
                 <UsageBar label="Products" used={org.active_product_count} max={org.max_products} icon={Package} />
               </div>
             </div>
+          </div>
+
+          {/* ── Invoices & Payments ──────────────────────────────── */}
+          <div className="lg:col-span-3 bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Receipt className="h-4 w-4 text-slate-400" />
+                <h2 className="text-sm font-semibold text-slate-900">
+                  Invoices &amp; Payments
+                  <span className="text-slate-400 font-normal ml-1">({invoices.length})</span>
+                </h2>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => refetchInvoices()}
+                  className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors"
+                  title="Refresh"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => { setPromptMsg(null); promptMutation.mutate(promptPhone || undefined); }}
+                  disabled={promptMutation.isPending}
+                  className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 border border-indigo-200 rounded-lg px-2.5 py-1.5 hover:bg-indigo-50 disabled:opacity-50 transition-colors"
+                  title="Send M-Pesa STK push to billing phone"
+                >
+                  {promptMutation.isPending
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <Send className="h-3.5 w-3.5" />
+                  }
+                  Prompt Payment
+                </button>
+              </div>
+            </div>
+
+            {/* Paybill payment info */}
+            <div className="px-5 py-3 bg-slate-50 border-b border-slate-100 text-xs text-slate-500 flex flex-wrap gap-x-6 gap-y-1">
+              <span>
+                <span className="font-medium text-slate-700">Paybill self-pay:</span>
+                {" "}Customer pays using account number{" "}
+                <code className="bg-white border border-slate-200 rounded px-1 py-0.5 text-indigo-700 font-mono">{org?.slug}</code>
+              </span>
+              {subscription?.billing_phone && (
+                <span>
+                  <span className="font-medium text-slate-700">Billing phone:</span>{" "}{subscription.billing_phone}
+                  {" · "}
+                  <input
+                    className="border border-slate-200 rounded px-1.5 py-0.5 text-xs w-32 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                    placeholder="Override phone…"
+                    value={promptPhone}
+                    onChange={(e) => setPromptPhone(e.target.value)}
+                  />
+                </span>
+              )}
+              {promptMsg && (
+                <span className={cn("font-medium", promptMsg.startsWith("Error") ? "text-red-600" : "text-emerald-600")}>
+                  {promptMsg}
+                </span>
+              )}
+            </div>
+
+            {invoicesLoading ? (
+              <div className="px-5 py-8 text-center text-sm text-slate-400 flex items-center justify-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading invoices…
+              </div>
+            ) : invoices.length === 0 ? (
+              <div className="px-5 py-8 text-center text-sm text-slate-400">No invoices yet</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs font-medium text-slate-500 bg-slate-50 border-b border-slate-100">
+                      <th className="px-4 py-2.5">Invoice</th>
+                      <th className="px-4 py-2.5">Plan</th>
+                      <th className="px-4 py-2.5">Amount</th>
+                      <th className="px-4 py-2.5">Period</th>
+                      <th className="px-4 py-2.5">Status</th>
+                      <th className="px-4 py-2.5">Method</th>
+                      <th className="px-4 py-2.5">Receipt</th>
+                      <th className="px-4 py-2.5"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {invoices.map((inv) => (
+                      <tr key={inv.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-4 py-3 font-mono text-xs text-slate-600">{inv.invoice_number ?? `#${inv.id}`}</td>
+                        <td className="px-4 py-3 text-slate-700">{inv.plan_name}</td>
+                        <td className="px-4 py-3 font-semibold tabular-nums">{inv.currency} {fmtMoney(inv.amount)}</td>
+                        <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">
+                          {fmtDate(inv.period_start)} – {fmtDate(inv.period_end)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <InvoiceBadge status={inv.status} />
+                        </td>
+                        <td className="px-4 py-3 text-slate-500 capitalize text-xs">
+                          {inv.payment_method?.replace("_", " ") ?? "—"}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs text-slate-500">{inv.mpesa_receipt ?? "—"}</td>
+                        <td className="px-4 py-3">
+                          {inv.status === "open" || inv.status === "overdue" ? (
+                            <button
+                              onClick={() => markPaidMutation.mutate(inv.id)}
+                              disabled={markPaidMutation.isPending}
+                              className="text-xs text-indigo-600 hover:underline disabled:opacity-50"
+                            >
+                              Mark paid
+                            </button>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 overflow-hidden">

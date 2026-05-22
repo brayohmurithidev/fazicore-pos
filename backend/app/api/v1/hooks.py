@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.billing import renew_subscription
 from app.core.database import get_session
 from app.models.mpesa import MpesaTransaction, MpesaTransactionStatus, MpesaTransactionType
 from app.models.organization import Organization, OrgStatus, SubscriptionPlan
@@ -79,7 +80,7 @@ async def stk_hook(
 
 
 async def _activate_subscription(tx: MpesaTransaction, session: AsyncSession) -> None:
-    """Upgrade the org's subscription after a successful SUBSUP payment."""
+    """Upgrade the org's subscription after a successful SUBSUP STK payment."""
     try:
         _, plan_slug, billing_interval_str = tx.account_reference.split(":", 2)  # type: ignore[union-attr]
     except ValueError:
@@ -95,36 +96,16 @@ async def _activate_subscription(tx: MpesaTransaction, session: AsyncSession) ->
     if not org:
         return
 
-    now = datetime.now(tz=timezone.utc)
-    if billing_interval_str == "annual":
-        period_end = now + timedelta(days=365)
-        billing_interval = BillingInterval.ANNUAL
-    else:
-        period_end = now + timedelta(days=30)
-        billing_interval = BillingInterval.MONTHLY
-
-    sub = Subscription(
-        organization_id=tx.org_id,
-        plan_id=plan.id,
-        status=SubscriptionStatus.ACTIVE,
-        billing_interval=billing_interval,
-        current_period_start=now,
-        current_period_end=period_end,
-        billing_phone=tx.phone,
-        last_payment_at=now,
-        last_payment_amount=tx.amount,
+    await renew_subscription(
+        session=session,
+        org=org,
+        plan=plan,
+        billing_interval_str=billing_interval_str,
+        payment_method="mpesa_stk",
+        mpesa_receipt=tx.mpesa_receipt_number,
+        mpesa_phone=tx.phone,
+        amount_paid=float(tx.amount),
     )
-    session.add(sub)
-
-    # Mirror limits onto org row so feature gates read fast without a join.
-    org.max_branches = plan.max_branches
-    org.max_users = plan.max_users
-    org.max_products = plan.max_products
-    org.status = OrgStatus.ACTIVE
-    try:
-        org.plan = SubscriptionPlan(plan_slug)
-    except ValueError:
-        pass  # plan slug not in enum (e.g. future plans) — leave as-is
 
 
 @router.post("/{org_slug}/c2b/validate", include_in_schema=False)
@@ -174,3 +155,106 @@ async def c2b_confirm(
     await session.commit()
 
     return {"ResultCode": "0", "ResultDesc": "Accepted"}
+
+
+# ── Platform-level paybill callbacks ─────────────────────────────────────────
+# Register these in Daraja for Fazi's own platform paybill shortcode.
+# Customers pay with their shop slug as the account number to renew.
+
+@router.post("/platform/c2b/validate", include_in_schema=False)
+async def platform_c2b_validate(request: Request):
+    return {"ResultCode": "0", "ResultDesc": "Accepted"}
+
+
+@router.post("/platform/c2b/confirm", include_in_schema=False)
+async def platform_c2b_confirm(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
+    """Safaricom posts here when a customer pays the platform paybill.
+    BillRefNumber must match an org slug — renews that org's subscription.
+    """
+    try:
+        payload = await request.json()
+    except Exception:
+        return {"ResultCode": "0", "ResultDesc": "Accepted"}
+
+    bill_ref = str(payload.get("BillRefNumber", "")).strip().lower()
+    receipt  = str(payload.get("TransID", ""))
+    amount   = float(payload.get("TransAmount", 0))
+    phone    = str(payload.get("MSISDN", ""))
+
+    if not bill_ref:
+        return {"ResultCode": "0", "ResultDesc": "Accepted"}
+
+    # Match org by slug (case-insensitive)
+    org = await session.scalar(
+        select(Organization).where(Organization.slug == bill_ref)
+    )
+    if not org:
+        return {"ResultCode": "0", "ResultDesc": "Accepted"}
+
+    # Store raw C2B transaction tied to the org
+    tx = MpesaTransaction(
+        org_id=org.id,
+        transaction_type=MpesaTransactionType.C2B,
+        status=MpesaTransactionStatus.COMPLETED,
+        phone=phone,
+        amount=amount,
+        mpesa_receipt_number=receipt,
+        result_code=0,
+        result_desc="Platform C2B subscription payment",
+        account_reference=f"PLATFORM_C2B:{bill_ref}",
+        raw_callback=json.dumps(payload),
+    )
+    session.add(tx)
+
+    # Look up current plan from most-recent subscription
+    from sqlalchemy.orm import selectinload  # noqa: PLC0415
+    sub = await session.scalar(
+        select(Subscription)
+        .where(Subscription.organization_id == org.id)
+        .order_by(Subscription.created_at.desc())
+        .limit(1)
+    )
+    plan: Plan | None = None
+    billing_interval_str = "monthly"
+    if sub:
+        plan = await session.get(Plan, sub.plan_id)
+        billing_interval_str = sub.billing_interval.value
+
+    # If no plan or free plan, try to infer from amount paid
+    if plan is None or float(plan.price_monthly) == 0:
+        plan = await _infer_plan_from_amount(amount, billing_interval_str, session)
+
+    if plan:
+        await renew_subscription(
+            session=session,
+            org=org,
+            plan=plan,
+            billing_interval_str=billing_interval_str,
+            payment_method="mpesa_c2b",
+            mpesa_receipt=receipt,
+            mpesa_phone=phone,
+            amount_paid=amount,
+        )
+
+    await session.commit()
+    return {"ResultCode": "0", "ResultDesc": "Accepted"}
+
+
+async def _infer_plan_from_amount(
+    amount: float,
+    billing_interval: str,
+    session: AsyncSession,
+) -> "Plan | None":
+    """Find the plan whose price best matches the amount paid."""
+    from sqlalchemy import select as _select  # noqa: PLC0415
+    plans = (await session.scalars(
+        _select(Plan).where(Plan.is_active == True)  # noqa: E712
+    )).all()
+    price_field = "price_annual" if billing_interval == "annual" else "price_monthly"
+    for plan in sorted(plans, key=lambda p: abs(float(getattr(p, price_field)) - amount)):
+        if float(getattr(plan, price_field)) > 0:
+            return plan
+    return None

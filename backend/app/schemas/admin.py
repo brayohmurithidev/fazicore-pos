@@ -155,3 +155,28 @@ class SubscriptionOut(BaseModel):
 class SubscriptionUpdate(BaseModel):
     plan_slug: str
     billing_interval: str = "monthly"
+
+
+class InvoiceOut(BaseModel):
+    id: int
+    invoice_number: str | None
+    organization_id: int
+    subscription_id: int | None
+    plan_name: str
+    amount: str
+    currency: str
+    billing_interval: str
+    period_start: datetime
+    period_end: datetime
+    due_date: datetime
+    status: str
+    paid_at: datetime | None
+    payment_method: str | None
+    mpesa_receipt: str | None
+    mpesa_phone: str | None
+    notes: str | None
+    created_at: datetime
+
+
+class PaymentPromptIn(BaseModel):
+    phone: str | None = None  # falls back to subscription.billing_phone
