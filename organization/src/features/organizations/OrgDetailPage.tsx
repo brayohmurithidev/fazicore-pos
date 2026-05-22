@@ -17,7 +17,6 @@ import { Input } from "@/components/ui/input"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import type { Organization, OrgUser, Subscription, SubscriptionPlan, Invoice } from "@/types"
 
 // ── Add user ───────────────────────────────────────────────────────────────────
@@ -387,6 +386,7 @@ export default function OrgDetailPage() {
   const [deletingUser,   setDeletingUser]   = useState<OrgUser | null>(null)
   const [promptPhone,    setPromptPhone]    = useState("")
   const [promptMsg,      setPromptMsg]      = useState<string | null>(null)
+  const [tab,            setTab]            = useState<"overview" | "users" | "billing">("overview")
 
   const { data: org, isLoading: orgLoading } = useQuery<Organization>({
     queryKey: ["admin", "org", id],
@@ -523,15 +523,29 @@ export default function OrgDetailPage() {
         </div>
 
         {/* Tabs */}
-        <Tabs defaultValue="overview">
-          <TabsList className="w-full sm:w-auto">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="users">Users ({users.length})</TabsTrigger>
-            <TabsTrigger value="billing">Billing ({invoices.length})</TabsTrigger>
-          </TabsList>
+        <div>
+          <div className="flex border-b border-zinc-200">
+            {(["overview", "users", "billing"] as const).map((t) => {
+              const label = t === "overview" ? "Overview" : t === "users" ? `Users (${users.length})` : `Billing (${invoices.length})`
+              return (
+                <button
+                  key={t}
+                  onClick={() => setTab(t)}
+                  className={cn(
+                    "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
+                    tab === t
+                      ? "border-zinc-900 text-zinc-900"
+                      : "border-transparent text-zinc-500 hover:text-zinc-700",
+                  )}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
 
           {/* ── Overview ── */}
-          <TabsContent value="overview">
+          {tab === "overview" && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
               {/* Subscription */}
               <div className="bg-white rounded-xl border border-zinc-200 p-5 space-y-3">
@@ -590,10 +604,10 @@ export default function OrgDetailPage() {
                 </div>
               </div>
             </div>
-          </TabsContent>
+          )}
 
           {/* ── Users ── */}
-          <TabsContent value="users">
+          {tab === "users" && (
             <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden mt-4">
               <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100">
                 <div className="flex items-center gap-2">
@@ -667,10 +681,10 @@ export default function OrgDetailPage() {
                 </div>
               )}
             </div>
-          </TabsContent>
+          )}
 
           {/* ── Billing ── */}
-          <TabsContent value="billing">
+          {tab === "billing" && (
             <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden mt-4">
               <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100">
                 <div className="flex items-center gap-2">
@@ -772,8 +786,8 @@ export default function OrgDetailPage() {
                 </div>
               )}
             </div>
-          </TabsContent>
-        </Tabs>
+          )}
+        </div>
       </div>
     </>
   )
