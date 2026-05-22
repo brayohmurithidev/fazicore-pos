@@ -968,7 +968,7 @@ type UpgradeStep = 'idle' | 'waiting' | 'polling' | 'success' | 'failed' | 'time
 const POLL_TIMEOUT_SECS = 120
 
 function UpgradeModal({ plan, onClose }: { plan: ApiPlanInfo; onClose: () => void }) {
-  const [interval, setInterval] = useState<'monthly' | 'annual'>('monthly')
+  const [billing, setBilling] = useState<'monthly' | 'annual'>('monthly')
   const [phone, setPhone] = useState('')
   const [step, setStep] = useState<UpgradeStep>('idle')
   const [initiated, setInitiated] = useState<UpgradeInitiated | null>(null)
@@ -977,7 +977,7 @@ function UpgradeModal({ plan, onClose }: { plan: ApiPlanInfo; onClose: () => voi
 
   const upgrade = useUpgradeSubscription()
   const queryStatus = useQueryUpgradeStatus()
-  const amount = interval === 'annual' ? plan.price_annual : plan.price_monthly
+  const amount = billing === 'annual' ? plan.price_annual : plan.price_monthly
 
   const pollEnabled = step === 'polling' && !!initiated
   const { data: stkStatus } = useStkStatus(initiated?.checkout_request_id ?? null, pollEnabled)
@@ -985,7 +985,7 @@ function UpgradeModal({ plan, onClose }: { plan: ApiPlanInfo; onClose: () => voi
   // Elapsed timer while polling
   useEffect(() => {
     if (step !== 'polling') { setElapsed(0); return }
-    const t = setInterval(() => setElapsed((e) => e + 1), 1000)
+    const t = window.setInterval(() => setElapsed((e) => e + 1), 1000)
     return () => clearInterval(t)
   }, [step])
 
@@ -1022,7 +1022,7 @@ function UpgradeModal({ plan, onClose }: { plan: ApiPlanInfo; onClose: () => voi
     setErrorMsg('')
     setStep('waiting')
     try {
-      const result = await upgrade.mutateAsync({ plan_slug: plan.slug, billing_interval: interval, phone: phone.trim() })
+      const result = await upgrade.mutateAsync({ plan_slug: plan.slug, billing_interval: billing, phone: phone.trim() })
       setInitiated(result)
       setStep('polling')
     } catch (e: unknown) {
@@ -1059,7 +1059,7 @@ function UpgradeModal({ plan, onClose }: { plan: ApiPlanInfo; onClose: () => voi
               <div className="font-bold text-base text-gray-900">Waiting for payment…</div>
               <div className="text-sm text-gray-500 mt-1">Check your phone ({phone}) and enter your M-Pesa PIN.</div>
             </div>
-            <div className="text-xs text-gray-400">KES {amount.toLocaleString()} · {interval}</div>
+            <div className="text-xs text-gray-400">KES {amount.toLocaleString()} · {billing}</div>
             <div className="w-full bg-gray-100 rounded-full h-1 overflow-hidden">
               <div
                 className="h-full bg-amber-400 rounded-full transition-all"
@@ -1110,10 +1110,10 @@ function UpgradeModal({ plan, onClose }: { plan: ApiPlanInfo; onClose: () => voi
               {(['monthly', 'annual'] as const).map((iv) => (
                 <button
                   key={iv}
-                  onClick={() => setInterval(iv)}
+                  onClick={() => setBilling(iv)}
                   className={cn(
                     'flex-1 py-1.5 rounded-md transition-colors capitalize',
-                    interval === iv ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-800'
+                    billing === iv ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-800'
                   )}
                 >
                   {iv === 'annual' ? `Annual · save ${Math.round(100 - (plan.price_annual / (plan.price_monthly * 12)) * 100)}%` : 'Monthly'}
@@ -1124,7 +1124,7 @@ function UpgradeModal({ plan, onClose }: { plan: ApiPlanInfo; onClose: () => voi
             {/* Amount */}
             <div className="bg-gray-50 rounded-xl p-4 mb-4 text-center">
               <div className="text-2xl font-extrabold text-gray-900">KES {amount.toLocaleString()}</div>
-              <div className="text-xs text-gray-400 mt-0.5">{interval === 'annual' ? 'per year' : 'per month'}</div>
+              <div className="text-xs text-gray-400 mt-0.5">{billing === 'annual' ? 'per year' : 'per month'}</div>
             </div>
 
             {/* Phone */}
