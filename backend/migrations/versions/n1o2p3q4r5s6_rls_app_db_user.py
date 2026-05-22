@@ -69,12 +69,14 @@ def upgrade() -> None:
     """)
 
     # CONNECT on the current database (avoids hardcoding DB name).
+    # Use quote_ident() + concatenation — format('%I') triggers a syntax
+    # error via asyncpg because %% round-trips through PostgreSQL as %I.
     op.execute(f"""
         DO $$
         DECLARE
             db text := current_database();
         BEGIN
-            EXECUTE format('GRANT CONNECT ON DATABASE %%I TO {_APP_ROLE}', db);
+            EXECUTE 'GRANT CONNECT ON DATABASE ' || quote_ident(db) || ' TO {_APP_ROLE}';
         END
         $$;
     """)
@@ -111,7 +113,7 @@ def downgrade() -> None:
         DO $$
         DECLARE db text := current_database();
         BEGIN
-            EXECUTE format('REVOKE CONNECT ON DATABASE %%I FROM {_APP_ROLE}', db);
+            EXECUTE 'REVOKE CONNECT ON DATABASE ' || quote_ident(db) || ' FROM {_APP_ROLE}';
         END
         $$;
     """)
