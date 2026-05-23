@@ -90,7 +90,7 @@ async def admin_login(
     admin = result.scalar_one_or_none()
     if not admin or not verify_password(body.password, admin.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    token = create_access_token(subject=admin.id, extra={"platform": True})
+    token = create_access_token(subject=admin.id, extra={"platform": True}, expire_hours=settings.ADMIN_TOKEN_EXPIRE_HOURS)
     return AdminLoginResponse(access_token=token, full_name=admin.name)
 
 
@@ -474,6 +474,8 @@ async def update_billing_phone(
     session.add(sub)
     await session.flush()
     plan = await session.get(Plan, sub.plan_id)
+    if not plan:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Associated plan not found")
     return _sub_out(sub, plan)
 
 

@@ -14,7 +14,7 @@ function Loader() {
   return (
     <div className="flex h-screen items-center justify-center bg-slate-50">
       <div className="flex flex-col items-center gap-3">
-        <div className="w-8 h-8 rounded-full border-4 border-slate-200 border-t-indigo-600 animate-spin" />
+        <div className="w-8 h-8 rounded-full border-4 border-zinc-200 border-t-zinc-900 animate-spin" />
         <p className="text-xs font-medium text-slate-400 tracking-wide">Fazicore Admin</p>
       </div>
     </div>
