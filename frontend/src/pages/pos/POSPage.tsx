@@ -473,6 +473,9 @@ export function POSPage() {
       // Don't steal keys while user is typing — except F-keys
       if (isTyping && !e.key.startsWith('F')) return
 
+      // Don't run POS shortcuts while any dialog is open
+      if (payOpen || discountOpen || receiptOpen || shortcutsOpen) return
+
       switch (e.key) {
         // Focus search
         case '/':
