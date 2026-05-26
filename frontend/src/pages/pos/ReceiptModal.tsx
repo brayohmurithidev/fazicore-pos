@@ -6,6 +6,7 @@ import { useSettingsStore } from '@/stores/settings'
 import { printReceipt } from '@/lib/print'
 import { printESCPOS } from '@/lib/escpos'
 import { isTauri } from '@/hooks/useTauri'
+import { toast } from '@/lib/toast'
 import type { SaleInfo } from '@/types'
 
 interface Props {
@@ -23,14 +24,21 @@ export function ReceiptModal({ open, onClose, sale }: Props) {
     setPrinting(true)
     try {
       if (isTauri) {
-        printReceipt(sale, settings)
-        printESCPOS(sale, settings).catch(() => {})
+        if (sale.payment === 'credit') {
+          // Invoice: show preview modal so user can download PDF
+          printReceipt(sale, settings)
+          printESCPOS(sale, settings).catch(() => {})
+        } else {
+          // Receipt: ESC/POS only — no preview modal needed
+          const ok = await printESCPOS(sale, settings)
+          if (!ok) toast.error('No printer connected. Check Settings → Printer.')
+        }
       } else {
         const ok = await printESCPOS(sale, settings)
         if (!ok) printReceipt(sale, settings)
       }
     } catch {
-      printReceipt(sale, settings)
+      if (sale.payment === 'credit' || !isTauri) printReceipt(sale, settings)
     } finally {
       setPrinting(false)
     }

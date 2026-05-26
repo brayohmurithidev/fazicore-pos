@@ -18,7 +18,6 @@ import { isLocalMode } from '@/lib/local-mode'
 import { useBarcodeScanner } from '@/hooks/useBarcodeScanner'
 import { usePOSProducts } from '@/hooks/usePOSProducts'
 import { useOfflineStore } from '@/stores/offline'
-import { printReceipt } from '@/lib/print'
 import { printESCPOS } from '@/lib/escpos'
 import type { CartItem, Product, SaleInfo } from '@/types'
 
@@ -623,16 +622,16 @@ export function POSPage() {
 
     setLastSale(sale)
     setPayOpen(false)
-    setReceiptOpen(true)
     setCart([])
     setDiscount(0)
     setOrderNotes('')
-    // Auto-print receipt if enabled
+
     if (settings.autoPrint) {
-      setTimeout(async () => {
-        const ok = await printESCPOS(sale, settings)
-        if (!ok) printReceipt(sale, settings)
-      }, 400)
+      // Try thermal printer first; only show receipt modal if no printer found
+      const ok = await printESCPOS(sale, settings)
+      if (!ok) setReceiptOpen(true)
+    } else {
+      setReceiptOpen(true)
     }
   }
 

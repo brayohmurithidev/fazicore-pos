@@ -531,7 +531,7 @@ function GeneralTab() {
       {isAdmin && <BusinessInfoSection />}
       <Section title="POS Behaviour">
         <Toggle label="Require Cashier PIN" sub="Cashier must enter PIN to start a shift" value={settings.requirePin} onChange={(v) => patch('requirePin', v)} locked={!isAdmin} lockedReason="Admin only" />
-        <Toggle label="Print Receipt by Default" sub="Auto-open receipt after every sale" value={settings.autoPrint} onChange={(v) => patch('autoPrint', v)} locked={!isAdmin} lockedReason="Admin only" />
+        <Toggle label="Auto-print on Sale Complete" sub="Prints directly via thermal printer when a sale completes — skips the receipt popup if a printer is found" value={settings.autoPrint} onChange={(v) => patch('autoPrint', v)} locked={!isAdmin} lockedReason="Admin only" />
         <Toggle label="Low Stock Alerts" sub="Show warnings when stock is below minimum" value={settings.lowStockAlerts} onChange={(v) => patch('lowStockAlerts', v)} locked={!isAdmin} lockedReason="Admin only" />
         <Toggle label="Expiry Date Tracking" sub="Alert when products near expiry" value={settings.expiryTracking} onChange={(v) => patch('expiryTracking', v)} locked={!isAdmin} lockedReason="Admin only" />
         <Toggle label="Barcode Scanner Mode" sub="Enable barcode input field on POS screen" value={settings.barcodeMode} onChange={(v) => patch('barcodeMode', v)} locked={!isAdmin || flags.barcode_mode === false} lockedReason={!isAdmin ? 'Admin only' : 'Upgrade'} />
