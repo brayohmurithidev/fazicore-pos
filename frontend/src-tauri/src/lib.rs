@@ -420,6 +420,8 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(SyncConfigState(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             // printing

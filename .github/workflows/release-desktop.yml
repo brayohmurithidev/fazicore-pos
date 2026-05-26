@@ -107,7 +107,11 @@ jobs:
           APPLE_ID:                    ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD:              ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID:               ${{ secrets.APPLE_TEAM_ID }}
-          # Tauri updater signature (Windows + macOS)
+          # Tauri updater signature — REQUIRED for in-app updates to work.
+          # Generate once with: pnpm tauri signer generate -w ~/.tauri/fazipos.key
+          # Then add TAURI_SIGNING_PRIVATE_KEY (base64 private key) and
+          # TAURI_SIGNING_PRIVATE_KEY_PASSWORD to GitHub repo secrets.
+          # Copy the printed public key into frontend/src-tauri/tauri.conf.json → plugins.updater.pubkey
           TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
@@ -122,6 +126,9 @@ jobs:
             | macOS (Intel + Apple Silicon) | `FaziPOS_*_universal.dmg` |
             | Windows 64-bit installer | `FaziPOS_*_x64-setup.exe` |
             | Windows 64-bit MSI | `FaziPOS_*_x64_en-US.msi` |
+
+            > The app will notify users automatically when this release is published.
           releaseDraft: true      # publish manually after reviewing artefacts
           prerelease: false
+          updaterJsonKeepUniversal: true   # include all platforms in one latest.json
           args: ${{ matrix.build-args }}

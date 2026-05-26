@@ -7,6 +7,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Toaster } from '@/components/ui/Toaster'
 import { PrintPreviewModal } from '@/components/shared/PrintPreviewModal'
+import { UpdateBanner } from '@/components/shared/UpdateBanner'
 import { RoleBadge } from '@/components/shared/RoleBadge'
 import { NotificationBell } from '@/components/shared/NotificationBell'
 import { useAuthStore } from '@/stores/auth'
@@ -446,6 +447,7 @@ export function AppShell() {
       </div>
       <Toaster />
       <PrintPreviewModal />
+      <UpdateBanner />
       </div>
     </div>
   )

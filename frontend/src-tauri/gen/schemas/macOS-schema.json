@@ -2829,6 +2829,36 @@
           "markdownDescription": "Denies the version command without any pre-configured scope."
         },
         {
+          "description": "This permission set configures which\nprocess features are by default exposed.\n\n#### Granted Permissions\n\nThis enables to quit via `allow-exit` and restart via `allow-restart`\nthe application.\n\n#### This default permission set includes:\n\n- `allow-exit`\n- `allow-restart`",
+          "type": "string",
+          "const": "process:default",
+          "markdownDescription": "This permission set configures which\nprocess features are by default exposed.\n\n#### Granted Permissions\n\nThis enables to quit via `allow-exit` and restart via `allow-restart`\nthe application.\n\n#### This default permission set includes:\n\n- `allow-exit`\n- `allow-restart`"
+        },
+        {
+          "description": "Enables the exit command without any pre-configured scope.",
+          "type": "string",
+          "const": "process:allow-exit",
+          "markdownDescription": "Enables the exit command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the restart command without any pre-configured scope.",
+          "type": "string",
+          "const": "process:allow-restart",
+          "markdownDescription": "Enables the restart command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the exit command without any pre-configured scope.",
+          "type": "string",
+          "const": "process:deny-exit",
+          "markdownDescription": "Denies the exit command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the restart command without any pre-configured scope.",
+          "type": "string",
+          "const": "process:deny-restart",
+          "markdownDescription": "Denies the restart command without any pre-configured scope."
+        },
+        {
           "description": "# Tauri `serialport` default permissions\n\nThis configuration file defines the default permissions granted\nto the serialport.\n\n### Granted Permissions\n\nThis default permission set enables all read-related commands and\nallows access to the `$APP` folder and sub directories created in it.\nThe location of the `$APP` folder depends on the operating system,\nwhere the application is run.\n\nIn general the `$APP` folder needs to be manually created\nby the application at runtime, before accessing files or folders\nin it is possible.\n\n### Denied Permissions\n\nThis default permission set prevents access to critical components\nof the Tauri application by default.\nOn Windows the webview data folder access is denied.\n\n\n#### This default permission set includes:\n\n- `allow-managed-ports`\n- `allow-available-ports`\n- `allow-available-ports-direct`\n- `allow-cancel-read`\n- `allow-close`\n- `allow-close-all`\n- `allow-force-close`\n- `allow-open`\n- `allow-read`\n- `allow-write`\n- `allow-write-binary`\n- `allow-start-listening`\n- `allow-stop-listening`\n- `allow-available-ports`\n- `allow-available-ports-direct`\n- `allow-bytes-to-read`\n- `allow-bytes-to-write`\n- `allow-cancel-read`\n- `allow-clear-break`\n- `allow-clear-buffer`\n- `allow-close`\n- `allow-close-all`\n- `allow-force-close`\n- `allow-managed-ports`\n- `allow-open`\n- `allow-read`\n- `allow-read-binary`\n- `allow-read-carrier-detect`\n- `allow-read-cd`\n- `allow-read-clear-to-send`\n- `allow-read-cts`\n- `allow-read-data-set-ready`\n- `allow-read-dsr`\n- `allow-read-dtr`\n- `allow-read-ri`\n- `allow-read-ring-indicator`\n- `allow-set-baud-rate`\n- `allow-set-break`\n- `allow-set-data-bits`\n- `allow-set-flow-control`\n- `allow-set-parity`\n- `allow-set-stop-bits`\n- `allow-set-timeout`\n- `allow-start-listening`\n- `allow-stop-listening`\n- `allow-write`\n- `allow-write-binary`\n- `allow-write-data-terminal-ready`\n- `allow-write-dtr`\n- `allow-write-request-to-send`\n- `allow-write-rts`\n- `allow-set-log-level`\n- `allow-get-log-level`",
           "type": "string",
           "const": "serialplugin:default",
@@ -3553,6 +3583,60 @@
           "type": "string",
           "const": "store:deny-values",
           "markdownDescription": "Denies the values command without any pre-configured scope."
+        },
+        {
+          "description": "This permission set configures which kind of\nupdater functions are exposed to the frontend.\n\n#### Granted Permissions\n\nThe full workflow from checking for updates to installing them\nis enabled.\n\n\n#### This default permission set includes:\n\n- `allow-check`\n- `allow-download`\n- `allow-install`\n- `allow-download-and-install`",
+          "type": "string",
+          "const": "updater:default",
+          "markdownDescription": "This permission set configures which kind of\nupdater functions are exposed to the frontend.\n\n#### Granted Permissions\n\nThe full workflow from checking for updates to installing them\nis enabled.\n\n\n#### This default permission set includes:\n\n- `allow-check`\n- `allow-download`\n- `allow-install`\n- `allow-download-and-install`"
+        },
+        {
+          "description": "Enables the check command without any pre-configured scope.",
+          "type": "string",
+          "const": "updater:allow-check",
+          "markdownDescription": "Enables the check command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the download command without any pre-configured scope.",
+          "type": "string",
+          "const": "updater:allow-download",
+          "markdownDescription": "Enables the download command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the download_and_install command without any pre-configured scope.",
+          "type": "string",
+          "const": "updater:allow-download-and-install",
+          "markdownDescription": "Enables the download_and_install command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the install command without any pre-configured scope.",
+          "type": "string",
+          "const": "updater:allow-install",
+          "markdownDescription": "Enables the install command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the check command without any pre-configured scope.",
+          "type": "string",
+          "const": "updater:deny-check",
+          "markdownDescription": "Denies the check command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the download command without any pre-configured scope.",
+          "type": "string",
+          "const": "updater:deny-download",
+          "markdownDescription": "Denies the download command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the download_and_install command without any pre-configured scope.",
+          "type": "string",
+          "const": "updater:deny-download-and-install",
+          "markdownDescription": "Denies the download_and_install command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the install command without any pre-configured scope.",
+          "type": "string",
+          "const": "updater:deny-install",
+          "markdownDescription": "Denies the install command without any pre-configured scope."
         },
         {
           "description": "This permission set configures what kind of\noperations are available from the window state plugin.\n\n#### Granted Permissions\n\nAll operations are enabled by default.\n\n\n#### This default permission set includes:\n\n- `allow-filename`\n- `allow-restore-state`\n- `allow-save-window-state`",
