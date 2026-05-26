@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Phone, User, CheckCircle2, XCircle, RefreshCw, Wifi } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -321,6 +321,25 @@ export function PaymentModal({ open, onClose, total, onComplete, settings }: Pro
     if (tx.amount !== total) setMpesaCashStr(String(total - tx.amount))
     setShowPicker(false)
   }
+
+  // Keep stable refs so the keydown handler always sees the latest values
+  const canProceedRef = useRef(canProceed)
+  canProceedRef.current = canProceed
+  const handleChargeRef = useRef(handleCharge)
+  handleChargeRef.current = handleCharge
+
+  useEffect(() => {
+    if (!open || stkOpen || showPicker) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        if (canProceedRef.current()) handleChargeRef.current()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [open, stkOpen, showPicker])
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>

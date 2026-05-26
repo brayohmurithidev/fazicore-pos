@@ -1,3 +1,4 @@
+import { useEffect, useCallback } from 'react'
 import { Delete } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -9,12 +10,25 @@ interface NumpadProps {
 const KEYS = ['7','8','9','4','5','6','1','2','3','.','0','del']
 
 export function Numpad({ value, onChange }: NumpadProps) {
-  const press = (k: string) => {
+  const press = useCallback((k: string) => {
     if (k === 'del') { onChange(value.slice(0, -1)); return }
     if (value.includes('.') && k === '.') return
     if (value === '0' && k !== '.') { onChange(k); return }
     onChange(value + k)
-  }
+  }, [value, onChange])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Don't steal from real text inputs
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      if (e.key >= '0' && e.key <= '9') { e.preventDefault(); press(e.key) }
+      else if (e.key === '.') { e.preventDefault(); press('.') }
+      else if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); press('del') }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [press])
 
   return (
     <div>
