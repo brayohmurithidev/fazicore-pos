@@ -38,6 +38,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useFeature } from '@/hooks/useFeature'
 import { fmtKES } from '@/lib/data'
 import { resolveImageUrl } from '@/lib/api'
+import { useTauriFileDrop } from '@/hooks/useTauriFileDrop'
 import type { ApiProduct, ApiCategory, ApiPurchaseOrder, ApiInventoryItem, ApiSupplier, TransferStatus, ReorderUrgency, AgingBucket } from '@/types/api'
 
 // ── Utilities ─────────────────────────────────────────────────────────────
@@ -375,6 +376,10 @@ function ProductFormModal({ open, onClose, initial, categories, allProducts, isP
     setImagePreview(URL.createObjectURL(file))
   }
 
+  // Tauri: listens to OS-level file drops (from Finder/Explorer). The standard
+  // HTML5 onDrop below handles web/browser drag-and-drop as a fallback.
+  const { isDragging: tauriDragging } = useTauriFileDrop(open && !!hasProductImages, applyImageFile)
+
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) applyImageFile(file)
@@ -568,6 +573,7 @@ function ProductFormModal({ open, onClose, initial, categories, allProducts, isP
               const localPreview = imagePreview
               const storedUrl = !imageUrlBroken ? resolveImageUrl(initial?.image_url) : null
               const hasImage = !!(localPreview || storedUrl)
+              const isDropActive = imageDragging || tauriDragging
               return (
                 <div
                   onClick={() => imageInputRef.current?.click()}
@@ -576,7 +582,7 @@ function ProductFormModal({ open, onClose, initial, categories, allProducts, isP
                   onDragLeave={() => setImageDragging(false)}
                   onDrop={handleDrop}
                   className={`relative w-full rounded-xl border-2 border-dashed cursor-pointer transition-all overflow-hidden
-                    ${imageDragging
+                    ${isDropActive
                       ? 'border-amber-400 bg-amber-50 scale-[1.01]'
                       : hasImage
                         ? 'border-gray-200 hover:border-gray-400'
@@ -608,12 +614,12 @@ function ProductFormModal({ open, onClose, initial, categories, allProducts, isP
                     </>
                   ) : (
                     <div className="flex flex-col items-center justify-center py-6 gap-1.5 pointer-events-none select-none">
-                      {imageDragging
+                      {isDropActive
                         ? <Package size={28} className="text-amber-400" />
                         : <Package size={28} className="text-gray-300" />
                       }
                       <span className="text-xs font-medium text-gray-500">
-                        {imageDragging ? 'Drop to upload' : 'Click or drag & drop'}
+                        {isDropActive ? 'Drop to upload' : 'Click or drag & drop'}
                       </span>
                       <span className="text-[11px] text-gray-400">JPEG, PNG, WebP · max 5 MB</span>
                     </div>
