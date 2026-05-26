@@ -81,6 +81,16 @@ jobs:
         run: pnpm install --frozen-lockfile
         working-directory: frontend
 
+      # Write the production .env so Vite bakes the live API URL into the bundle.
+      # Override via GitHub repository variables if the URL ever changes.
+      - name: Write production .env
+        shell: bash
+        run: |
+          cat > frontend/.env.production << 'EOF'
+          VITE_API_URL=${{ vars.VITE_API_URL || 'https://fazistore-api.fazilabs.com' }}
+          VITE_MINIO_PUBLIC_URL=${{ vars.VITE_MINIO_PUBLIC_URL || 'https://fazistore-api.fazilabs.com/' }}
+          EOF
+
       # ── Build + publish ─────────────────────────────────────────────────────
       # The action compiles Rust, bundles the frontend, and uploads artefacts
       # to a (draft) GitHub Release for the given tag.
