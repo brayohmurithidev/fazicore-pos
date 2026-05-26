@@ -42,14 +42,11 @@ export function buildCSV(headers: string[], rows: (string | number)[][]): string
   return [headers.map(escape).join(','), ...rows.map((r) => r.map(escape).join(','))].join('\n')
 }
 
-export async function openPrintHtml(html: string) {
+export async function openPrintHtml(html: string, filename = 'document') {
   if (isTauri) {
-    try {
-      const { invoke } = await import('@tauri-apps/api/core')
-      await invoke('open_html_preview', { html })
-    } catch (e) {
-      toast.error(`Print failed: ${e instanceof Error ? e.message : String(e)}`)
-    }
+    // Show in-app preview with Print + Download toolbar (no external browser needed)
+    const { usePrintPreviewStore } = await import('@/stores/printPreview')
+    usePrintPreviewStore.getState().show(html, filename)
   } else {
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
     const url = URL.createObjectURL(blob)

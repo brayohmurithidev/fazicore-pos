@@ -197,7 +197,8 @@ async function _printReceipt(sale: SaleInfo, settings: Settings) {
 </html>`
 
   if (isTauri) {
-    await openPrintHtml(html)
+    const label = isCredit ? `Invoice-${sale.id}` : `Receipt-${sale.id}`
+    await openPrintHtml(html, label)
   } else {
     win!.document.write(html)
     win!.document.close()

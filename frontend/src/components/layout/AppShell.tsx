@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Toaster } from '@/components/ui/Toaster'
+import { PrintPreviewModal } from '@/components/shared/PrintPreviewModal'
 import { RoleBadge } from '@/components/shared/RoleBadge'
 import { NotificationBell } from '@/components/shared/NotificationBell'
 import { useAuthStore } from '@/stores/auth'
@@ -444,6 +445,7 @@ export function AppShell() {
         </main>
       </div>
       <Toaster />
+      <PrintPreviewModal />
       </div>
     </div>
   )
