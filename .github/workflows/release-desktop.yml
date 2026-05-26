@@ -1,0 +1,127 @@
+name: Release Desktop
+
+# ── Triggers ──────────────────────────────────────────────────────────────────
+# 1. Push a tag:  git tag v1.2.0 && git push origin v1.2.0
+# 2. Manual run:  Actions → Release Desktop → Run workflow → enter version
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release — must match version in frontend/src-tauri/tauri.conf.json (e.g. 1.2.0)'
+        required: true
+
+permissions:
+  contents: write   # needed to create GitHub Releases
+
+jobs:
+  build-release:
+    name: Build (${{ matrix.platform }})
+    strategy:
+      fail-fast: false   # don't cancel the other platform if one fails
+      matrix:
+        include:
+          # ── macOS universal binary (Intel + Apple Silicon) ─────────────────
+          - platform: macos-latest
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+            build-args: --target universal-apple-darwin
+
+          # ── Windows x64 ────────────────────────────────────────────────────
+          - platform: windows-latest
+            rust-targets: ''
+            build-args: ''
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      # ── Source ──────────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Compute release tag ─────────────────────────────────────────────────
+      # On tag push → use the pushed tag.
+      # On manual dispatch → construct from the version input.
+      - name: Resolve tag
+        id: tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "value=v${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── Toolchain ───────────────────────────────────────────────────────────
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '10'
+
+      - name: Setup Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - name: Rust build cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: frontend/src-tauri -> target
+
+      # ── Linux system deps (not needed here, kept as reference if added later)
+
+      # ── Frontend ────────────────────────────────────────────────────────────
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: frontend
+
+      # ── Build + publish ─────────────────────────────────────────────────────
+      # The action compiles Rust, bundles the frontend, and uploads artefacts
+      # to a (draft) GitHub Release for the given tag.
+      #
+      # macOS code signing / notarisation (all optional — unsigned if not set):
+      #   APPLE_CERTIFICATE          base64-encoded .p12 export
+      #   APPLE_CERTIFICATE_PASSWORD p12 export password
+      #   APPLE_SIGNING_IDENTITY     e.g. "Developer ID Application: Fazilabs (TEAMID)"
+      #   APPLE_ID                   Apple ID email used for notarisation
+      #   APPLE_PASSWORD             App-specific password for that Apple ID
+      #   APPLE_TEAM_ID              10-character team ID
+      #
+      # Windows code signing (optional):
+      #   TAURI_SIGNING_PRIVATE_KEY          base64-encoded updater signing key
+      #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD updater signing key password
+      - name: Build & release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS signing (no-op when secrets are absent)
+          APPLE_CERTIFICATE:           ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD:  ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY:      ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID:                    ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD:              ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID:               ${{ secrets.APPLE_TEAM_ID }}
+          # Tauri updater signature (Windows + macOS)
+          TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: frontend
+          tagName:      ${{ steps.tag.outputs.value }}
+          releaseName:  'FaziPOS v__VERSION__'
+          releaseBody: |
+            ## FaziPOS __VERSION__
+
+            | Platform | File |
+            |----------|------|
+            | macOS (Intel + Apple Silicon) | `FaziPOS_*_universal.dmg` |
+            | Windows 64-bit installer | `FaziPOS_*_x64-setup.exe` |
+            | Windows 64-bit MSI | `FaziPOS_*_x64_en-US.msi` |
+          releaseDraft: true      # publish manually after reviewing artefacts
+          prerelease: false
+          args: ${{ matrix.build-args }}
