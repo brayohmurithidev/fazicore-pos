@@ -5,6 +5,7 @@ import { Printer, MessageSquare, Loader2 } from 'lucide-react'
 import { useSettingsStore } from '@/stores/settings'
 import { printReceipt } from '@/lib/print'
 import { printESCPOS } from '@/lib/escpos'
+import { isTauri } from '@/hooks/useTauri'
 import type { SaleInfo } from '@/types'
 
 interface Props {
@@ -21,8 +22,13 @@ export function ReceiptModal({ open, onClose, sale }: Props) {
     if (!sale) return
     setPrinting(true)
     try {
-      const ok = await printESCPOS(sale, settings)
-      if (!ok) printReceipt(sale, settings)
+      if (isTauri) {
+        printReceipt(sale, settings)
+        printESCPOS(sale, settings).catch(() => {})
+      } else {
+        const ok = await printESCPOS(sale, settings)
+        if (!ok) printReceipt(sale, settings)
+      }
     } catch {
       printReceipt(sale, settings)
     } finally {

@@ -15,6 +15,7 @@ import { toast } from '@/lib/toast'
 import { printReceipt } from '@/lib/print'
 import { printESCPOS } from '@/lib/escpos'
 import { useSettingsStore } from '@/stores/settings'
+import { isTauri } from '@/hooks/useTauri'
 import type { ApiOrder, ApiPaymentMethod } from '@/types/api'
 import type { SaleInfo } from '@/types'
 
@@ -543,11 +544,19 @@ export function SalesPage() {
 
   async function handleReprint(order: ApiOrder) {
     const sale = orderToSaleInfo(order)
-    try {
-      const ok = await printESCPOS(sale, settings)
-      if (!ok) printReceipt(sale, settings)
-    } catch {
+    if (isTauri) {
+      // Always show the in-app preview so there's always something visible.
+      // Attempt ESC/POS concurrently — succeeds silently if a thermal printer
+      // is connected, fails silently if not.
       printReceipt(sale, settings)
+      printESCPOS(sale, settings).catch(() => {})
+    } else {
+      try {
+        const ok = await printESCPOS(sale, settings)
+        if (!ok) printReceipt(sale, settings)
+      } catch {
+        printReceipt(sale, settings)
+      }
     }
   }
 
