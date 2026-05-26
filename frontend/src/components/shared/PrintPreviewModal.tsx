@@ -11,14 +11,31 @@ function parseTitle(html: string): string {
   return html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim() ?? ''
 }
 
-/** Parse @page { size: ... } → [widthMm, heightMm]. Height 0 = auto (receipts). */
-function detectPageSize(html: string): [number, number] {
-  const m = html.match(/@page\s*\{[^}]*size:\s*([^;}\n]+)/i)
-  const s = m?.[1]?.trim().toLowerCase() ?? ''
-  if (s.includes('58mm'))  return [58, 0]
-  if (s.includes('80mm'))  return [80, 0]
-  if (s.includes('a5'))    return [148, 210]
-  return [210, 297]
+interface PageMetrics {
+  wMm: number       // full page width
+  hMm: number       // full page height (0 = auto/receipt)
+  mTopMm: number    // top & bottom margin
+  mSideMm: number   // left & right margin
+}
+
+/** Parse @page { size: ...; margin: ... } from the HTML. */
+function detectPageMetrics(html: string): PageMetrics {
+  const block = html.match(/@page\s*\{([^}]+)\}/i)?.[1] ?? ''
+
+  const s = (block.match(/size:\s*([^;}\n]+)/i)?.[1] ?? '').trim().toLowerCase()
+  let wMm = 210, hMm = 297
+  if (s.includes('58mm')) { wMm = 58;  hMm = 0 }
+  else if (s.includes('80mm')) { wMm = 80;  hMm = 0 }
+  else if (s.includes('a5'))   { wMm = 148; hMm = 210 }
+
+  // margin: "12mm 15mm" → top=12 side=15  |  "2mm 3mm" → top=2 side=3
+  const parts = (block.match(/margin:\s*([^;}\n]+)/i)?.[1] ?? '')
+    .match(/[\d.]+/g)?.map(Number) ?? []
+  const isReceipt = wMm < 150
+  const mTopMm  = parts[0] ?? (isReceipt ? 2  : 12)
+  const mSideMm = parts[1] ?? parts[0] ?? (isReceipt ? 3  : 15)
+
+  return { wMm, hMm, mTopMm, mSideMm }
 }
 
 /** Render html in a hidden same-width iframe and return an html2canvas Canvas. */
@@ -87,39 +104,44 @@ export function PrintPreviewModal() {
       const { default: jsPDF } = await import('jspdf')
 
       const SCALE = 2
-      const [pageWmm, pageHmm] = detectPageSize(html)
+      const { wMm: pageWmm, hMm: pageHmm, mTopMm, mSideMm } = detectPageMetrics(html)
       const isReceipt = pageWmm < 150
 
-      // Render at exactly the right paper width (no stretch)
-      const paperWidthPx = Math.round(pageWmm * PX_PER_MM)
-      const canvas = await renderToCanvas(html, paperWidthPx, SCALE)
+      // Render at content width (page minus side margins) so html2canvas
+      // captures exactly what fits between the margins — no @page margin support.
+      const contentWmm   = pageWmm - mSideMm * 2
+      const contentWpx   = Math.round(contentWmm * PX_PER_MM)
+      const canvas       = await renderToCanvas(html, contentWpx, SCALE)
 
       // Pixel → mm conversion (canvas is at SCALE×)
       const scaledPxPerMm = PX_PER_MM * SCALE
-      const imgWmm = canvas.width  / scaledPxPerMm   // should equal pageWmm
+      const imgWmm = canvas.width  / scaledPxPerMm   // ≈ contentWmm
       const imgHmm = canvas.height / scaledPxPerMm
 
       if (isReceipt) {
-        // Single tall page matching content height exactly
-        const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [imgWmm, imgHmm] })
-        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, imgWmm, imgHmm)
+        // Single tall page: content height + top + bottom margins
+        const pgH = imgHmm + mTopMm * 2
+        const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [pageWmm, pgH] })
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', mSideMm, mTopMm, imgWmm, imgHmm)
         await savePdf(pdf, `${safeBase}.pdf`)
       } else {
-        // A4 (or A5): break content into pages
+        // A4 (or A5): break content into pages, offset image by margins
         const pgH = pageHmm > 0 ? pageHmm : 297
-        const pdf  = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [pageWmm, pgH] })
-        const pageHeightPx = pgH * scaledPxPerMm
+        const contentHmm    = pgH - mTopMm * 2
+        const contentHpx    = contentHmm * scaledPxPerMm
+        const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [pageWmm, pgH] })
         let yPx = 0, pageIdx = 0
 
         while (yPx < canvas.height) {
           if (pageIdx > 0) pdf.addPage([pageWmm, pgH])
-          const sliceHpx  = Math.min(pageHeightPx, canvas.height - yPx)
+          const sliceHpx    = Math.min(contentHpx, canvas.height - yPx)
           const sliceCanvas = document.createElement('canvas')
           sliceCanvas.width  = canvas.width
-          sliceCanvas.height = sliceHpx
+          sliceCanvas.height = Math.ceil(sliceHpx)
           sliceCanvas.getContext('2d')!.drawImage(canvas, 0, -yPx)
-          pdf.addImage(sliceCanvas.toDataURL('image/png'), 'PNG', 0, 0, pageWmm, sliceHpx / scaledPxPerMm)
-          yPx += pageHeightPx
+          const sliceHmm = sliceHpx / scaledPxPerMm
+          pdf.addImage(sliceCanvas.toDataURL('image/png'), 'PNG', mSideMm, mTopMm, imgWmm, sliceHmm)
+          yPx += contentHpx
           pageIdx++
         }
         await savePdf(pdf, `${safeBase}.pdf`)
