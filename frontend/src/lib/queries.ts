@@ -780,6 +780,44 @@ export function useAdjustPrice() {
   })
 }
 
+// ── Product Units ─────────────────────────────────────────────────────────
+
+export function useProductUnits(productId: number | null) {
+  return useQuery<ApiProductUnit[]>({
+    queryKey: ['product-units', productId],
+    queryFn: () => api.get(`/products/${productId}/units`).then((r) => r.data),
+    enabled: productId !== null,
+    staleTime: 30_000,
+  })
+}
+
+export function useCreateProductUnit() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ productId, data }: { productId: number; data: Partial<ApiProductUnit> }) =>
+      api.post(`/products/${productId}/units`, data).then((r) => r.data),
+    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: ['product-units', v.productId] }),
+  })
+}
+
+export function useUpdateProductUnit() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ productId, unitId, data }: { productId: number; unitId: number; data: Partial<ApiProductUnit> }) =>
+      api.patch(`/products/${productId}/units/${unitId}`, data).then((r) => r.data),
+    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: ['product-units', v.productId] }),
+  })
+}
+
+export function useDeleteProductUnit() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ productId, unitId }: { productId: number; unitId: number }) =>
+      api.delete(`/products/${productId}/units/${unitId}`).then((r) => r.data),
+    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: ['product-units', v.productId] }),
+  })
+}
+
 // ── Customers ─────────────────────────────────────────────────────────────
 
 export function useCustomers(q?: string) {

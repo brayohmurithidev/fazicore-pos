@@ -30,6 +30,7 @@ import {
   useStockTransfers, useInitiateTransfer, useTransferAction, useUploadProductImage,
   useReorderSuggestions, useInventoryAging, usePermissions, useBulkCreateProducts,
   useAdjustPrice, usePriceHistory, type ApiPriceHistory,
+  useProductUnits, useCreateProductUnit, useUpdateProductUnit, useDeleteProductUnit,
 } from '@/lib/queries'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
@@ -39,7 +40,7 @@ import { useFeature } from '@/hooks/useFeature'
 import { fmtKES } from '@/lib/data'
 import { resolveImageUrl } from '@/lib/api'
 import { useTauriFileDrop } from '@/hooks/useTauriFileDrop'
-import type { ApiProduct, ApiCategory, ApiPurchaseOrder, ApiInventoryItem, ApiSupplier, TransferStatus, ReorderUrgency, AgingBucket } from '@/types/api'
+import type { ApiProduct, ApiCategory, ApiPurchaseOrder, ApiInventoryItem, ApiSupplier, TransferStatus, ReorderUrgency, AgingBucket, ApiProductUnit } from '@/types/api'
 
 // ── Utilities ─────────────────────────────────────────────────────────────
 
@@ -847,6 +848,124 @@ function PriceAdjustModal({ product, open, onClose }: {
   )
 }
 
+const BLANK_UNIT = { name: '', abbreviation: '', conversion_factor: '', price: '', barcode: '', sku: '' }
+
+function ProductUnitsSection({ product, canManage }: { product: ApiProduct; canManage: boolean }) {
+  const { data: units = [], isLoading } = useProductUnits(product.id)
+  const createUnit = useCreateProductUnit()
+  const deleteUnit = useDeleteProductUnit()
+  const [adding, setAdding] = useState(false)
+  const [form, setForm] = useState(BLANK_UNIT)
+  const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }))
+
+  const handleAdd = async () => {
+    if (!form.name || !form.conversion_factor) return
+    await createUnit.mutateAsync({
+      productId: product.id,
+      data: {
+        name: form.name.trim(),
+        abbreviation: form.abbreviation.trim() || null,
+        conversion_factor: parseFloat(form.conversion_factor) || 1,
+        price: form.price ? parseFloat(form.price) : null,
+        barcode: form.barcode.trim() || null,
+        sku: form.sku.trim() || null,
+      } as Partial<ApiProductUnit>,
+    })
+    setForm(BLANK_UNIT)
+    setAdding(false)
+  }
+
+  return (
+    <div className="px-5 py-4 border-b border-gray-100">
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Selling Units</div>
+        {canManage && !adding && (
+          <button onClick={() => setAdding(true)} className="text-[11px] font-semibold text-gray-500 hover:text-gray-900 flex items-center gap-0.5 transition-colors">
+            <Plus size={11} />Add unit
+          </button>
+        )}
+      </div>
+
+      {/* Base unit row */}
+      <div className="flex items-center justify-between py-1.5 text-sm">
+        <div className="flex items-center gap-2">
+          <span className="text-gray-700 font-medium">{product.unit}</span>
+          <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-medium">base</span>
+        </div>
+        <span className="text-gray-500 text-xs">{fmtKES(product.price)}</span>
+      </div>
+
+      {/* Additional units */}
+      {isLoading ? (
+        <div className="h-6 bg-gray-100 rounded animate-pulse mt-1" />
+      ) : (
+        units.map((u) => (
+          <div key={u.id} className="flex items-center justify-between py-1.5 text-sm border-t border-gray-50">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-gray-700 font-medium">{u.name}</span>
+              {u.abbreviation && <span className="text-[10px] text-gray-400">({u.abbreviation})</span>}
+              <span className="text-[10px] text-gray-400">×{u.conversion_factor} {product.unit}</span>
+              {u.barcode && <span className="text-[10px] text-gray-300 font-mono truncate max-w-[60px]">{u.barcode}</span>}
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <span className="text-gray-500 text-xs">{fmtKES(u.price ?? product.price * u.conversion_factor)}</span>
+              {canManage && (
+                <button
+                  onClick={() => { if (window.confirm(`Remove unit "${u.name}"?`)) deleteUnit.mutate({ productId: product.id, unitId: u.id }) }}
+                  className="text-gray-300 hover:text-red-500 p-0.5 transition-colors"
+                >
+                  <Trash2 size={12} />
+                </button>
+              )}
+            </div>
+          </div>
+        ))
+      )}
+
+      {/* Inline add form */}
+      {adding && (
+        <div className="mt-3 border border-gray-200 rounded-xl p-3 bg-gray-50 space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] text-gray-500 font-medium mb-1 block">Unit name *</label>
+              <Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Crate" className="h-7 text-xs" />
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-500 font-medium mb-1 block">Abbrev.</label>
+              <Input value={form.abbreviation} onChange={(e) => set('abbreviation', e.target.value)} placeholder="crt" className="h-7 text-xs" />
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-500 font-medium mb-1 block">Factor * (how many {product.unit}s)</label>
+              <Input type="number" value={form.conversion_factor} onChange={(e) => set('conversion_factor', e.target.value)} placeholder="24" className="h-7 text-xs" />
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-500 font-medium mb-1 block">Sell price (blank = auto)</label>
+              <Input type="number" value={form.price} onChange={(e) => set('price', e.target.value)} placeholder={form.conversion_factor ? String(product.price * (parseFloat(form.conversion_factor) || 1)) : ''} className="h-7 text-xs" />
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-500 font-medium mb-1 block">Barcode</label>
+              <Input value={form.barcode} onChange={(e) => set('barcode', e.target.value)} placeholder="optional" className="h-7 text-xs" />
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-500 font-medium mb-1 block">SKU</label>
+              <Input value={form.sku} onChange={(e) => set('sku', e.target.value)} placeholder="optional" className="h-7 text-xs" />
+            </div>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <Button size="sm" className="flex-1 h-7 text-xs" disabled={!form.name || !form.conversion_factor || createUnit.isPending} onClick={handleAdd}>
+              {createUnit.isPending && <Loader2 size={11} className="animate-spin mr-1" />}
+              Save unit
+            </Button>
+            <Button size="sm" variant="outline" className="h-7 text-xs px-3" onClick={() => { setAdding(false); setForm(BLANK_UNIT) }}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ProductDetailPane({ product, categories, onClose, onEdit, onAdjust, onDelete, canManage = true, isAdmin = false }: {
   product: ApiProduct
   categories: ApiCategory[]
@@ -995,6 +1114,9 @@ function ProductDetailPane({ product, categories, onClose, onEdit, onAdjust, onD
             </div>
           </div>
         )}
+
+        {/* Units */}
+        <ProductUnitsSection product={product} canManage={canManage} />
 
         {/* Price history */}
         {priceHistory.length > 0 && (
