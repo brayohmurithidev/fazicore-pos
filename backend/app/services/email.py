@@ -60,85 +60,84 @@ async def send_welcome_email(
     html = f"""
 <!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:Inter,Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 0;">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#111827;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;padding:48px 24px;">
     <tr><td align="center">
-      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.08);">
+      <table width="520" cellpadding="0" cellspacing="0" style="max-width:520px;width:100%;">
 
-        <!-- Header -->
+        <!-- Logo / wordmark -->
         <tr>
-          <td style="background:#111827;padding:32px 40px;">
-            <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.3px;">Fazi POS</p>
-            <p style="margin:6px 0 0;font-size:13px;color:#9ca3af;">Point of Sale &amp; Business Management</p>
+          <td style="padding-bottom:36px;">
+            <span style="font-size:18px;font-weight:700;color:#111827;letter-spacing:-0.3px;">Fazi <span style="color:#D97706;">POS</span></span>
           </td>
         </tr>
 
-        <!-- Body -->
+        <!-- Heading -->
         <tr>
-          <td style="padding:36px 40px 28px;">
-            <p style="margin:0 0 8px;font-size:20px;font-weight:700;color:#111827;">Welcome, {org_name}! 🎉</p>
-            <p style="margin:0 0 24px;font-size:14px;color:#6b7280;line-height:1.6;">
-              Your Fazi POS account has been set up and is ready to use.
-              Here are the details you'll need to get started.
-            </p>
+          <td style="padding-bottom:16px;">
+            <p style="margin:0;font-size:24px;font-weight:700;color:#111827;line-height:1.3;">Welcome, {org_name}</p>
+          </td>
+        </tr>
 
-            <!-- Details box -->
-            <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:28px;">
+        <!-- Body text -->
+        <tr>
+          <td style="padding-bottom:32px;">
+            <p style="margin:0;font-size:15px;color:#6b7280;line-height:1.7;">
+              Your account is ready. Here are the details you need to get started.
+            </p>
+          </td>
+        </tr>
+
+        <!-- Details -->
+        <tr>
+          <td style="padding-bottom:32px;border-top:1px solid #f3f4f6;border-bottom:1px solid #f3f4f6;">
+            <table width="100%" cellpadding="0" cellspacing="0">
               <tr>
-                <td style="padding:20px 24px;">
-                  <p style="margin:0 0 12px;font-size:12px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;">Your Account Details</p>
-                  <table width="100%" cellpadding="0" cellspacing="0">
-                    <tr>
-                      <td style="padding:6px 0;font-size:13px;color:#6b7280;width:120px;">Business name</td>
-                      <td style="padding:6px 0;font-size:13px;font-weight:600;color:#111827;">{org_name}</td>
-                    </tr>
-                    <tr>
-                      <td style="padding:6px 0;font-size:13px;color:#6b7280;">Your slug</td>
-                      <td style="padding:6px 0;font-size:15px;font-weight:700;color:#111827;letter-spacing:0.5px;font-family:monospace;">{slug}</td>
-                    </tr>
-                    <tr>
-                      <td style="padding:6px 0;font-size:13px;color:#6b7280;">Plan</td>
-                      <td style="padding:6px 0;">
-                        <span style="display:inline-block;background:#111827;color:#ffffff;font-size:11px;font-weight:700;padding:2px 10px;border-radius:20px;letter-spacing:0.3px;">{plan_label}</span>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="padding:6px 0;font-size:13px;color:#6b7280;">Web app</td>
-                      <td style="padding:6px 0;font-size:13px;"><a href="{webapp_url}" style="color:#2563eb;text-decoration:none;">{webapp_url}</a></td>
-                    </tr>
-                  </table>
-                </td>
+                <td style="padding:14px 0 0;font-size:12px;color:#9ca3af;width:130px;vertical-align:top;">Business</td>
+                <td style="padding:14px 0 0;font-size:14px;font-weight:600;color:#111827;">{org_name}</td>
+              </tr>
+              <tr>
+                <td style="padding:10px 0 0;font-size:12px;color:#9ca3af;vertical-align:top;">Slug</td>
+                <td style="padding:10px 0 0;font-size:15px;font-weight:700;color:#111827;font-family:monospace;letter-spacing:0.5px;">{slug}</td>
+              </tr>
+              <tr>
+                <td style="padding:10px 0 0;font-size:12px;color:#9ca3af;vertical-align:top;">Plan</td>
+                <td style="padding:10px 0 0;font-size:13px;font-weight:600;color:#D97706;">{plan_label}</td>
+              </tr>
+              <tr>
+                <td style="padding:10px 0 14px;font-size:12px;color:#9ca3af;vertical-align:top;">Web app</td>
+                <td style="padding:10px 0 14px;font-size:13px;"><a href="{webapp_url}" style="color:#D97706;text-decoration:none;">{webapp_url}</a></td>
               </tr>
             </table>
+          </td>
+        </tr>
 
-            <!-- CTA -->
-            <table cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
-              <tr>
-                <td style="background:#111827;border-radius:8px;">
-                  <a href="{login_url}" style="display:inline-block;padding:13px 28px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">
-                    Open Fazi POS →
-                  </a>
-                </td>
-              </tr>
-            </table>
+        <!-- CTA -->
+        <tr>
+          <td style="padding-top:32px;padding-bottom:32px;">
+            <a href="{login_url}" style="display:inline-block;background:#D97706;color:#ffffff;font-size:14px;font-weight:600;padding:12px 28px;border-radius:6px;text-decoration:none;letter-spacing:0.1px;">
+              Open Fazi POS
+            </a>
+          </td>
+        </tr>
 
-            <p style="margin:0 0 6px;font-size:13px;color:#6b7280;line-height:1.6;">
-              <strong style="color:#374151;">Your slug is your key.</strong>
-              When you log in, enter <code style="background:#f3f4f6;padding:2px 5px;border-radius:4px;font-size:12px;">{slug}</code> as your organisation identifier.
-            </p>
-            <p style="margin:0;font-size:13px;color:#9ca3af;line-height:1.6;">
-              Desktop and mobile apps are coming soon — we'll send another email when they're available.
+        <!-- Note -->
+        <tr>
+          <td style="padding-bottom:48px;">
+            <p style="margin:0;font-size:13px;color:#9ca3af;line-height:1.7;">
+              Use <strong style="color:#6b7280;">{slug}</strong> as your organisation identifier when signing in.<br>
+              Desktop and mobile apps are coming soon.
             </p>
           </td>
         </tr>
 
         <!-- Footer -->
         <tr>
-          <td style="padding:20px 40px;border-top:1px solid #f3f4f6;">
-            <p style="margin:0;font-size:12px;color:#9ca3af;">
-              Fazi POS &nbsp;·&nbsp; Powered by Fazi Labs<br>
-              If you didn't expect this email, please ignore it.
+          <td style="border-top:1px solid #f3f4f6;padding-top:24px;">
+            <p style="margin:0;font-size:12px;color:#d1d5db;line-height:1.6;">
+              Fazi POS &nbsp;&middot;&nbsp; Fazi Labs &nbsp;&middot;&nbsp;
+              If you didn't expect this, you can ignore it.
             </p>
           </td>
         </tr>
