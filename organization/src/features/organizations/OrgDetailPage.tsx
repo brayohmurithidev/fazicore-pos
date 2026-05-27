@@ -213,6 +213,64 @@ function DeleteUserModal({ orgId, user, onClose }: { orgId: string; user: OrgUse
   )
 }
 
+// ── Delete org ─────────────────────────────────────────────────────────────────
+
+function DeleteOrgModal({ org, onClose }: { org: Organization; onClose: () => void }) {
+  const navigate = useNavigate()
+  const qc       = useQueryClient()
+  const [confirm, setConfirm] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState("")
+
+  async function handleDelete() {
+    setLoading(true)
+    try {
+      await api.delete(`/admin/organizations/${org.id}`)
+      qc.invalidateQueries({ queryKey: ["admin", "orgs"] })
+      navigate("/organizations")
+    } catch (err: unknown) {
+      setError((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? "Failed to delete organization.")
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Delete Organization</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 mt-1">
+          <p className="text-sm text-zinc-600">
+            This will permanently delete <span className="font-semibold">{org.name}</span> and all associated data. This cannot be undone.
+          </p>
+          <p className="text-sm text-zinc-500">
+            Type <span className="font-mono font-semibold text-zinc-800">{org.slug}</span> to confirm.
+          </p>
+          <input
+            className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500 font-mono"
+            placeholder={org.slug}
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+          />
+          <FormError message={error} />
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={onClose}>Cancel</Button>
+            <Button
+              onClick={handleDelete}
+              disabled={loading || confirm !== org.slug}
+              className="bg-red-600 text-white hover:bg-red-700 disabled:opacity-40"
+            >
+              {loading && <Loader2 className="animate-spin" />}
+              Delete permanently
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // ── Edit limits ────────────────────────────────────────────────────────────────
 
 const editLimitsSchema = z.object({
@@ -382,10 +440,12 @@ export default function OrgDetailPage() {
   const [showAddUser,    setShowAddUser]    = useState(false)
   const [showChangePlan, setShowChangePlan] = useState(false)
   const [showEditLimits, setShowEditLimits] = useState(false)
+  const [showDeleteOrg,  setShowDeleteOrg]  = useState(false)
   const [editingUser,    setEditingUser]    = useState<OrgUser | null>(null)
   const [deletingUser,   setDeletingUser]   = useState<OrgUser | null>(null)
   const [promptPhone,    setPromptPhone]    = useState("")
   const [promptMsg,      setPromptMsg]      = useState<string | null>(null)
+  const [resendMsg,      setResendMsg]      = useState<string | null>(null)
   const [tab,            setTab]            = useState<"overview" | "users" | "billing">("overview")
 
   const { data: org, isLoading: orgLoading } = useQuery<Organization>({
@@ -447,6 +507,14 @@ export default function OrgDetailPage() {
     mutationFn: () => api.post(`/admin/organizations/${id}/activate`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "org", id] }),
   })
+  const resendEmailMutation = useMutation({
+    mutationFn: () => api.post(`/admin/organizations/${id}/send-welcome`),
+    onSuccess: () => setResendMsg("Welcome email sent."),
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? "Failed to send email."
+      setResendMsg(`Error: ${msg}`)
+    },
+  })
 
   if (orgLoading) {
     return (
@@ -468,6 +536,7 @@ export default function OrgDetailPage() {
       {editingUser    && <EditUserModal   orgId={id!} user={editingUser}  onClose={() => setEditingUser(null)} />}
       {deletingUser   && <DeleteUserModal orgId={id!} user={deletingUser} onClose={() => setDeletingUser(null)} />}
       {showEditLimits && <EditLimitsModal org={org}   onClose={() => setShowEditLimits(false)} />}
+      {showDeleteOrg  && <DeleteOrgModal  org={org}   onClose={() => setShowDeleteOrg(false)} />}
       {showChangePlan && (
         <ChangePlanModal
           orgId={id!} plans={plans}
@@ -501,16 +570,42 @@ export default function OrgDetailPage() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <StatusBadge status={org.status} />
-              <Button
-                size="sm"
-                variant={isSuspended ? "outline" : "destructive"}
-                disabled={suspendMutation.isPending || activateMutation.isPending}
-                onClick={() => isSuspended ? activateMutation.mutate() : suspendMutation.mutate()}
-              >
-                {isSuspended ? "Activate" : "Suspend"}
-              </Button>
+            <div className="flex flex-col items-end gap-2 shrink-0">
+              <div className="flex items-center gap-2">
+                <StatusBadge status={org.status} />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={resendEmailMutation.isPending}
+                  onClick={() => { setResendMsg(null); resendEmailMutation.mutate() }}
+                  title="Resend welcome email"
+                >
+                  {resendEmailMutation.isPending ? <Loader2 className="animate-spin h-3.5 w-3.5" /> : <Mail className="h-3.5 w-3.5" />}
+                  Resend Email
+                </Button>
+                <Button
+                  size="sm"
+                  variant={isSuspended ? "outline" : "destructive"}
+                  disabled={suspendMutation.isPending || activateMutation.isPending}
+                  onClick={() => isSuspended ? activateMutation.mutate() : suspendMutation.mutate()}
+                >
+                  {isSuspended ? "Activate" : "Suspend"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                  onClick={() => setShowDeleteOrg(true)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete
+                </Button>
+              </div>
+              {resendMsg && (
+                <p className={cn("text-xs font-medium", resendMsg.startsWith("Error") ? "text-red-600" : "text-green-600")}>
+                  {resendMsg}
+                </p>
+              )}
             </div>
           </div>
 

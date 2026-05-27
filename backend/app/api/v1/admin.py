@@ -39,6 +39,7 @@ from app.schemas.admin import (
     SubscriptionOut,
     SubscriptionUpdate,
 )
+from app.services.email import send_user_welcome_email, send_welcome_email
 from app.services.mpesa import DarajaClient
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -283,6 +284,24 @@ async def activate_organization(
     return await _org_out(org, session)
 
 
+@router.post("/organizations/{org_id}/send-welcome", status_code=status.HTTP_204_NO_CONTENT)
+async def resend_org_welcome(
+    org_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: PlatformAdmin = Depends(require_admin),
+) -> None:
+    org = await session.get(Organization, org_id)
+    if not org:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+    if org.email:
+        await send_welcome_email(
+            recipients=[org.email],
+            org_name=org.name,
+            slug=org.slug,
+            plan=org.plan.value,
+        )
+
+
 # ── Org Users ──────────────────────────────────────────────────────────────────
 
 def _user_out(user: User) -> AdminUserOut:
@@ -343,6 +362,15 @@ async def create_org_user(
     session.add(user)
     await session.flush()
     await session.refresh(user)
+
+    if user.email:
+        await send_user_welcome_email(
+            email=user.email,
+            full_name=user.name,
+            org_name=org.name,
+            slug=org.slug,
+        )
+
     return _user_out(user)
 
 
