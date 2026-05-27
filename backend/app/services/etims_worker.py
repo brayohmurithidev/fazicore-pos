@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.database import AsyncSessionLocal
 from app.models.etims import EtimsSubmission
 from app.services.etims import EtimsService
 
@@ -48,15 +49,12 @@ async def run_cycle(session: AsyncSession) -> int:
     return len(submissions)
 
 
-async def start_worker(get_session):
-    """
-    Pass the AsyncSession factory (get_session async generator from database.py).
-    Called once from app startup.
-    """
+async def start_worker():
+    """Called once from app startup — polls for pending eTIMS submissions."""
     log.info("[etims-worker] Started — polling every %ds", POLL_INTERVAL)
     while True:
         try:
-            async for session in get_session():
+            async with AsyncSessionLocal() as session:
                 processed = await run_cycle(session)
                 if processed:
                     log.info("[etims-worker] Processed %d submission(s)", processed)

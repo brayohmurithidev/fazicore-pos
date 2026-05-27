@@ -98,7 +98,7 @@ async def bulk_create_products(
                 Product.org_id == current_user.org_id, Product.is_active == True
             )
         ) or 0
-        if active_count + len(data) > org.max_products:
+        if org.max_products is not None and active_count + len(data) > org.max_products:
             raise HTTPException(
                 status_code=status.HTTP_402_PAYMENT_REQUIRED,
                 detail={"code": "limit_exceeded", "resource": "products",
