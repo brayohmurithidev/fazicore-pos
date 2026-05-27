@@ -349,6 +349,7 @@ export default function CustomerOnboardPage() {
       const org = await createOrg.mutateAsync({
         name: business.name, slug: business.slug,
         email: contact.email, phone: contact.phone || null, country: business.country,
+        admin_email: admin.email || null,
       })
       await createUser.mutateAsync({
         orgId: org.id,

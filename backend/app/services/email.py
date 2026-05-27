@@ -46,11 +46,15 @@ async def send_email(to: str, subject: str, html: str, text: str) -> None:
 # ── Templates ──────────────────────────────────────────────────────────────────
 
 async def send_welcome_email(
-    to: str,
+    recipients: list[str],
     org_name: str,
     slug: str,
     plan: str = "starter",
 ) -> None:
+    # Deduplicate, normalise, drop blanks — send each unique address once
+    seen: set[str] = set()
+    unique = [r.strip().lower() for r in recipients if r and r.strip()]
+    unique = [r for r in unique if not (r in seen or seen.add(r))]  # type: ignore[func-returns-value]
     webapp_url  = settings.WEBAPP_URL.rstrip("/")
     login_url   = f"{webapp_url}?org={slug}"
     plan_label  = plan.capitalize()
@@ -167,4 +171,5 @@ Desktop and mobile apps are coming soon.
 — Fazi POS Team
 """
 
-    await send_email(to, subject, html, text)
+    for addr in unique:
+        await send_email(addr, subject, html, text)

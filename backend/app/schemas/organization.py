@@ -13,6 +13,7 @@ class OrganizationCreate(BaseModel):
     max_branches: int | None = 1
     max_users: int | None = 5
     max_products: int | None = 500
+    admin_email: str | None = None  # not stored; only used for welcome email
 
 
 class OrganizationUpdate(BaseModel):

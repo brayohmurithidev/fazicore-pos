@@ -146,13 +146,14 @@ async def create_organization(
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Slug already taken")
 
-    org = Organization(**data.model_dump())
+    org = Organization(**data.model_dump(exclude={"admin_email"}))
     session.add(org)
     await session.flush()
     await session.refresh(org)
 
-    if org.email:
-        await send_welcome_email(to=org.email, org_name=org.name, slug=org.slug, plan=org.plan.value)
+    recipients = [e for e in [org.email, data.admin_email] if e]
+    if recipients:
+        await send_welcome_email(recipients=recipients, org_name=org.name, slug=org.slug, plan=org.plan.value)
 
     repo = OrganizationRepository(session)
     s = await repo.get_with_stats(org.id)
