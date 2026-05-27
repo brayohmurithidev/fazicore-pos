@@ -15,32 +15,38 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        "loyalty_settings",
-        sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("org_id", sa.Integer(), sa.ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True),
-        sa.Column("enabled", sa.Boolean(), nullable=False, server_default="false"),
-        sa.Column("points_per_kes", sa.Numeric(8, 4), nullable=False, server_default="1.0"),
-        sa.Column("kes_per_point", sa.Numeric(8, 4), nullable=False, server_default="0.5"),
-        sa.Column("min_redeem_points", sa.Integer(), nullable=False, server_default="50"),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.UniqueConstraint("org_id", name="uq_loyalty_settings_org"),
-    )
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS loyalty_settings (
+            id SERIAL PRIMARY KEY,
+            org_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+            enabled BOOLEAN NOT NULL DEFAULT false,
+            points_per_kes NUMERIC(8,4) NOT NULL DEFAULT 1.0,
+            kes_per_point NUMERIC(8,4) NOT NULL DEFAULT 0.5,
+            min_redeem_points INTEGER NOT NULL DEFAULT 50,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            CONSTRAINT uq_loyalty_settings_org UNIQUE (org_id)
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_loyalty_settings_org_id ON loyalty_settings (org_id)")
 
-    op.create_table(
-        "points_transactions",
-        sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("org_id", sa.Integer(), sa.ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True),
-        sa.Column("customer_id", sa.Integer(), sa.ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True),
-        sa.Column("order_id", sa.Integer(), sa.ForeignKey("orders.id", ondelete="SET NULL"), nullable=True),
-        sa.Column("type", sa.Enum("earn", "redeem", "adjust", name="pointstransactiontype"), nullable=False),
-        sa.Column("points", sa.Integer(), nullable=False),
-        sa.Column("balance_before", sa.Integer(), nullable=False),
-        sa.Column("balance_after", sa.Integer(), nullable=False),
-        sa.Column("notes", sa.String(255), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-    )
+    op.execute("CREATE TYPE IF NOT EXISTS pointstransactiontype AS ENUM ('earn', 'redeem', 'adjust')")
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS points_transactions (
+            id SERIAL PRIMARY KEY,
+            org_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+            customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+            order_id INTEGER REFERENCES orders(id) ON DELETE SET NULL,
+            type pointstransactiontype NOT NULL,
+            points INTEGER NOT NULL,
+            balance_before INTEGER NOT NULL,
+            balance_after INTEGER NOT NULL,
+            notes VARCHAR(255),
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_points_transactions_org_id ON points_transactions (org_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_points_transactions_customer_id ON points_transactions (customer_id)")
 
 
 def downgrade() -> None:
