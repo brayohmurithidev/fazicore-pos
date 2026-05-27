@@ -52,6 +52,18 @@ class Settings(BaseSettings):
     # Falls back to the request's base_url when unset (fine only if the API is public).
     MPESA_CALLBACK_BASE_URL: str | None = None
 
+    # SMTP — leave SMTP_HOST blank to disable email (safe for local dev)
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_TLS: bool = True
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = "noreply@fazilabs.com"
+    SMTP_FROM_NAME: str = "Fazi POS"
+
+    # Public URL of the POS web app (sent in welcome emails)
+    WEBAPP_URL: str = "https://pos.fazilabs.com"
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def parse_cors(cls, v: str | list) -> list:

@@ -15,6 +15,7 @@ from app.models.organization import Organization, OrgStatus
 from app.models.platform_admin import PlatformAdmin
 from app.repositories.organization import OrganizationRepository
 from app.schemas.organization import OrganizationCreate, OrganizationOut, OrganizationUpdate
+from app.services.email import send_welcome_email
 from app.schemas.platform import (
     OrgStats,
     PlatformLoginRequest,
@@ -149,6 +150,9 @@ async def create_organization(
     session.add(org)
     await session.flush()
     await session.refresh(org)
+
+    if org.email:
+        await send_welcome_email(to=org.email, org_name=org.name, slug=org.slug)
 
     repo = OrganizationRepository(session)
     s = await repo.get_with_stats(org.id)
