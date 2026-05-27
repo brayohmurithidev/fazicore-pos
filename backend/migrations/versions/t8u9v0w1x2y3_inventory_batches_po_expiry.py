@@ -20,10 +20,8 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "purchase_order_items",
-        sa.Column("expiry_date", sa.Date(), nullable=True),
-    )
+    # Use IF NOT EXISTS — column may already exist from an earlier migration on older deployments
+    op.execute("ALTER TABLE purchase_order_items ADD COLUMN IF NOT EXISTS expiry_date DATE")
 
     op.create_table(
         "inventory_batches",
