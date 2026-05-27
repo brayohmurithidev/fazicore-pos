@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
 from sqlalchemy import func, select
@@ -151,13 +152,28 @@ async def create_organization(
     await session.flush()
     await session.refresh(org)
 
-    recipients = [e for e in [org.email, data.admin_email] if e]
-    if recipients:
-        await send_welcome_email(recipients=recipients, org_name=org.name, slug=org.slug, plan=org.plan.value)
-
     repo = OrganizationRepository(session)
     s = await repo.get_with_stats(org.id)
     return OrgStats(**s)  # type: ignore[arg-type]
+
+
+class WelcomeEmailIn(BaseModel):
+    admin_email: str | None = None
+
+
+@router.post("/organizations/{org_id}/send-welcome", status_code=status.HTTP_204_NO_CONTENT)
+async def send_welcome(
+    org_id: int,
+    body: WelcomeEmailIn,
+    session: AsyncSession = Depends(get_session),
+    _: PlatformAdmin = Depends(get_platform_admin),
+) -> None:
+    org = await session.get(Organization, org_id)
+    if not org:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+    recipients = [e for e in [org.email, body.admin_email] if e]
+    if recipients:
+        await send_welcome_email(recipients=recipients, org_name=org.name, slug=org.slug, plan=org.plan.value)
 
 
 @router.get("/organizations/{org_id}", response_model=OrgStats)

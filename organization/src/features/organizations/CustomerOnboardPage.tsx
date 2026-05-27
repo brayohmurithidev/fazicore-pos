@@ -349,7 +349,6 @@ export default function CustomerOnboardPage() {
       const org = await createOrg.mutateAsync({
         name: business.name, slug: business.slug,
         email: contact.email, phone: contact.phone || null, country: business.country,
-        admin_email: admin.email || null,
       })
       await createUser.mutateAsync({
         orgId: org.id,
@@ -358,6 +357,8 @@ export default function CustomerOnboardPage() {
       if (plan.plan_slug) {
         await setSubscription.mutateAsync({ orgId: org.id, data: { plan_slug: plan.plan_slug, billing_interval: plan.billing_interval } })
       }
+      // All steps succeeded — send welcome email now
+      await api.post(`/admin/organizations/${org.id}/send-welcome`, { admin_email: admin.email || null })
       qc.invalidateQueries({ queryKey: ["admin", "organizations"] })
       navigate(`/organizations/${org.id}`)
     } catch (err: unknown) {
