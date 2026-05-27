@@ -119,6 +119,7 @@ export interface ApiPOItem {
   product_name: string
   quantity: number
   unit_cost: number
+  expiry_date: string | null
 }
 
 export interface ApiPurchaseOrder {
@@ -143,6 +144,19 @@ export interface ApiInventoryItem {
   reserved_quantity: number
   low_stock_threshold: number
   location: string | null
+}
+
+export interface ApiInventoryBatch {
+  id: number
+  product_id: number
+  product_name: string | null
+  branch_id: number | null
+  batch_number: string | null
+  quantity_received: number
+  quantity_remaining: number
+  cost_per_unit: number
+  expiry_date: string | null
+  received_date: string
 }
 
 export interface ApiInventoryTransaction {

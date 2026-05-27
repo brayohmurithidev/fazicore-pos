@@ -1825,7 +1825,7 @@ function NewPOModal({ open, onClose, products, branches }: {
 }) {
   const [supplier, setSupplier] = useState('')
   const [branchId, setBranchId] = useState('')
-  const [lines, setLines] = useState([{ product_id: '', product_name: '', qty: '', unit_cost: '' }])
+  const [lines, setLines] = useState([{ product_id: '', product_name: '', qty: '', unit_cost: '', expiry_date: '' }])
   const [quickCreateLineIdx, setQuickCreateLineIdx] = useState<number | null>(null)
   const [quickCreateSupplierOpen, setQuickCreateSupplierOpen] = useState(false)
   const { data: suppliers = [] } = useSuppliers()
@@ -1854,10 +1854,11 @@ function NewPOModal({ open, onClose, products, branches }: {
       product_name: l.product_name,
       quantity: parseInt(l.qty) || 0,
       unit_cost: parseFloat(l.unit_cost) || 0,
+      expiry_date: l.expiry_date || null,
     }))
     await createPO.mutateAsync({ supplier, branch_id: branchId ? Number(branchId) : null, items })
     toast.success('Purchase order created')
-    setSupplier(''); setBranchId(''); setLines([{ product_id: '', product_name: '', qty: '', unit_cost: '' }])
+    setSupplier(''); setBranchId(''); setLines([{ product_id: '', product_name: '', qty: '', unit_cost: '', expiry_date: '' }])
     onClose()
   }
 
@@ -1903,7 +1904,7 @@ function NewPOModal({ open, onClose, products, branches }: {
           </div>
           <div className="mb-1 flex justify-between items-center">
             <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Order Lines</Label>
-            <button onClick={() => setLines((l) => [...l, { product_id: '', product_name: '', qty: '', unit_cost: '' }])}
+            <button onClick={() => setLines((l) => [...l, { product_id: '', product_name: '', qty: '', unit_cost: '', expiry_date: '' }])}
               className="text-xs text-gray-900 font-semibold flex items-center gap-1 hover:opacity-70">
               <Plus size={12} />Add line
             </button>
@@ -1911,7 +1912,14 @@ function NewPOModal({ open, onClose, products, branches }: {
           <div className="rounded-lg border overflow-hidden mb-4">
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
-                <tr><th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">Product</th><th className="text-right px-3 py-2 text-xs font-semibold text-gray-500 w-20">Qty</th><th className="text-right px-3 py-2 text-xs font-semibold text-gray-500 w-28">Unit Cost</th><th className="text-right px-3 py-2 text-xs font-semibold text-gray-500 w-24">Total</th><th className="w-8"></th></tr>
+                <tr>
+                  <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">Product</th>
+                  <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500 w-16">Qty</th>
+                  <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500 w-24">Unit Cost</th>
+                  <th className="text-center px-2 py-2 text-xs font-semibold text-gray-500 w-32">Expiry Date</th>
+                  <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500 w-20">Total</th>
+                  <th className="w-8"></th>
+                </tr>
               </thead>
               <tbody>
                 {lines.map((line, i) => (
@@ -1933,6 +1941,7 @@ function NewPOModal({ open, onClose, products, branches }: {
                     </td>
                     <td className="px-2 py-1.5"><Input type="number" value={line.qty} onChange={(e) => setLine(i, 'qty', e.target.value)} className="h-8 text-xs text-right" placeholder="0" /></td>
                     <td className="px-2 py-1.5"><Input type="number" value={line.unit_cost} onChange={(e) => setLine(i, 'unit_cost', e.target.value)} className="h-8 text-xs text-right" placeholder="0.00" /></td>
+                    <td className="px-2 py-1.5"><Input type="date" value={line.expiry_date} onChange={(e) => setLine(i, 'expiry_date', e.target.value)} className="h-8 text-xs" /></td>
                     <td className="px-3 py-1.5 text-right text-xs font-semibold">{fmtKES((parseFloat(line.qty) || 0) * (parseFloat(line.unit_cost) || 0))}</td>
                     <td className="px-1 py-1.5 text-center">
                       {lines.length > 1 && <button onClick={() => setLines((l) => l.filter((_, idx) => idx !== i))} className="text-gray-400 hover:text-red-500 p-0.5"><XCircle size={13} /></button>}
@@ -2053,6 +2062,7 @@ function PODetailSheet({ po, onClose }: { po: ApiPurchaseOrder | null; onClose: 
                   <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">Product</th>
                   <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500 w-14">Qty</th>
                   <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500 w-24">Unit Cost</th>
+                  <th className="text-center px-3 py-2 text-xs font-semibold text-gray-500 w-28">Expiry</th>
                   <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500 w-24">Total</th>
                 </tr>
               </thead>
@@ -2062,6 +2072,9 @@ function PODetailSheet({ po, onClose }: { po: ApiPurchaseOrder | null; onClose: 
                     <td className="px-3 py-2.5 font-medium text-gray-900">{item.product_name}</td>
                     <td className="px-3 py-2.5 text-right text-gray-500">{item.quantity}</td>
                     <td className="px-3 py-2.5 text-right text-gray-500">{fmtKES(item.unit_cost)}</td>
+                    <td className="px-3 py-2.5 text-center text-xs text-gray-500">
+                      {item.expiry_date ? new Date(item.expiry_date).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                    </td>
                     <td className="px-3 py-2.5 text-right font-semibold">{fmtKES(item.quantity * item.unit_cost)}</td>
                   </tr>
                 ))}

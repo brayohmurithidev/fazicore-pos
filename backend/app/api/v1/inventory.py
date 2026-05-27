@@ -1,14 +1,15 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.core.database import get_session
 from app.core.deps import get_current_active_user
-from app.models.inventory import Inventory, InventoryTransaction, TransactionType
+from app.models.inventory import Inventory, InventoryBatch, InventoryTransaction, TransactionType
+from app.models.product import Product
 from app.models.user import User, UserRole
 from app.repositories.inventory import InventoryRepository
 from app.schemas.inventory import InventoryOut, StockTransferRequest
@@ -129,6 +130,55 @@ async def list_transactions(
             o.product_name = tx.inventory.product.name
         if tx.user:
             o.performed_by_name = tx.user.name
+        out.append(o)
+    return out
+
+
+class InventoryBatchOut(BaseModel):
+    id: int
+    product_id: int
+    product_name: str | None = None
+    branch_id: int | None
+    batch_number: str | None
+    quantity_received: int
+    quantity_remaining: int
+    cost_per_unit: float
+    expiry_date: date | None
+    received_date: date
+
+    model_config = {"from_attributes": True}
+
+
+@router.get("/batches", response_model=list[InventoryBatchOut])
+async def list_batches(
+    product_id: int | None = Query(None),
+    branch_id: int | None = Query(None),
+    include_exhausted: bool = Query(False),
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_active_user),
+) -> list[InventoryBatchOut]:
+    """List inventory batches for the org, optionally filtered by product/branch."""
+    effective_branch = branch_id if current_user.role == UserRole.ADMIN else current_user.branch_id
+    stmt = (
+        select(InventoryBatch)
+        .join(Product, Product.id == InventoryBatch.product_id)
+        .options(selectinload(InventoryBatch.product))
+        .where(Product.org_id == current_user.org_id)
+        .order_by(InventoryBatch.received_date.asc(), InventoryBatch.id.asc())
+    )
+    if product_id is not None:
+        stmt = stmt.where(InventoryBatch.product_id == product_id)
+    if effective_branch is not None:
+        stmt = stmt.where(InventoryBatch.branch_id == effective_branch)
+    if not include_exhausted:
+        stmt = stmt.where(InventoryBatch.quantity_remaining > 0)
+    result = await session.execute(stmt)
+    batches = list(result.scalars().all())
+    out = []
+    for b in batches:
+        o = InventoryBatchOut.model_validate(b)
+        if b.product:
+            o.product_name = b.product.name
         out.append(o)
     return out
 

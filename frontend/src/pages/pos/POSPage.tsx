@@ -38,9 +38,9 @@ function Kbd({ children, light }: { children: React.ReactNode; light?: boolean }
 // ── Product tile ──────────────────────────────────────────────────────────────
 
 function ProductTile({
-  product, catColor, cartQty, onAdd,
+  product, catColor, cartQty, onAdd, expiryTracking,
 }: {
-  product: Product; catColor: string; cartQty: number; onAdd: () => void
+  product: Product; catColor: string; cartQty: number; onAdd: () => void; expiryTracking: boolean
 }) {
   const [imgError, setImgError] = useState(false)
   const available = product.stock - cartQty
@@ -48,12 +48,21 @@ function ProductTile({
   const isCapped = cartQty >= product.stock && product.stock > 0
   const isLow = product.stock > 0 && product.stock <= product.minStock && !isCapped
 
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const expDate = product.expiryDate ? new Date(product.expiryDate) : null
+  const isExpired = expiryTracking && expDate !== null && expDate < today
+  const daysToExpiry = expDate ? Math.ceil((expDate.getTime() - today.getTime()) / 86400000) : null
+  const isExpiringSoon = !isExpired && daysToExpiry !== null && daysToExpiry <= 30
+
+  const blocked = isOut || isCapped || isExpired
+
   return (
     <button
-      onClick={() => !isOut && !isCapped && onAdd()}
-      disabled={isOut || isCapped}
+      onClick={() => !blocked && onAdd()}
+      disabled={blocked}
+      title={isExpired ? `Expired ${product.expiryDate}` : isExpiringSoon ? `Expires in ${daysToExpiry} days` : undefined}
       className={`bg-white border rounded-xl p-2.5 text-left transition-all w-full ${
-        isOut || isCapped
+        blocked
           ? 'opacity-50 cursor-not-allowed border-gray-100'
           : 'border-gray-200 hover:border-gray-800 hover:shadow-md active:scale-[0.97] cursor-pointer'
       }`}
@@ -82,6 +91,20 @@ function ProductTile({
             </span>
           </div>
         )}
+        {isExpired && (
+          <div className="absolute inset-0 bg-red-50/90 flex items-center justify-center">
+            <span className="text-[10px] font-bold text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full border border-red-200">
+              Expired
+            </span>
+          </div>
+        )}
+        {isExpiringSoon && !isExpired && (
+          <div className="absolute top-1 right-1">
+            <span className="text-[9px] font-bold text-amber-700 bg-amber-100 px-1 py-0.5 rounded border border-amber-200">
+              {daysToExpiry}d
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="text-xs font-semibold text-gray-900 leading-snug mb-1 line-clamp-2 min-h-[28px]">
@@ -89,9 +112,9 @@ function ProductTile({
       </div>
       <div className="text-[13px] font-bold text-gray-900">{fmtKES(product.price)}</div>
       <div className={`text-[10px] mt-0.5 font-medium ${
-        isOut ? 'text-red-500' : isCapped ? 'text-amber-500' : isLow ? 'text-orange-500' : 'text-gray-400'
+        isExpired ? 'text-red-500' : isOut ? 'text-red-500' : isCapped ? 'text-amber-500' : isLow ? 'text-orange-500' : 'text-gray-400'
       }`}>
-        {isOut ? 'Out of stock' : isCapped ? `${product.stock} in cart` : isLow ? `Low: ${available}` : `${available} left`}
+        {isExpired ? 'Expired' : isOut ? 'Out of stock' : isCapped ? `${product.stock} in cart` : isLow ? `Low: ${available}` : `${available} left`}
       </div>
     </button>
   )
@@ -417,6 +440,10 @@ export function POSPage() {
 
   // ── Cart helpers ─────────────────────────────────────────────────────────
   const addToCart = (product: Product) => {
+    if (settings.expiryTracking && product.expiryDate) {
+      const today = new Date(); today.setHours(0, 0, 0, 0)
+      if (new Date(product.expiryDate) < today) return
+    }
     setCart((prev) => {
       const existing = prev.find((i) => i.id === product.id)
       const currentQty = existing?.qty ?? 0
@@ -744,6 +771,7 @@ export function POSPage() {
                   catColor={catMap.get(p.category)?.color ?? '#9CA3AF'}
                   cartQty={cartQtyMap.get(p.id) ?? 0}
                   onAdd={() => addToCart(p)}
+                  expiryTracking={settings.expiryTracking}
                 />
               ))}
             </div>

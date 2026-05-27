@@ -62,6 +62,7 @@ async def create_purchase_order(
             product_name=item.product_name or "",
             quantity=item.quantity,
             unit_cost=item.unit_cost,
+            expiry_date=item.expiry_date,
         )
         for item in data.items
     ]
@@ -128,11 +129,13 @@ async def update_po_status(
     await session.flush()
 
     if new_status == POStatus.RECEIVED:
+        from datetime import datetime, timezone
         from sqlalchemy import func
         from app.repositories.inventory import InventoryRepository
-        from app.models.inventory import TransactionType, Inventory
+        from app.models.inventory import InventoryBatch, TransactionType, Inventory
         from app.models.product import Product
         inv_repo = InventoryRepository(session)
+        today = datetime.now(timezone.utc).date()
         for item in po.items:
             if item.product_id:
                 # Snapshot total stock across all branches BEFORE this receipt
@@ -159,6 +162,19 @@ async def update_po_status(
                     inv, item.quantity, TransactionType.PURCHASE, current_user.id,
                     f"PO {po.po_number} received"
                 )
+
+                # Create a batch record for FIFO expiry tracking
+                batch = InventoryBatch(
+                    product_id=item.product_id,
+                    branch_id=po.branch_id,
+                    purchase_order_item_id=item.id,
+                    quantity_received=item.quantity,
+                    quantity_remaining=item.quantity,
+                    cost_per_unit=float(item.unit_cost),
+                    expiry_date=item.expiry_date,
+                    received_date=today,
+                )
+                session.add(batch)
 
                 # Update product cost using Weighted Average Cost
                 product = await session.get(Product, item.product_id)

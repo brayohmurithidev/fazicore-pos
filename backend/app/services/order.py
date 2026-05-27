@@ -61,11 +61,27 @@ class OrderService:
                             item_data.product_id, None
                         )
                     if inv is not None:
-                        if inv.available_quantity < item_data.quantity:
-                            raise HTTPException(
-                                status_code=status.HTTP_400_BAD_REQUEST,
-                                detail=f"Insufficient stock for '{item_data.product_name}'",
+                        has_batches = await self.inventory_repo.has_any_batch(
+                            item_data.product_id, inv.branch_id
+                        )
+                        if has_batches:
+                            batch_avail = await self.inventory_repo.get_available_batch_quantity(
+                                item_data.product_id, inv.branch_id
                             )
+                            if batch_avail < item_data.quantity:
+                                raise HTTPException(
+                                    status_code=status.HTTP_400_BAD_REQUEST,
+                                    detail=f"Insufficient non-expired stock for '{item_data.product_name}'",
+                                )
+                            await self.inventory_repo.deduct_from_batches(
+                                item_data.product_id, inv.branch_id, item_data.quantity
+                            )
+                        else:
+                            if inv.available_quantity < item_data.quantity:
+                                raise HTTPException(
+                                    status_code=status.HTTP_400_BAD_REQUEST,
+                                    detail=f"Insufficient stock for '{item_data.product_name}'",
+                                )
                         from app.models.inventory import TransactionType
                         await self.inventory_repo.adjust(
                             inv,

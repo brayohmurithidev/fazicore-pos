@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel
 
@@ -10,6 +10,7 @@ class POItemCreate(BaseModel):
     product_name: str | None = None
     quantity: int
     unit_cost: float
+    expiry_date: date | None = None
 
 
 class PurchaseOrderCreate(BaseModel):
@@ -24,6 +25,7 @@ class POItemOut(BaseModel):
     product_name: str
     quantity: int
     unit_cost: float
+    expiry_date: date | None = None
 
     model_config = {"from_attributes": True}
 

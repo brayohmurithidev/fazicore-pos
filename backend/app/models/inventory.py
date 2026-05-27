@@ -1,6 +1,7 @@
 import enum
+from datetime import date
 
-from sqlalchemy import Enum, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Date, Enum, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -56,3 +57,22 @@ class InventoryTransaction(Base, TimestampMixin):
 
     inventory: Mapped["Inventory"] = relationship("Inventory", back_populates="transactions")
     user: Mapped["User | None"] = relationship("User")
+
+
+class InventoryBatch(Base, TimestampMixin):
+    """One row per stock receipt batch — tracks per-batch expiry and remaining quantity."""
+    __tablename__ = "inventory_batches"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
+    branch_id: Mapped[int | None] = mapped_column(ForeignKey("branches.id"), nullable=True, index=True)
+    purchase_order_item_id: Mapped[int | None] = mapped_column(ForeignKey("purchase_order_items.id", ondelete="SET NULL"), nullable=True)
+    batch_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    quantity_received: Mapped[int] = mapped_column(Integer, nullable=False)
+    quantity_remaining: Mapped[int] = mapped_column(Integer, nullable=False)
+    cost_per_unit: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    expiry_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    received_date: Mapped[date] = mapped_column(Date, nullable=False)
+
+    product: Mapped["Product"] = relationship("Product")
+    branch: Mapped["Branch | None"] = relationship("Branch")
