@@ -206,7 +206,7 @@ function CustomerDetail({ customer, onClose, onEdit }: {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3 p-4 border-b border-gray-100">
+      <div className="grid grid-cols-4 gap-3 p-4 border-b border-gray-100">
         <div className="text-center">
           <div className="text-lg font-bold text-gray-900">{customer.total_orders}</div>
           <div className="text-[10px] text-gray-500 uppercase tracking-wide">Orders</div>
@@ -220,6 +220,10 @@ function CustomerDetail({ customer, onClose, onEdit }: {
             {fmt(customer.credit_balance)}
           </div>
           <div className="text-[10px] text-gray-500 uppercase tracking-wide">Outstanding</div>
+        </div>
+        <div className="text-center">
+          <div className="text-lg font-bold text-amber-600">{customer.loyalty_points.toLocaleString()}</div>
+          <div className="text-[10px] text-gray-500 uppercase tracking-wide">Points</div>
         </div>
       </div>
 

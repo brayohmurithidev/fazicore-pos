@@ -148,18 +148,23 @@ class OrderService:
         await self.session.flush()
         await self.session.refresh(order)
 
-        # ── Loyalty points ────────────────────────────────────────────────
+        # ── Customer stats + loyalty points ──────────────────────────────
         if data.customer_id:
-            ls_result = await self.session.execute(
-                select(LoyaltySettings).where(LoyaltySettings.org_id == org_id)
+            cust_result = await self.session.execute(
+                select(Customer).where(Customer.id == data.customer_id)
             )
-            ls = ls_result.scalar_one_or_none()
-            if ls and ls.enabled:
-                cust_result = await self.session.execute(
-                    select(Customer).where(Customer.id == data.customer_id)
+            customer = cust_result.scalar_one_or_none()
+            if customer:
+                # Always update stats regardless of loyalty toggle
+                customer.total_spent = float(customer.total_spent) + float(total)
+                customer.total_orders = customer.total_orders + 1
+
+                # Points only when loyalty is enabled
+                ls_result = await self.session.execute(
+                    select(LoyaltySettings).where(LoyaltySettings.org_id == org_id)
                 )
-                customer = cust_result.scalar_one_or_none()
-                if customer:
+                ls = ls_result.scalar_one_or_none()
+                if ls and ls.enabled:
                     balance = customer.loyalty_points
 
                     # Redeem first (if requested)
@@ -180,7 +185,7 @@ class OrderService:
                         ))
                         balance = customer.loyalty_points
 
-                    # Earn points on the net total paid (after redemption discount)
+                    # Earn on net total
                     earned = math.floor(float(total) * float(ls.points_per_kes))
                     if earned > 0:
                         customer.loyalty_points = balance + earned
@@ -195,11 +200,7 @@ class OrderService:
                             notes=f"Earned for order {order_number}",
                         ))
 
-                    # Update customer stats
-                    customer.total_spent = float(customer.total_spent) + float(total)
-                    customer.total_orders = customer.total_orders + 1
-
-                    await self.session.flush()
+                await self.session.flush()
 
         return order
 
