@@ -16,6 +16,7 @@ from app.repositories.inventory import InventoryRepository
 from app.repositories.order import OrderRepository
 from app.repositories.product import ProductRepository
 from app.schemas.order import OrderCreate, OrderEdit, OrderVoid
+from app.services.etims import EtimsService
 
 
 def _generate_order_number(org_prefix: str, today: date, sequence: int) -> str:
@@ -201,6 +202,13 @@ class OrderService:
                         ))
 
                 await self.session.flush()
+
+        # ── eTIMS submission (best-effort, non-blocking) ──────────────────
+        try:
+            etims = EtimsService(self.session)
+            await etims.queue_submission(order, org_slug)
+        except Exception:
+            pass  # never fail an order because of eTIMS
 
         return order
 

@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -5,10 +6,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api.v1 import admin, analytics, attendance, audit, auth, branches, categories, customers, dashboard, download, expenditures, hooks, inventory, loyalty, mpesa, orders, org, platform, products, purchase_orders, seed, stock_transfers, suppliers, uploads, users
+from app.api.v1 import admin, analytics, attendance, audit, auth, branches, categories, customers, dashboard, download, etims, expenditures, hooks, inventory, loyalty, mpesa, orders, org, platform, products, purchase_orders, seed, stock_transfers, suppliers, uploads, users
 from app.api.v1.analytics import sales_router
 from app.core.config import settings
+from app.core.database import get_session
 from app.middleware.tenant import TenantMiddleware
+from app.services.etims_worker import start_worker
 
 app = FastAPI(
     title="Fazi POS API",
@@ -57,6 +60,12 @@ app.include_router(download.router, prefix=API_PREFIX)
 app.include_router(mpesa.router, prefix=API_PREFIX)
 app.include_router(hooks.router, prefix=API_PREFIX)
 app.include_router(loyalty.router, prefix=API_PREFIX)
+app.include_router(etims.router, prefix=API_PREFIX)
+
+
+@app.on_event("startup")
+async def startup_event() -> None:
+    asyncio.create_task(start_worker(get_session))
 
 
 @app.exception_handler(Exception)

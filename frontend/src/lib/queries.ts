@@ -37,6 +37,7 @@ import type {
   ApiPurchaseOrder, ApiUser, ApiOrgInfo, ApiSubscriptionInfo, ApiSupplier, ApiStockTransfer,
   ApiPermissions, ApiNotifications, ApiAnalyticsDailyItem, ReorderSuggestion, AgingItem, DashboardData, TokenResponse,
   ApiExpenditure, ApiExpenditureSummary, ApiLoyaltySettings,
+  ApiEtimsConfig, ApiEtimsSubmission,
 } from '@/types/api'
 
 // ── Local-mode adapters ───────────────────────────────────────────────────────
@@ -1270,5 +1271,48 @@ export function useUpdateLoyaltySettings() {
     mutationFn: (data: Partial<ApiLoyaltySettings>) =>
       api.patch('/loyalty/settings', data).then((r) => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['loyalty-settings'] }),
+  })
+}
+
+// ── eTIMS ──────────────────────────────────────────────────────────────────
+
+export function useEtimsConfig() {
+  return useQuery<ApiEtimsConfig | null>({
+    queryKey: ['etims-config'],
+    queryFn: () => api.get('/etims/config').then((r) => r.data),
+    staleTime: 30_000,
+  })
+}
+
+export function useUpdateEtimsConfig() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: Partial<ApiEtimsConfig>) =>
+      api.put('/etims/config', data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['etims-config'] }),
+  })
+}
+
+export function useTestEtimsConnection() {
+  return useMutation({
+    mutationFn: () => api.post('/etims/test-connection').then((r) => r.data),
+  })
+}
+
+export function useEtimsSubmissions(status?: string) {
+  return useQuery<ApiEtimsSubmission[]>({
+    queryKey: ['etims-submissions', status],
+    queryFn: () =>
+      api.get('/etims/submissions', { params: status ? { status } : {} }).then((r) => r.data),
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  })
+}
+
+export function useRetryEtimsSubmission() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.post(`/etims/submissions/${id}/retry`).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['etims-submissions'] }),
   })
 }

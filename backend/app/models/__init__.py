@@ -19,6 +19,7 @@ from app.models.expenditure import Expenditure
 from app.models.invoice import SubscriptionInvoice
 from app.models.price_history import PriceHistory
 from app.models.loyalty import LoyaltySettings, PointsTransaction
+from app.models.etims import EtimsConfig, EtimsSubmission
 
 __all__ = [
     "Organization",
@@ -48,4 +49,6 @@ __all__ = [
     "PriceHistory",
     "LoyaltySettings",
     "PointsTransaction",
+    "EtimsConfig",
+    "EtimsSubmission",
 ]

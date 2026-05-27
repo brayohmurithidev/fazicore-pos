@@ -432,3 +432,28 @@ export interface ApiFeatureEntry {
   group: string
   description: string
 }
+
+export interface ApiEtimsConfig {
+  id: number
+  org_id: number
+  kra_pin: string
+  bhf_id: string
+  device_serial: string | null
+  sandbox_mode: boolean
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface ApiEtimsSubmission {
+  id: number
+  org_id: number
+  order_id: number | null
+  cu_invoice_no: string | null
+  status: 'pending' | 'submitted' | 'failed'
+  error_message: string | null
+  attempt_count: number
+  next_retry_at: string | null
+  submitted_at: string | null
+  created_at: string
+}

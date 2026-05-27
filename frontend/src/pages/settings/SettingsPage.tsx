@@ -26,6 +26,8 @@ import {
   useSetLiveMpesaEnvironment, useRegisterC2bUrls, useSimulateC2b,
   useOrgInfo, useUpgradeSubscription, useStkStatus, useQueryUpgradeStatus,
   useLoyaltySettings, useUpdateLoyaltySettings,
+  useEtimsConfig, useUpdateEtimsConfig, useTestEtimsConnection,
+  useEtimsSubmissions, useRetryEtimsSubmission,
   type MpesaCredentialsOut, type UpgradeInitiated,
 } from '@/lib/queries'
 import { useFeatureFlags } from '@/hooks/useFeature'
@@ -38,7 +40,7 @@ import type { ApiPlanInfo } from '@/types/api'
 
 // ── Tab definitions ───────────────────────────────────────────────────────────
 
-type TabId = 'general' | 'payments' | 'users' | 'permissions' | 'audit' | 'plan'
+type TabId = 'general' | 'payments' | 'users' | 'permissions' | 'audit' | 'plan' | 'etims'
 
 // ── Shared primitives ─────────────────────────────────────────────────────────
 
@@ -560,7 +562,7 @@ function GeneralTab() {
       </Section>
       {(isTauri || flags.thermal_printing !== false) && <PrinterSetupSection />}
       <LoyaltySection />
-      {isTauri() && <MultiTerminalSection />}
+      {isTauri && <MultiTerminalSection />}
       {isAdmin && (
         <Section title="Branches">
           <Toggle label="Branch-level Inventory" sub="Each branch tracks its own stock separately" value={settings.branchInventory} onChange={(v) => patch('branchInventory', v)} locked={flags.multi_branch === false} />
@@ -1598,6 +1600,223 @@ function PlanTab() {
   )
 }
 
+// ── eTIMS / KRA tab ──────────────────────────────────────────────────────────
+
+function EtimsTab() {
+  const { user } = useAuthStore()
+  const isAdmin = user?.role === 'admin'
+
+  const { data: cfg, isLoading } = useEtimsConfig()
+  const updateCfg = useUpdateEtimsConfig()
+  const testConn = useTestEtimsConnection()
+  const { data: submissions = [] } = useEtimsSubmissions()
+  const retryMutation = useRetryEtimsSubmission()
+
+  const [form, setForm] = useState({
+    kra_pin: '',
+    bhf_id: '00',
+    device_serial: '',
+    sandbox_mode: true,
+    is_active: false,
+  })
+  const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null)
+
+  useEffect(() => {
+    if (cfg) {
+      setForm({
+        kra_pin: cfg.kra_pin,
+        bhf_id: cfg.bhf_id,
+        device_serial: cfg.device_serial ?? '',
+        sandbox_mode: cfg.sandbox_mode,
+        is_active: cfg.is_active,
+      })
+    }
+  }, [cfg])
+
+  const handleSave = () => {
+    updateCfg.mutate({ ...form, device_serial: form.device_serial || undefined })
+  }
+
+  const handleTest = async () => {
+    setTestResult(null)
+    try {
+      const res = await testConn.mutateAsync(undefined)
+      setTestResult({ ok: res.ok, msg: res.ok ? 'Connection successful' : (res.error ?? 'Failed') })
+    } catch {
+      setTestResult({ ok: false, msg: 'Network error' })
+    }
+  }
+
+  const statusColor = {
+    submitted: 'text-emerald-600 bg-emerald-50',
+    pending:   'text-amber-600 bg-amber-50',
+    failed:    'text-red-600 bg-red-50',
+  }
+
+  if (isLoading) return <div className="p-6 text-sm text-gray-400">Loading…</div>
+
+  return (
+    <div className="p-4 sm:p-6 max-w-2xl space-y-6">
+
+      {/* Info banner */}
+      <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-800 space-y-1">
+        <div className="font-semibold">KRA eTIMS VSCU Integration</div>
+        <div className="text-blue-600 text-xs">
+          Each sale is automatically submitted to KRA when a tenant KRA PIN is configured and active.
+          Offline sales are queued and retried automatically with exponential backoff.
+        </div>
+      </div>
+
+      {/* Config form */}
+      <Section title="VSCU Credentials">
+        <div className="py-2 space-y-3">
+          <div>
+            <label className="text-xs font-medium text-gray-700">KRA PIN</label>
+            <input
+              value={form.kra_pin}
+              onChange={(e) => setForm((f) => ({ ...f, kra_pin: e.target.value.toUpperCase() }))}
+              placeholder="A123456789B"
+              disabled={!isAdmin}
+              className="mt-1 w-full text-sm border border-gray-200 rounded-md px-3 py-1.5 font-mono focus:outline-none focus:ring-2 focus:ring-gray-300 disabled:opacity-50"
+            />
+          </div>
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="text-xs font-medium text-gray-700">Branch Code (bhfId)</label>
+              <input
+                value={form.bhf_id}
+                onChange={(e) => setForm((f) => ({ ...f, bhf_id: e.target.value }))}
+                placeholder="00"
+                disabled={!isAdmin}
+                className="mt-1 w-full text-sm border border-gray-200 rounded-md px-3 py-1.5 font-mono focus:outline-none focus:ring-2 focus:ring-gray-300 disabled:opacity-50"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="text-xs font-medium text-gray-700">Device Serial (optional)</label>
+              <input
+                value={form.device_serial}
+                onChange={(e) => setForm((f) => ({ ...f, device_serial: e.target.value }))}
+                placeholder="VSCU000001"
+                disabled={!isAdmin}
+                className="mt-1 w-full text-sm border border-gray-200 rounded-md px-3 py-1.5 font-mono focus:outline-none focus:ring-2 focus:ring-gray-300 disabled:opacity-50"
+              />
+            </div>
+          </div>
+          <div className="flex gap-6 pt-1">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.sandbox_mode}
+                onChange={(e) => setForm((f) => ({ ...f, sandbox_mode: e.target.checked }))}
+                disabled={!isAdmin}
+                className="accent-amber-500"
+              />
+              <span className="text-sm text-gray-700">Sandbox mode</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.is_active}
+                onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
+                disabled={!isAdmin}
+                className="accent-emerald-600"
+              />
+              <span className="text-sm text-gray-700">Active (submit invoices)</span>
+            </label>
+          </div>
+          {!form.is_active && (
+            <div className="text-xs text-amber-600">
+              eTIMS is disabled — invoices will not be submitted to KRA until you enable it.
+            </div>
+          )}
+          {form.sandbox_mode && form.is_active && (
+            <div className="text-xs text-amber-600">
+              Sandbox mode is on — submissions go to the KRA test environment, not production.
+            </div>
+          )}
+        </div>
+        {isAdmin && (
+          <div className="flex gap-2 pt-2">
+            <Button size="sm" onClick={handleSave} disabled={updateCfg.isPending}>
+              {updateCfg.isPending ? 'Saving…' : 'Save'}
+            </Button>
+            <Button size="sm" variant="outline" onClick={handleTest} disabled={testConn.isPending || !form.kra_pin}>
+              {testConn.isPending ? 'Testing…' : 'Test connection'}
+            </Button>
+          </div>
+        )}
+        {testResult && (
+          <div className={`mt-2 text-xs font-medium ${testResult.ok ? 'text-emerald-600' : 'text-red-500'}`}>
+            {testResult.msg}
+          </div>
+        )}
+        {updateCfg.isSuccess && (
+          <div className="mt-2 text-xs text-emerald-600">Saved.</div>
+        )}
+      </Section>
+
+      {/* Submissions log */}
+      <Section title={`Submissions (${submissions.length})`}>
+        {submissions.length === 0 ? (
+          <div className="py-4 text-sm text-gray-400 text-center">No submissions yet.</div>
+        ) : (
+          <div className="overflow-x-auto -mx-1">
+            <table className="w-full text-xs min-w-[480px]">
+              <thead>
+                <tr className="text-left text-gray-400 border-b border-gray-100">
+                  <th className="py-2 px-2 font-medium">Order</th>
+                  <th className="py-2 px-2 font-medium">CU Invoice</th>
+                  <th className="py-2 px-2 font-medium">Status</th>
+                  <th className="py-2 px-2 font-medium">Attempts</th>
+                  <th className="py-2 px-2 font-medium">Date</th>
+                  <th className="py-2 px-2" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {submissions.map((s) => (
+                  <tr key={s.id} className="hover:bg-gray-50">
+                    <td className="py-2 px-2 font-mono">{s.order_id ?? '—'}</td>
+                    <td className="py-2 px-2 font-mono text-emerald-700">{s.cu_invoice_no ?? '—'}</td>
+                    <td className="py-2 px-2">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusColor[s.status as keyof typeof statusColor] ?? ''}`}>
+                        {s.status}
+                      </span>
+                    </td>
+                    <td className="py-2 px-2 text-gray-500">{s.attempt_count}</td>
+                    <td className="py-2 px-2 text-gray-400">{new Date(s.created_at).toLocaleDateString()}</td>
+                    <td className="py-2 px-2">
+                      {s.status !== 'submitted' && isAdmin && (
+                        <button
+                          onClick={() => retryMutation.mutate(s.id)}
+                          disabled={retryMutation.isPending}
+                          className="text-blue-600 underline text-[10px]"
+                        >
+                          Retry
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Section>
+
+      {/* Registration guide */}
+      <Section title="Setup Checklist">
+        <ol className="text-sm text-gray-600 space-y-2 list-decimal list-inside py-2">
+          <li>Apply to KRA as a certified Third Party Vendor (submit eTIMS Bio Data Form once for Fazi POS).</li>
+          <li>Your tenant selects <strong>VSCU/OSCU</strong> on the KRA eTIMS portal and associates their PIN with Fazi POS.</li>
+          <li>Enter their KRA PIN + branch code above and save.</li>
+          <li>Toggle <strong>Sandbox mode</strong> on and run a few test sales — check the submissions table above.</li>
+          <li>When KRA approves production access, turn off Sandbox mode and enable <strong>Active</strong>.</li>
+        </ol>
+      </Section>
+    </div>
+  )
+}
+
 // ── Page shell ────────────────────────────────────────────────────────────────
 
 export function SettingsPage() {
@@ -1617,6 +1836,7 @@ export function SettingsPage() {
     { id: 'permissions', label: 'Permissions',     icon: Shield,         adminOnly: true, hidden: flags.permissions_mgmt === false },
     { id: 'audit',       label: 'Audit Log',       icon: ClipboardList,  adminOnly: true, hidden: flags.audit_logs === false },
     { id: 'plan',        label: 'Plan & Billing',  icon: Sparkles,       adminOnly: true },
+    { id: 'etims',       label: 'eTIMS / KRA',     icon: ClipboardList,  adminOnly: true },
   ] as { id: TabId; label: string; icon: React.ElementType; adminOnly?: boolean; managerOnly?: boolean; hidden?: boolean }[])
     .filter((t) => !t.hidden && (!t.adminOnly || isAdmin) && (!t.managerOnly || isManagerOrAbove))
 
@@ -1686,6 +1906,7 @@ export function SettingsPage() {
           {tab === 'permissions' && <PermissionsTab />}
           {tab === 'audit'       && <AuditPage />}
           {tab === 'plan'        && <PlanTab />}
+          {tab === 'etims'       && <EtimsTab />}
         </div>
       </div>
     </div>
