@@ -473,43 +473,6 @@ export function POSPage() {
     scanFeedbackTimer.current = setTimeout(() => setScanFeedback(null), 1800)
   }, [])
 
-  const handleScan = useCallback((code: string) => {
-    // First try local products list (product barcode or SKU)
-    const byBarcode = products.find((p) => p.barcode === code)
-    if (byBarcode) {
-      addToCart(byBarcode, baseUnitOf(byBarcode))
-      setSearch('')
-      showScanFeedback(true, byBarcode.name)
-      return
-    }
-    const bySku = products.find((p) => p.sku === code)
-    if (bySku) {
-      addToCart(bySku, baseUnitOf(bySku))
-      setSearch('')
-      showScanFeedback(true, bySku.name)
-      return
-    }
-    // Check unit barcodes across all products
-    for (const p of products) {
-      const unitMatch = p.units.find((u) => u.barcode === code)
-      if (unitMatch) {
-        const unit: SelectedUnit = {
-          id: unitMatch.id, name: unitMatch.name, abbreviation: unitMatch.abbreviation,
-          conversion_factor: unitMatch.conversion_factor,
-          price: unitMatch.price ?? p.price * unitMatch.conversion_factor,
-        }
-        addToCart(p, unit)
-        setSearch('')
-        showScanFeedback(true, `${p.name} (${unitMatch.name})`)
-        return
-      }
-    }
-    setSearch(code)
-    showScanFeedback(false, code)
-  }, [products, addToCart, showScanFeedback])
-
-  useBarcodeScanner({ onScan: handleScan, enabled: noModalOpen })
-
   // Client-side filter (no API call per keystroke)
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
@@ -566,6 +529,41 @@ export function POSPage() {
 
   const updateItemDiscount = (id: string, pct: number) =>
     setCart((prev) => prev.map((i) => i.id === id ? { ...i, itemDiscount: pct } : i))
+
+  const handleScan = useCallback((code: string) => {
+    const byBarcode = products.find((p) => p.barcode === code)
+    if (byBarcode) {
+      addToCart(byBarcode, baseUnitOf(byBarcode))
+      setSearch('')
+      showScanFeedback(true, byBarcode.name)
+      return
+    }
+    const bySku = products.find((p) => p.sku === code)
+    if (bySku) {
+      addToCart(bySku, baseUnitOf(bySku))
+      setSearch('')
+      showScanFeedback(true, bySku.name)
+      return
+    }
+    for (const p of products) {
+      const unitMatch = p.units.find((u) => u.barcode === code)
+      if (unitMatch) {
+        const unit: SelectedUnit = {
+          id: unitMatch.id, name: unitMatch.name, abbreviation: unitMatch.abbreviation,
+          conversion_factor: unitMatch.conversion_factor,
+          price: unitMatch.price ?? p.price * unitMatch.conversion_factor,
+        }
+        addToCart(p, unit)
+        setSearch('')
+        showScanFeedback(true, `${p.name} (${unitMatch.name})`)
+        return
+      }
+    }
+    setSearch(code)
+    showScanFeedback(false, code)
+  }, [products, addToCart, showScanFeedback])
+
+  useBarcodeScanner({ onScan: handleScan, enabled: noModalOpen })
 
   // ── Barcode / Enter to add ───────────────────────────────────────────────
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
