@@ -39,6 +39,7 @@ import type {
   ApiExpenditure, ApiExpenditureSummary, ApiLoyaltySettings,
   ApiEtimsConfig, ApiEtimsSubmission,
   ApiDailySummary, ApiShiftReport, ApiStockLevel, ApiVoidLog,
+  ApiProductUnit,
 } from '@/types/api'
 
 // ── Local-mode adapters ───────────────────────────────────────────────────────
@@ -58,7 +59,7 @@ function localProductToApi(p: LocalProduct): ApiProduct {
     image_url: p.local_image_path ?? p.image_url, unit: p.unit, vat_rate: p.vat_rate,
     expiry_date: null, min_stock: p.min_stock, is_active: p.is_active,
     track_inventory: p.track_inventory, stock_quantity: p.stock_quantity,
-    parent_product_id: null, attributes: null, created_at: '',
+    parent_product_id: null, attributes: null, units: [], created_at: '',
   }
 }
 
@@ -91,6 +92,7 @@ function localOrderToApi(o: LocalOrder): ApiOrder {
     items: o.items.map((it, idx) => ({
       id: idx + 1, product_id: it.product_id, product_name: it.name, product_sku: it.sku,
       quantity: it.qty, unit_price: it.price, discount_amount: 0, total: it.subtotal,
+      unit_id: null, unit_name: null, conversion_factor: 1,
     })),
     created_at: o.created_at,
   }

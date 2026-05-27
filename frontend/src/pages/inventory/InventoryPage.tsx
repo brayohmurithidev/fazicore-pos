@@ -30,7 +30,7 @@ import {
   useStockTransfers, useInitiateTransfer, useTransferAction, useUploadProductImage,
   useReorderSuggestions, useInventoryAging, usePermissions, useBulkCreateProducts,
   useAdjustPrice, usePriceHistory, type ApiPriceHistory,
-  useProductUnits, useCreateProductUnit, useUpdateProductUnit, useDeleteProductUnit,
+  useProductUnits, useCreateProductUnit, useDeleteProductUnit,
 } from '@/lib/queries'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
@@ -2106,7 +2106,7 @@ function NewPOModal({ open, onClose, products, branches }: {
                     </td>
                     <td className="px-2 py-1.5">
                       {hasUnits ? (
-                        <Select value={line.unit_id || 'base'} onValueChange={(v) => handleUnitChange(i, v === 'base' ? '' : v)}>
+                        <Select value={line.unit_id != null ? String(line.unit_id) : 'base'} onValueChange={(v) => handleUnitChange(i, v === 'base' ? '' : v)}>
                           <SelectTrigger className="h-8 text-xs">
                             <SelectValue />
                           </SelectTrigger>
