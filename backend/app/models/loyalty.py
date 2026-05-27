@@ -32,7 +32,10 @@ class PointsTransaction(Base):
     org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True)
     order_id: Mapped[int | None] = mapped_column(ForeignKey("orders.id", ondelete="SET NULL"), nullable=True)
-    type: Mapped[PointsTransactionType] = mapped_column(Enum(PointsTransactionType), nullable=False)
+    type: Mapped[PointsTransactionType] = mapped_column(
+        Enum(PointsTransactionType, values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False,
+    )
     points: Mapped[int] = mapped_column(Integer, nullable=False)
     balance_before: Mapped[int] = mapped_column(Integer, nullable=False)
     balance_after: Mapped[int] = mapped_column(Integer, nullable=False)
