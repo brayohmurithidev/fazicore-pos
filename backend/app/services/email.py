@@ -49,11 +49,13 @@ async def send_welcome_email(
     to: str,
     org_name: str,
     slug: str,
+    plan: str = "starter",
 ) -> None:
-    webapp_url = settings.WEBAPP_URL.rstrip("/")
-    login_url  = f"{webapp_url}?org={slug}"
+    webapp_url  = settings.WEBAPP_URL.rstrip("/")
+    login_url   = f"{webapp_url}?org={slug}"
+    plan_label  = plan.capitalize()
 
-    subject = f"Welcome to Fazi POS — your account is ready"
+    subject = "Welcome to Fazi POS — your account is ready"
 
     html = f"""
 <!DOCTYPE html>
@@ -94,6 +96,12 @@ async def send_welcome_email(
                     <tr>
                       <td style="padding:6px 0;font-size:13px;color:#6b7280;">Your slug</td>
                       <td style="padding:6px 0;font-size:15px;font-weight:700;color:#111827;letter-spacing:0.5px;font-family:monospace;">{slug}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:6px 0;font-size:13px;color:#6b7280;">Plan</td>
+                      <td style="padding:6px 0;">
+                        <span style="display:inline-block;background:#111827;color:#ffffff;font-size:11px;font-weight:700;padding:2px 10px;border-radius:20px;letter-spacing:0.3px;">{plan_label}</span>
+                      </td>
                     </tr>
                     <tr>
                       <td style="padding:6px 0;font-size:13px;color:#6b7280;">Web app</td>
@@ -148,6 +156,7 @@ Your account is ready.
 
 Business name : {org_name}
 Your slug     : {slug}
+Plan          : {plan_label}
 Web app       : {webapp_url}
 
 Open the app: {login_url}

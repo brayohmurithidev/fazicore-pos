@@ -152,7 +152,7 @@ async def create_organization(
     await session.refresh(org)
 
     if org.email:
-        await send_welcome_email(to=org.email, org_name=org.name, slug=org.slug)
+        await send_welcome_email(to=org.email, org_name=org.name, slug=org.slug, plan=org.plan.value)
 
     repo = OrganizationRepository(session)
     s = await repo.get_with_stats(org.id)
