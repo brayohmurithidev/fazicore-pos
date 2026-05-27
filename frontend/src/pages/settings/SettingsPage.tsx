@@ -19,6 +19,7 @@ import {
 } from '@/lib/escpos'
 import { isTauriPortOpen } from '@/lib/tauri-serial'
 import { isTauri } from '@/hooks/useTauri'
+import { invoke } from '@tauri-apps/api/core'
 import {
   useSubscription, usePermissions, useUpdatePermissions, FEATURE_CATALOG,
   useMpesaCredentials, useSaveMpesaCredentials, useDeleteMpesaCredentials,
@@ -559,6 +560,7 @@ function GeneralTab() {
       </Section>
       {(isTauri || flags.thermal_printing !== false) && <PrinterSetupSection />}
       <LoyaltySection />
+      {isTauri() && <MultiTerminalSection />}
       {isAdmin && (
         <Section title="Branches">
           <Toggle label="Branch-level Inventory" sub="Each branch tracks its own stock separately" value={settings.branchInventory} onChange={(v) => patch('branchInventory', v)} locked={flags.multi_branch === false} />
@@ -663,6 +665,137 @@ function LoyaltySection() {
             100 pts redeems as <strong>KES {(100 * ls.kes_per_point).toFixed(0)}</strong>.
           </div>
         </>
+      )}
+    </Section>
+  )
+}
+
+// ── Multi-terminal section ────────────────────────────────────────────────────
+
+function MultiTerminalSection() {
+  const { settings, update } = useSettingsStore()
+  const [serverStatus, setServerStatus] = useState<{ running: boolean; ip: string; port: number } | null>(null)
+  const [isStarting, setIsStarting] = useState(false)
+  const [testResult, setTestResult] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (settings.terminalMode !== 'branch_server') return
+    const check = async () => {
+      try {
+        const s = await invoke<{ running: boolean; ip: string; port: number }>('get_branch_server_status')
+        setServerStatus(s)
+      } catch {}
+    }
+    check()
+    const id = setInterval(check, 5_000)
+    return () => clearInterval(id)
+  }, [settings.terminalMode])
+
+  const handleMode = async (mode: 'standalone' | 'branch_server' | 'client') => {
+    if (mode === 'branch_server') {
+      setIsStarting(true)
+      try { await invoke('start_branch_server', { port: settings.serverPort || 8765 }) } catch (e) { console.error(e) }
+      setIsStarting(false)
+    } else {
+      try { await invoke('stop_branch_server') } catch {}
+    }
+    update({ terminalMode: mode })
+  }
+
+  const testConnection = async () => {
+    const url = settings.branchServerUrl.replace(/\/$/, '')
+    try {
+      const res = await fetch(`${url}/status`, { signal: AbortSignal.timeout(3000) })
+      setTestResult(res.ok ? 'Connected' : 'Server error')
+    } catch {
+      setTestResult('Cannot reach server')
+    }
+    setTimeout(() => setTestResult(null), 4000)
+  }
+
+  const modes = [
+    { value: 'standalone', label: 'Standalone', sub: 'This terminal manages its own stock independently' },
+    { value: 'branch_server', label: 'Branch Server', sub: 'Host shared stock for all terminals in this branch' },
+    { value: 'client', label: 'Client Terminal', sub: 'Connect to the branch server for live stock data' },
+  ] as const
+
+  return (
+    <Section title="Multi-terminal">
+      <div className="py-1 space-y-3">
+        {modes.map(({ value, label, sub }) => (
+          <label key={value} className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="radio"
+              name="terminalMode"
+              value={value}
+              checked={settings.terminalMode === value}
+              onChange={() => handleMode(value)}
+              className="mt-0.5 accent-emerald-600"
+            />
+            <div>
+              <div className="text-sm font-medium text-gray-900">{label}</div>
+              <div className="text-xs text-gray-400">{sub}</div>
+            </div>
+          </label>
+        ))}
+      </div>
+
+      {settings.terminalMode === 'branch_server' && (
+        <div className="mt-3 p-3 bg-emerald-50 rounded-lg border border-emerald-100 space-y-2">
+          {isStarting ? (
+            <div className="text-sm text-emerald-700">Starting server…</div>
+          ) : serverStatus?.running ? (
+            <div>
+              <div className="text-sm font-medium text-emerald-800">Server running</div>
+              <div className="mt-1 flex items-center gap-2">
+                <code className="text-xs bg-white border border-emerald-200 rounded px-2 py-1 text-emerald-700">
+                  http://{serverStatus.ip}:{serverStatus.port}
+                </code>
+                <button
+                  onClick={() => navigator.clipboard.writeText(`http://${serverStatus.ip}:${serverStatus.port}`)}
+                  className="text-xs text-emerald-700 underline"
+                >
+                  Copy
+                </button>
+              </div>
+              <div className="text-xs text-gray-400 mt-1">Enter this URL on client terminals.</div>
+            </div>
+          ) : (
+            <div className="text-sm text-amber-700">Server not started yet.</div>
+          )}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">Port</span>
+            <input
+              type="number"
+              value={settings.serverPort || 8765}
+              onChange={(e) => update({ serverPort: Number(e.target.value) })}
+              className="w-20 text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none"
+            />
+          </div>
+        </div>
+      )}
+
+      {settings.terminalMode === 'client' && (
+        <div className="mt-3 space-y-2">
+          <div>
+            <label className="text-xs text-gray-500">Branch Server URL</label>
+            <input
+              type="text"
+              placeholder="http://192.168.1.10:8765"
+              value={settings.branchServerUrl}
+              onChange={(e) => update({ branchServerUrl: e.target.value })}
+              className="mt-1 w-full text-sm border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-gray-300"
+            />
+          </div>
+          <button onClick={testConnection} className="text-xs text-emerald-700 underline">
+            Test connection
+          </button>
+          {testResult && (
+            <div className={`text-xs font-medium ${testResult === 'Connected' ? 'text-emerald-600' : 'text-red-500'}`}>
+              {testResult}
+            </div>
+          )}
+        </div>
       )}
     </Section>
   )

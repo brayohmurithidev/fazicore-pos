@@ -13,6 +13,7 @@ import { resolveImageUrl } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import { isTauri } from '@tauri-apps/api/core'
+import { useQuery } from '@tanstack/react-query'
 import { useCategories, useCreateOrder, useBranches, usePermissions, useCustomers, useLoyaltySettings } from '@/lib/queries'
 import type { ApiCustomer } from '@/types/api'
 import { isLocalMode } from '@/lib/local-mode'
@@ -472,6 +473,31 @@ export function POSPage() {
     [apiProducts]
   )
 
+  // ── Branch server (client terminal mode) ─────────────────────────────────
+  const isClientMode = isTauri() && settings.terminalMode === 'client' && !!settings.branchServerUrl
+  const bsUrl = settings.branchServerUrl?.replace(/\/$/, '')
+  const { data: bsStock } = useQuery<Map<number, number>>({
+    queryKey: ['bs-stock', bsUrl],
+    queryFn: async () => {
+      const res = await fetch(`${bsUrl}/api/stock`)
+      if (!res.ok) throw new Error('branch server unreachable')
+      const items: { product_id: number; qty: number }[] = await res.json()
+      return new Map(items.map((i) => [i.product_id, i.qty]))
+    },
+    enabled: isClientMode,
+    refetchInterval: 10_000,
+    staleTime: 8_000,
+  })
+
+  // Override stock quantities from branch server when in client mode
+  const displayProducts = useMemo<Product[]>(() => {
+    if (!isClientMode || !bsStock) return products
+    return products.map((p) => {
+      const numId = Number(p.id)
+      return bsStock.has(numId) ? { ...p, stock: bsStock.get(numId)! } : p
+    })
+  }, [products, isClientMode, bsStock])
+
   // ── Loyalty ──────────────────────────────────────────────────────────────
   const { data: loyaltySettings } = useLoyaltySettings()
   const loyaltyEnabled = loyaltySettings?.enabled === true
@@ -498,7 +524,7 @@ export function POSPage() {
   // Client-side filter (no API call per keystroke)
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
-    return products.filter((p) => {
+    return displayProducts.filter((p) => {
       if (activeCat !== 'all' && p.category !== activeCat) return false
       if (!q) return true
       return (
@@ -553,14 +579,14 @@ export function POSPage() {
     setCart((prev) => prev.map((i) => i.id === id ? { ...i, itemDiscount: pct } : i))
 
   const handleScan = useCallback((code: string) => {
-    const byBarcode = products.find((p) => p.barcode === code)
+    const byBarcode = displayProducts.find((p) => p.barcode === code)
     if (byBarcode) {
       addToCart(byBarcode, baseUnitOf(byBarcode))
       setSearch('')
       showScanFeedback(true, byBarcode.name)
       return
     }
-    const bySku = products.find((p) => p.sku === code)
+    const bySku = displayProducts.find((p) => p.sku === code)
     if (bySku) {
       addToCart(bySku, baseUnitOf(bySku))
       setSearch('')
@@ -590,7 +616,7 @@ export function POSPage() {
   // ── Barcode / Enter to add ───────────────────────────────────────────────
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== 'Enter') return
-    const exact = products.find((p) => p.barcode === search || p.sku === search)
+    const exact = displayProducts.find((p) => p.barcode === search || p.sku === search)
     if (exact) {
       addToCart(exact, baseUnitOf(exact))
       setSearch('')
@@ -764,7 +790,37 @@ export function POSPage() {
       loyalty_points_redeemed: pointsRedeemed,
     }
 
-    if (!isLocalMode && isTauri() && !isOnline) {
+    if (isClientMode) {
+      // Reserve stock on branch server, then commit
+      const reserveItems = cart
+        .filter((item) => Number(item.id.split(':')[0]) > 0)
+        .map((item) => ({
+          product_id: Number(item.id.split(':')[0]),
+          qty: Math.round(item.qty * item.selectedUnit.conversion_factor),
+        }))
+      let reservationId: string | null = null
+      if (reserveItems.length > 0) {
+        const reserveRes = await fetch(`${bsUrl}/api/reserve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: reserveItems }),
+        })
+        const reserveData: { ok: boolean; reservation_id?: string; error?: string } = await reserveRes.json()
+        if (!reserveData.ok) {
+          // eslint-disable-next-line no-alert
+          alert(reserveData.error ?? 'Stock reservation failed — another terminal may have sold this item')
+          return
+        }
+        reservationId = reserveData.reservation_id ?? null
+      }
+      if (reservationId) {
+        await fetch(`${bsUrl}/api/commit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reservation_id: reservationId }),
+        })
+      }
+    } else if (!isLocalMode && isTauri() && !isOnline) {
       // Queue the sale locally for later sync; stock is decremented in SQLite immediately
       const stockItems: [number, number][] = cart
         .filter((item) => Number(item.id.split(':')[0]) > 0)
@@ -1005,7 +1061,7 @@ export function POSPage() {
           ) : (
             cart.map((item) => {
               const catColor = catMap.get(item.category)?.color ?? '#9CA3AF'
-              const product = products.find((p) => p.id === item.id.split(':')[0])
+              const product = displayProducts.find((p) => p.id === item.id.split(':')[0])
               const maxQty = product
                 ? Math.floor(product.stock / item.selectedUnit.conversion_factor)
                 : item.qty

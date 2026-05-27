@@ -146,4 +146,8 @@ export interface Settings {
   branchInventory: boolean
   consolidatedReports: boolean
   stockTransfer: boolean
+  // Multi-terminal
+  terminalMode: 'standalone' | 'branch_server' | 'client'
+  branchServerUrl: string
+  serverPort: number
 }

@@ -77,6 +77,7 @@ export const DEFAULT_SETTINGS: Settings = {
   printerMode: 'cups', cupsName: '',
   showVat: true, showLogo: false, smsReceipt: false, branchInventory: true,
   consolidatedReports: true, stockTransfer: true,
+  terminalMode: 'standalone', branchServerUrl: '', serverPort: 8765,
 }
 
 export function fmtKES(amount: number): string {

@@ -1,3 +1,4 @@
+mod branch_server;
 mod db;
 mod sync;
 
@@ -14,6 +15,8 @@ use std::path::PathBuf;
 
 use db::{DbState, SyncStatus};
 use sync::{SyncConfig, SyncConfigState, SyncResult};
+
+pub struct BranchServerState(pub Mutex<Option<branch_server::RunningServer>>);
 
 pub struct ImageDirState(pub PathBuf);
 
@@ -314,6 +317,67 @@ fn local_get_sales_report(
     db::get_local_sales_report(&conn, &from_date, &to_date).map_err(|e| e.to_string())
 }
 
+// ── Branch server commands ────────────────────────────────────────────────────
+
+fn local_ip() -> Option<String> {
+    use std::net::UdpSocket;
+    let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect("8.8.8.8:80").ok()?;
+    Some(socket.local_addr().ok()?.ip().to_string())
+}
+
+#[tauri::command]
+async fn start_branch_server(
+    db: tauri::State<'_, DbState>,
+    bs: tauri::State<'_, BranchServerState>,
+    port: u16,
+) -> Result<(), String> {
+    // Check + drop guard before any await
+    {
+        let guard = bs.0.lock().unwrap();
+        if guard.is_some() {
+            return Ok(());
+        }
+    }
+    let db_arc = db.0.clone();
+    let server = branch_server::start(db_arc, port).await?;
+    *bs.0.lock().unwrap() = Some(server);
+    Ok(())
+}
+
+#[tauri::command]
+fn stop_branch_server(bs: tauri::State<'_, BranchServerState>) -> Result<(), String> {
+    let mut guard = bs.0.lock().unwrap();
+    if let Some(server) = guard.take() {
+        server.abort();
+    }
+    Ok(())
+}
+
+#[derive(serde::Serialize)]
+pub struct BranchServerStatus {
+    running: bool,
+    ip: String,
+    port: u16,
+}
+
+#[tauri::command]
+fn get_branch_server_status(bs: tauri::State<'_, BranchServerState>) -> BranchServerStatus {
+    let guard = bs.0.lock().unwrap();
+    match &*guard {
+        Some(s) => BranchServerStatus {
+            running: true,
+            ip: local_ip().unwrap_or_else(|| "unknown".into()),
+            port: s.port,
+        },
+        None => BranchServerStatus {
+            running: false,
+            ip: local_ip().unwrap_or_else(|| "unknown".into()),
+            port: 0,
+        },
+    }
+}
+
 // ── Sync config (call this on login / token refresh) ─────────────────────────
 
 #[tauri::command]
@@ -423,6 +487,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(SyncConfigState(Mutex::new(None)))
+        .manage(BranchServerState(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             // printing
             list_system_printers,
@@ -430,6 +495,10 @@ pub fn run() {
             save_text_file,
             save_binary_file,
             open_html_preview,
+            // branch server
+            start_branch_server,
+            stop_branch_server,
+            get_branch_server_status,
             // offline db (sync mode)
             db_get_products,
             db_get_customers,
@@ -467,7 +536,7 @@ pub fn run() {
             let conn = rusqlite::Connection::open(&db_path)
                 .expect("failed to open SQLite database");
             db::init_db(&conn).expect("failed to initialize database schema");
-            app.manage(DbState(Mutex::new(conn)));
+            app.manage(DbState(std::sync::Arc::new(Mutex::new(conn))));
 
             // ── Image cache dir ──
             let image_dir = data_dir.join("images");
