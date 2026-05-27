@@ -80,10 +80,8 @@ jobs:
             # Pull the new image
             docker pull "${API_IMAGE}"
 
-            # Run migrations against the new image before switching traffic
-            API_IMAGE="${API_IMAGE}" docker compose --profile migrate run --rm migrate
-
-            # Swap api + worker to new image, leave db/redis/minio/nginx untouched
+            # Swap api + worker to new image (entrypoint.sh runs alembic upgrade head on startup)
+            # Migrations run automatically before uvicorn starts
             API_IMAGE="${API_IMAGE}" docker compose up -d --no-deps --pull never api worker
 
             # Prune images older than 24h to keep the server clean
