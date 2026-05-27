@@ -1259,23 +1259,46 @@ function ProductsTab({ branchId }: { branchId?: number }) {
   const downloadTemplateCSV = () => downloadCSV('products_template.csv', TEMPLATE_HEADERS, TEMPLATE_ROW)
   const downloadTemplateXlsx = () => void downloadXlsx('products_template.xlsx', TEMPLATE_HEADERS, TEMPLATE_ROW)
 
-  const handleImportCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     e.target.value = ''
-    const text = await file.text()
-    const lines = text.trim().split(/\r?\n/)
-    if (lines.length < 2) { toast.error('CSV has no data rows'); return }
-    const headers = parseCSVLine(lines[0]).map((h) => h.trim().toLowerCase())
-    const nameIdx = headers.indexOf('name')
-    const priceIdx = headers.indexOf('price')
-    if (nameIdx === -1 || priceIdx === -1) { toast.error('CSV must have "name" and "price" columns'); return }
+
+    const isXlsx = file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls')
+
+    let headers: string[]
+    let dataRows: string[][]
+
+    if (isXlsx) {
+      try {
+        const XLSX = await import('xlsx')
+        const buf = await file.arrayBuffer()
+        const wb = XLSX.read(buf, { type: 'array' })
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        const raw: string[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as string[][]
+        if (raw.length < 2) { toast.error('Spreadsheet has no data rows'); return }
+        headers = raw[0].map((h) => String(h).trim().toLowerCase())
+        dataRows = raw.slice(1).map((r) => r.map((c) => String(c ?? '').trim()))
+      } catch (err) {
+        toast.error(`Could not read spreadsheet: ${err instanceof Error ? err.message : String(err)}`)
+        return
+      }
+    } else {
+      const text = await file.text()
+      const lines = text.trim().split(/\r?\n/)
+      if (lines.length < 2) { toast.error('CSV has no data rows'); return }
+      headers = parseCSVLine(lines[0]).map((h) => h.trim().toLowerCase())
+      dataRows = lines.slice(1).filter(Boolean).map(parseCSVLine)
+    }
+
+    if (!headers.includes('name') || !headers.includes('price')) {
+      toast.error('File must have "name" and "price" columns')
+      return
+    }
+
     const col = (cols: string[], key: string) => { const i = headers.indexOf(key); return i === -1 ? '' : cols[i]?.trim() ?? '' }
     const rows: Record<string, unknown>[] = []
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim()
-      if (!line) continue
-      const cols = parseCSVLine(line)
+    for (const cols of dataRows) {
       const name = col(cols, 'name')
       const price = parseFloat(col(cols, 'price'))
       if (!name || isNaN(price)) continue
@@ -1295,13 +1318,13 @@ function ProductsTab({ branchId }: { branchId?: number }) {
         initial_stock: parseInt(col(cols, 'stock_quantity')) || 0,
       })
     }
-    if (rows.length === 0) { toast.error('No valid rows found in CSV'); return }
+    if (rows.length === 0) { toast.error('No valid rows found in file'); return }
     bulkCreateProducts.mutate(rows, {
       onSuccess: (res: { created: number }) => toast.success(`Imported ${res.created} product${res.created !== 1 ? 's' : ''}`),
       onError: (err) => {
         const limit = parseLimitError(err)
         if (limit) setLimitError(limit)
-        else toast.error('Import failed — check CSV format')
+        else toast.error('Import failed — check file format')
       },
     })
   }
@@ -1506,7 +1529,7 @@ function ProductsTab({ branchId }: { branchId?: number }) {
           <Button variant="outline" size="sm" onClick={() => setBarcodeModalOpen(true)}><Barcode size={13} className="mr-1.5" />Labels</Button>
           {canManage && (
             <>
-              <input ref={importRef} type="file" accept=".csv" className="hidden" onChange={handleImportCSV} />
+              <input ref={importRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleImportFile} />
               <DropdownMenu>
                 <DropdownMenuTrigger className={buttonVariants({ variant: 'outline', size: 'sm' })}>
                   <FileDown size={13} className="mr-1.5" />Template<ChevronDown size={11} className="ml-1 opacity-60" />
