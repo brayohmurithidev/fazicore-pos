@@ -1206,6 +1206,16 @@ export function useMpesaTransactions(unattachedOnly = false) {
   })
 }
 
+export function useMpesaTransactionsByDate(dateFrom: string, dateTo: string) {
+  return useQuery({
+    queryKey: ['mpesa-transactions-range', dateFrom, dateTo],
+    queryFn: () =>
+      api.get(`/mpesa/transactions?date_from=${dateFrom}&date_to=${dateTo}&limit=500`)
+        .then((r) => r.data as MpesaTransactionItem[]),
+    enabled: !!dateFrom && !!dateTo,
+  })
+}
+
 // ── M-Pesa types ──────────────────────────────────────────────────────────
 
 export interface MpesaCredentialsOut {

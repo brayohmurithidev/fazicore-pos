@@ -160,10 +160,20 @@ function IncomingPaymentPicker({
   onSelect: (tx: MpesaTransactionItem) => void
   onClose: () => void
 }) {
+  const [todayOnly, setTodayOnly] = useState(true)
   const { data: txs = [], isLoading, refetch } = useMpesaTransactions(true)
 
-  const fmt = (iso: string) =>
-    new Date(iso).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })
+  const todayStr = new Date().toDateString()
+  const fmt = (iso: string) => {
+    const d = new Date(iso)
+    const time = d.toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })
+    if (d.toDateString() === todayStr) return `Today · ${time}`
+    return d.toLocaleDateString('en-KE', { day: 'numeric', month: 'short' }) + ` · ${time}`
+  }
+
+  const visible = todayOnly
+    ? txs.filter((tx) => new Date(tx.created_at).toDateString() === todayStr)
+    : txs
 
   return (
     <div>
@@ -172,21 +182,34 @@ function IncomingPaymentPicker({
           <div className="text-sm font-semibold text-gray-900">Incoming M-Pesa Payments</div>
           <div className="text-xs text-gray-400">Select a payment that matches {fmtKES(amount)}</div>
         </div>
-        <Button size="sm" variant="outline" onClick={() => refetch()} className="px-2">
-          <RefreshCw size={13} />
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => setTodayOnly((v) => !v)}
+            className={`text-xs px-2 py-1 rounded border transition-colors ${
+              todayOnly ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200'
+            }`}
+          >
+            {todayOnly ? "Today" : "All"}
+          </button>
+          <Button size="sm" variant="outline" onClick={() => refetch()} className="px-2">
+            <RefreshCw size={13} />
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
         <div className="text-xs text-gray-400 text-center py-6">Loading...</div>
-      ) : txs.length === 0 ? (
+      ) : visible.length === 0 ? (
         <div className="text-center py-8 text-gray-400 text-sm">
-          No unattached incoming payments found.<br />
-          <span className="text-xs">Payments appear here when customers pay via paybill/till directly.</span>
+          No unattached payments found{todayOnly ? ' today' : ''}.<br />
+          {todayOnly
+            ? <button className="text-xs text-green-700 font-semibold mt-1" onClick={() => setTodayOnly(false)}>Show all dates</button>
+            : <span className="text-xs">Payments appear here when customers pay via paybill/till directly.</span>
+          }
         </div>
       ) : (
         <div className="space-y-1.5 max-h-64 overflow-y-auto">
-          {txs.map((tx) => {
+          {visible.map((tx) => {
             const matches = Math.abs(tx.amount - amount) < 1
             return (
               <button

@@ -11,6 +11,7 @@ import {
   useAnalyticsSummary, useAnalyticsByPayment, useAnalyticsByCashier,
   useReorderSuggestions, useInventoryAging,
   useDailySummary, useShiftReport, useStockLevels, useVoidLog,
+  useMpesaTransactionsByDate,
 } from '@/lib/queries'
 import { useFeature, useFeatureFlags } from '@/hooks/useFeature'
 import { UpgradeWall } from '@/components/shared/UpgradeWall'
@@ -26,7 +27,7 @@ const fmtTime = (iso: string | null | undefined) => {
 const today = () => new Date().toISOString().slice(0, 10)
 
 type Period = 'day' | 'week' | 'month'
-type ReportTab = 'sales' | 'daily' | 'shift' | 'inventory' | 'stock' | 'products' | 'credit' | 'voids'
+type ReportTab = 'sales' | 'daily' | 'shift' | 'inventory' | 'stock' | 'products' | 'credit' | 'voids' | 'mpesa'
 
 // ── PDF Print ─────────────────────────────────────────────────────────────────
 
@@ -650,6 +651,105 @@ function VoidsTab() {
   )
 }
 
+// ── M-Pesa Transactions Tab ───────────────────────────────────────────────────
+
+function MpesaTab() {
+  const [dateFrom, setDateFrom] = useState(today())
+  const [dateTo,   setDateTo]   = useState(today())
+  const { data: txs = [], isLoading } = useMpesaTransactionsByDate(dateFrom, dateTo)
+
+  const fmtTs = (iso: string) => {
+    const d = new Date(iso)
+    return d.toLocaleDateString('en-KE', { day: 'numeric', month: 'short' }) +
+      ' · ' + d.toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })
+  }
+
+  const totalAmount  = txs.filter((t) => t.status === 'completed').reduce((s, t) => s + t.amount, 0)
+  const completedCnt = txs.filter((t) => t.status === 'completed').length
+  const failedCnt    = txs.filter((t) => t.status === 'failed').length
+
+  return (
+    <div className="space-y-4">
+      {/* Date filter */}
+      <Card>
+        <CardContent className="pt-4 pb-3">
+          <div className="flex flex-wrap gap-3 items-end">
+            <div>
+              <div className="text-xs text-gray-500 mb-1">From</div>
+              <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-8 text-sm w-36" />
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 mb-1">To</div>
+              <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-8 text-sm w-36" />
+            </div>
+            <div className="flex gap-2 ml-auto text-right">
+              <div className="text-center">
+                <div className="text-lg font-bold text-green-700">{fmt(totalAmount)}</div>
+                <div className="text-xs text-gray-400">{completedCnt} completed · {failedCnt} failed</div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Transactions table */}
+      <Card>
+        <CardHeader className="pb-2 pt-4">
+          <CardTitle className="text-sm font-semibold">M-Pesa Transactions</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin text-gray-400" /></div>
+          ) : txs.length === 0 ? (
+            <div className="text-center py-10 text-gray-400 text-sm">No transactions in this date range.</div>
+          ) : (
+            <div className="overflow-x-auto" id="print-area">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-xs text-gray-500 uppercase tracking-wide">
+                    <th className="text-left py-2 pl-4 pr-3 font-medium">Date & Time</th>
+                    <th className="text-left py-2 pr-3 font-medium">Phone</th>
+                    <th className="text-left py-2 pr-3 font-medium">Sender</th>
+                    <th className="text-left py-2 pr-3 font-medium">Receipt</th>
+                    <th className="text-left py-2 pr-3 font-medium">Type</th>
+                    <th className="text-left py-2 pr-3 font-medium">Status</th>
+                    <th className="text-right py-2 pr-4 font-medium">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {txs.map((tx) => (
+                    <tr key={tx.id} className="hover:bg-gray-50">
+                      <td className="py-2.5 pl-4 pr-3 text-xs text-gray-500 whitespace-nowrap">{fmtTs(tx.created_at)}</td>
+                      <td className="py-2.5 pr-3 font-mono text-xs">{tx.phone || '—'}</td>
+                      <td className="py-2.5 pr-3 text-xs text-gray-700">{tx.sender_name || '—'}</td>
+                      <td className="py-2.5 pr-3 font-mono text-xs text-gray-600">{tx.mpesa_receipt_number || '—'}</td>
+                      <td className="py-2.5 pr-3 text-xs capitalize">{tx.transaction_type.replace('_', ' ')}</td>
+                      <td className="py-2.5 pr-3">
+                        <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${
+                          tx.status === 'completed' ? 'bg-green-100 text-green-700' :
+                          tx.status === 'failed'    ? 'bg-red-100 text-red-600' :
+                          'bg-yellow-100 text-yellow-700'
+                        }`}>{tx.status}</span>
+                      </td>
+                      <td className="py-2.5 pr-4 text-right font-semibold">{fmt(tx.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-gray-200 bg-gray-50">
+                    <td colSpan={6} className="py-2 pl-4 text-xs font-semibold text-gray-600">Total (completed)</td>
+                    <td className="py-2 pr-4 text-right font-bold text-green-700">{fmt(totalAmount)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 const TABS: { id: ReportTab; label: string; icon: React.ElementType; roles: string[]; featureFlag?: string }[] = [
@@ -661,6 +761,7 @@ const TABS: { id: ReportTab; label: string; icon: React.ElementType; roles: stri
   { id: 'inventory', label: 'Reorder',   icon: Package,      roles: ['admin', 'manager', 'stock'], featureFlag: 'inventory_analytics' },
   { id: 'voids',     label: 'Voids',     icon: Ban,          roles: ['admin', 'manager'] },
   { id: 'credit',    label: 'Credit',    icon: CreditCard,   roles: ['admin', 'manager'], featureFlag: 'credit_system' },
+  { id: 'mpesa',     label: 'M-Pesa',    icon: CreditCard,   roles: ['admin', 'manager'] },
 ]
 
 export function ReportsPage() {
@@ -692,6 +793,7 @@ export function ReportsPage() {
     products: 'Product Performance',
     credit: 'Credit Report',
     voids: 'Void & Refund Log',
+    mpesa: 'M-Pesa Transactions',
   }
 
   return (
@@ -747,6 +849,7 @@ export function ReportsPage() {
         {tab === 'inventory' && <InventoryTab />}
         {tab === 'voids'     && <VoidsTab />}
         {tab === 'credit'    && <CreditTab />}
+        {tab === 'mpesa'     && <MpesaTab />}
       </div>
     </div>
   )

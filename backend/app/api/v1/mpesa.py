@@ -19,6 +19,7 @@ routed directly to the right organisation with no shortcode lookup ambiguity.
 """
 
 import json
+from datetime import date, datetime, timedelta, timezone
 from typing import Annotated
 from urllib.parse import urlparse
 
@@ -448,7 +449,9 @@ async def list_transactions(
     user: Annotated[User, Depends(get_current_active_user)],
     session: AsyncSession = Depends(get_session),
     unattached_only: bool = Query(False),
-    limit: int = Query(50, le=200),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    limit: int = Query(200, le=500),
 ):
     q = select(MpesaTransaction).where(MpesaTransaction.org_id == user.org_id)
     if unattached_only:
@@ -456,6 +459,11 @@ async def list_transactions(
             MpesaTransaction.order_id.is_(None),
             MpesaTransaction.status == MpesaTransactionStatus.COMPLETED,
         )
+    if date_from:
+        q = q.where(MpesaTransaction.created_at >= datetime(date_from.year, date_from.month, date_from.day, tzinfo=timezone.utc))
+    if date_to:
+        next_day = date_to + timedelta(days=1)
+        q = q.where(MpesaTransaction.created_at < datetime(next_day.year, next_day.month, next_day.day, tzinfo=timezone.utc))
     q = q.order_by(MpesaTransaction.created_at.desc()).limit(limit)
     rows = (await session.scalars(q)).all()
 
