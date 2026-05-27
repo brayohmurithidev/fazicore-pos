@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.api.v1 import admin, analytics, attendance, audit, auth, branches, categories, customers, dashboard, download, etims, expenditures, hooks, inventory, loyalty, mpesa, orders, org, platform, products, purchase_orders, reports, seed, stock_transfers, suppliers, uploads, users
 from app.api.v1.analytics import sales_router
@@ -17,6 +18,8 @@ app = FastAPI(
     version="1.0.0",
     description="Multi-tenant Point of Sale system API",
 )
+
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
 app.add_middleware(
     CORSMiddleware,
