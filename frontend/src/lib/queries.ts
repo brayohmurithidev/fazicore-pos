@@ -36,7 +36,7 @@ import type {
   ApiInventoryItem, ApiInventoryTransaction, ApiOrder, ApiProduct,
   ApiPurchaseOrder, ApiUser, ApiOrgInfo, ApiSubscriptionInfo, ApiSupplier, ApiStockTransfer,
   ApiPermissions, ApiNotifications, ApiAnalyticsDailyItem, ReorderSuggestion, AgingItem, DashboardData, TokenResponse,
-  ApiExpenditure, ApiExpenditureSummary,
+  ApiExpenditure, ApiExpenditureSummary, ApiLoyaltySettings,
 } from '@/types/api'
 
 // ── Local-mode adapters ───────────────────────────────────────────────────────
@@ -1252,4 +1252,23 @@ export interface MpesaTransactionItem {
   mpesa_receipt_number: string | null
   order_id: number | null
   created_at: string
+}
+
+// ── Loyalty ────────────────────────────────────────────────────────────────
+
+export function useLoyaltySettings() {
+  return useQuery<ApiLoyaltySettings>({
+    queryKey: ['loyalty-settings'],
+    queryFn: () => api.get('/loyalty/settings').then((r) => r.data),
+    staleTime: 60_000,
+  })
+}
+
+export function useUpdateLoyaltySettings() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: Partial<ApiLoyaltySettings>) =>
+      api.patch('/loyalty/settings', data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['loyalty-settings'] }),
+  })
 }

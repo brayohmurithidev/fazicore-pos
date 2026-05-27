@@ -55,6 +55,7 @@ class OrderCreate(BaseModel):
     credit_customer_phone: str | None = None
     notes: str | None = None
     idempotency_key: str | None = None
+    loyalty_points_redeemed: int = 0
 
 
 class OrderItemOut(BaseModel):

@@ -419,6 +419,13 @@ export interface ApiSubscriptionInfo {
   available_plans: ApiPlanInfo[]
 }
 
+export interface ApiLoyaltySettings {
+  enabled: boolean
+  points_per_kes: number
+  kes_per_point: number
+  min_redeem_points: number
+}
+
 export interface ApiFeatureEntry {
   key: string
   label: string

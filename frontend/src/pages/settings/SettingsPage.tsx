@@ -24,6 +24,7 @@ import {
   useMpesaCredentials, useSaveMpesaCredentials, useDeleteMpesaCredentials,
   useSetLiveMpesaEnvironment, useRegisterC2bUrls, useSimulateC2b,
   useOrgInfo, useUpgradeSubscription, useStkStatus, useQueryUpgradeStatus,
+  useLoyaltySettings, useUpdateLoyaltySettings,
   type MpesaCredentialsOut, type UpgradeInitiated,
 } from '@/lib/queries'
 import { useFeatureFlags } from '@/hooks/useFeature'
@@ -557,6 +558,7 @@ function GeneralTab() {
         <Toggle label="Digital Receipt (SMS)" sub="Send receipt via SMS to customer" value={settings.smsReceipt} onChange={(v) => patch('smsReceipt', v)} locked={!isAdmin || flags.sms_receipts === false} lockedReason={!isAdmin ? 'Admin only' : 'Upgrade'} />
       </Section>
       {(isTauri || flags.thermal_printing !== false) && <PrinterSetupSection />}
+      <LoyaltySection />
       {isAdmin && (
         <Section title="Branches">
           <Toggle label="Branch-level Inventory" sub="Each branch tracks its own stock separately" value={settings.branchInventory} onChange={(v) => patch('branchInventory', v)} locked={flags.multi_branch === false} />
@@ -565,6 +567,104 @@ function GeneralTab() {
         </Section>
       )}
     </div>
+  )
+}
+
+// ── Loyalty settings section ──────────────────────────────────────────────────
+
+function LoyaltySection() {
+  const { user } = useAuthStore()
+  const isAdmin = user?.role === 'admin' || user?.role === 'manager'
+  const { data: ls, isLoading } = useLoyaltySettings()
+  const update = useUpdateLoyaltySettings()
+
+  if (isLoading || !ls) return null
+
+  const patch = (key: string, value: unknown) => update.mutate({ [key]: value })
+
+  return (
+    <Section title="Loyalty & Rewards">
+      <Toggle
+        label="Enable Loyalty Programme"
+        sub="Customers earn and redeem points at checkout"
+        value={ls.enabled}
+        onChange={(v) => patch('enabled', v)}
+        locked={!isAdmin}
+        lockedReason="Admin or manager only"
+      />
+      {ls.enabled && (
+        <>
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <div className="text-sm font-medium text-gray-900">Earn rate</div>
+              <div className="text-xs text-gray-400 mt-0.5">Points earned per KES 1 spent</div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="number"
+                min={0.01}
+                step={0.1}
+                defaultValue={ls.points_per_kes}
+                disabled={!isAdmin}
+                onBlur={(e) => {
+                  const v = parseFloat(e.target.value)
+                  if (!isNaN(v) && v > 0) patch('points_per_kes', v)
+                }}
+                className="w-20 text-sm border border-gray-200 rounded-md px-2 py-1.5 text-right focus:outline-none focus:ring-2 focus:ring-gray-300 disabled:opacity-50"
+              />
+              <span className="text-xs text-gray-400">pts / KES</span>
+            </div>
+          </div>
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <div className="text-sm font-medium text-gray-900">Redemption value</div>
+              <div className="text-xs text-gray-400 mt-0.5">KES given per 1 point redeemed</div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-400">KES</span>
+              <input
+                type="number"
+                min={0.01}
+                step={0.1}
+                defaultValue={ls.kes_per_point}
+                disabled={!isAdmin}
+                onBlur={(e) => {
+                  const v = parseFloat(e.target.value)
+                  if (!isNaN(v) && v > 0) patch('kes_per_point', v)
+                }}
+                className="w-20 text-sm border border-gray-200 rounded-md px-2 py-1.5 text-right focus:outline-none focus:ring-2 focus:ring-gray-300 disabled:opacity-50"
+              />
+              <span className="text-xs text-gray-400">/ pt</span>
+            </div>
+          </div>
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <div className="text-sm font-medium text-gray-900">Minimum to redeem</div>
+              <div className="text-xs text-gray-400 mt-0.5">Fewest points a customer must have to redeem</div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="number"
+                min={1}
+                step={1}
+                defaultValue={ls.min_redeem_points}
+                disabled={!isAdmin}
+                onBlur={(e) => {
+                  const v = parseInt(e.target.value)
+                  if (!isNaN(v) && v > 0) patch('min_redeem_points', v)
+                }}
+                className="w-20 text-sm border border-gray-200 rounded-md px-2 py-1.5 text-right focus:outline-none focus:ring-2 focus:ring-gray-300 disabled:opacity-50"
+              />
+              <span className="text-xs text-gray-400">pts</span>
+            </div>
+          </div>
+          <div className="mt-1 px-3 py-2.5 bg-gray-50 rounded-lg text-xs text-gray-500">
+            Example: KES 500 sale → earns <strong>{Math.floor(500 * ls.points_per_kes)} pts</strong>.{' '}
+            100 pts redeems as <strong>KES {(100 * ls.kes_per_point).toFixed(0)}</strong>.
+          </div>
+        </>
+      )}
+    </Section>
   )
 }
 

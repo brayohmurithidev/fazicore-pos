@@ -18,6 +18,7 @@ from app.models.mpesa import MpesaCredentials, MpesaTransaction
 from app.models.expenditure import Expenditure
 from app.models.invoice import SubscriptionInvoice
 from app.models.price_history import PriceHistory
+from app.models.loyalty import LoyaltySettings, PointsTransaction
 
 __all__ = [
     "Organization",
@@ -45,4 +46,6 @@ __all__ = [
     "Expenditure",
     "SubscriptionInvoice",
     "PriceHistory",
+    "LoyaltySettings",
+    "PointsTransaction",
 ]

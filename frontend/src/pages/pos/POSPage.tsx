@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
-import { Search, Trash2, Minus, Plus, Check, Receipt, SlidersHorizontal, BookmarkCheck, Bookmark, Keyboard, Building2, X as XIcon, ScanLine, WifiOff } from 'lucide-react'
+import { Search, Trash2, Minus, Plus, Check, Receipt, SlidersHorizontal, BookmarkCheck, Bookmark, Keyboard, Building2, X as XIcon, ScanLine, WifiOff, UserCircle, Gift } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -13,7 +13,8 @@ import { resolveImageUrl } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import { isTauri } from '@tauri-apps/api/core'
-import { useCategories, useCreateOrder, useBranches, usePermissions } from '@/lib/queries'
+import { useCategories, useCreateOrder, useBranches, usePermissions, useCustomers, useLoyaltySettings } from '@/lib/queries'
+import type { ApiCustomer } from '@/types/api'
 import { isLocalMode } from '@/lib/local-mode'
 import { useBarcodeScanner } from '@/hooks/useBarcodeScanner'
 import { usePOSProducts } from '@/hooks/usePOSProducts'
@@ -379,6 +380,11 @@ export function POSPage() {
   const [mobileCartOpen, setMobileCartOpen] = useState(false)
   const [scanFeedback, setScanFeedback] = useState<{ ok: boolean; text: string } | null>(null)
   const scanFeedbackTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const [loyaltyCustomer, setLoyaltyCustomer] = useState<ApiCustomer | null>(null)
+  const [customerSearch, setCustomerSearch] = useState('')
+  const [customerPickerOpen, setCustomerPickerOpen] = useState(false)
+  const [pointsRedeemed, setPointsRedeemed] = useState(0)
+  const [redeemOpen, setRedeemOpen] = useState(false)
 
   const createOrder = useCreateOrder()
   const { isOnline, createOfflineOrder, setPosBranchOverride } = useOfflineStore()
@@ -409,7 +415,7 @@ export function POSPage() {
     pendingApproval.current = null
   }
 
-  const noModalOpen = !payOpen && !receiptOpen && !approvalOpen && !discountOpen && !shortcutsOpen && !notesOpen
+  const noModalOpen = !payOpen && !receiptOpen && !approvalOpen && !discountOpen && !shortcutsOpen && !notesOpen && !customerPickerOpen && !redeemOpen
 
   const userBranchId = user?.branch ? (Number(user.branch) || undefined) : undefined
 
@@ -465,6 +471,22 @@ export function POSPage() {
       })),
     [apiProducts]
   )
+
+  // ── Loyalty ──────────────────────────────────────────────────────────────
+  const { data: loyaltySettings } = useLoyaltySettings()
+  const loyaltyEnabled = loyaltySettings?.enabled === true
+  const { data: allCustomers = [] } = useCustomers(customerSearch || undefined)
+  const filteredCustomers = customerSearch
+    ? allCustomers.filter((c) => c.name.toLowerCase().includes(customerSearch.toLowerCase()) || (c.phone ?? '').includes(customerSearch))
+    : allCustomers.slice(0, 8)
+
+  const availablePoints = loyaltyCustomer?.loyalty_points ?? 0
+  const ksPerPoint = loyaltySettings?.kes_per_point ?? 0.5
+  const minRedeem = loyaltySettings?.min_redeem_points ?? 50
+  const maxRedeemKES = Math.floor(availablePoints * ksPerPoint)
+  const redeemDiscount = pointsRedeemed > 0 ? Math.floor(pointsRedeemed * ksPerPoint) : 0
+
+  const detachCustomer = () => { setLoyaltyCustomer(null); setPointsRedeemed(0) }
 
   // ── Barcode scanner ──────────────────────────────────────────────────────
   const showScanFeedback = useCallback((ok: boolean, text: string) => {
@@ -695,7 +717,7 @@ export function POSPage() {
     const lineNet = i.itemDiscount > 0 ? line - Math.round(line * i.itemDiscount / 100) : line
     return s + lineNet - lineNet / (1 + i.vatRate)
   }, 0)
-  const total = subtotal - cartDiscountAmt
+  const total = subtotal - cartDiscountAmt - redeemDiscount
   const itemCount = cart.reduce((s, i) => s + i.qty, 0)
 
   // ── Payment complete ─────────────────────────────────────────────────────
@@ -731,13 +753,15 @@ export function POSPage() {
         unit_name: item.selectedUnit.id ? item.selectedUnit.name : undefined,
         conversion_factor: item.selectedUnit.conversion_factor,
       })),
-      discount_amount: cartDiscountAmt,
+      discount_amount: cartDiscountAmt + redeemDiscount,
       amount_paid: (payInfo.cashTendered as number) ?? total,
       mpesa_ref: (payInfo.mpesaRef as string) ?? undefined,
       mpesa_amount: (payInfo.mpesaAmount as number) ?? 0,
       cash_amount: (payInfo.cashAmount as number) ?? 0,
       credit_customer_name: (payInfo.creditName as string) ?? undefined,
       credit_customer_phone: (payInfo.creditPhone as string) ?? undefined,
+      customer_id: loyaltyCustomer?.id ?? undefined,
+      loyalty_points_redeemed: pointsRedeemed,
     }
 
     if (!isLocalMode && isTauri() && !isOnline) {
@@ -758,6 +782,8 @@ export function POSPage() {
     setCart([])
     setDiscount(0)
     setOrderNotes('')
+    setLoyaltyCustomer(null)
+    setPointsRedeemed(0)
 
     if (settings.autoPrint) {
       // Try thermal printer first; only show receipt modal if no printer found
@@ -1020,6 +1046,52 @@ export function POSPage() {
           </div>
         )}
 
+        {/* Loyalty customer bar */}
+        {loyaltyEnabled && (
+          <div className="px-4 py-2 border-t border-gray-100">
+            {loyaltyCustomer ? (
+              <div className="flex items-center gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <UserCircle size={13} className="text-purple-500 flex-shrink-0" />
+                    <span className="text-xs font-semibold text-gray-800 truncate">{loyaltyCustomer.name}</span>
+                    <span className="text-[10px] text-purple-600 font-semibold bg-purple-50 px-1.5 py-0.5 rounded-full border border-purple-100 flex-shrink-0">
+                      {availablePoints} pts
+                    </span>
+                  </div>
+                  {availablePoints >= minRedeem && (
+                    <button
+                      onClick={() => setRedeemOpen(true)}
+                      className={`mt-1 flex items-center gap-1 text-[10px] font-semibold transition-colors ${
+                        pointsRedeemed > 0
+                          ? 'text-purple-700'
+                          : 'text-gray-400 hover:text-purple-600'
+                      }`}
+                    >
+                      <Gift size={10} />
+                      {pointsRedeemed > 0
+                        ? `${pointsRedeemed} pts = −${fmtKES(redeemDiscount)} applied`
+                        : `Use points — worth up to ${fmtKES(maxRedeemKES)}`
+                      }
+                    </button>
+                  )}
+                </div>
+                <button onClick={detachCustomer} className="text-gray-300 hover:text-red-400 p-0.5 flex-shrink-0">
+                  <XIcon size={12} />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setCustomerPickerOpen(true)}
+                className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-purple-600 font-medium transition-colors"
+              >
+                <UserCircle size={13} />
+                Attach loyalty customer
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Totals + actions */}
         <div className="p-4 border-t border-gray-200">
           <div className="mb-3 space-y-1.5">
@@ -1043,6 +1115,12 @@ export function POSPage() {
               <div className="flex justify-between text-sm text-green-600">
                 <span>Cart discount ({discount}%)</span>
                 <span>−{fmtKES(cartDiscountAmt)}</span>
+              </div>
+            )}
+            {redeemDiscount > 0 && (
+              <div className="flex justify-between text-sm text-purple-600">
+                <span>Points redemption ({pointsRedeemed} pts)</span>
+                <span>−{fmtKES(redeemDiscount)}</span>
               </div>
             )}
             <div className="flex justify-between font-extrabold text-xl pt-1 border-t border-gray-100">
@@ -1194,6 +1272,85 @@ export function POSPage() {
               </div>
             ))}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Customer picker ───────────────────────────────────────────────── */}
+      <Dialog open={customerPickerOpen} onOpenChange={(v) => { if (!v) { setCustomerPickerOpen(false); setCustomerSearch('') } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><UserCircle size={16} />Find Customer</DialogTitle></DialogHeader>
+          <Input
+            autoFocus
+            placeholder="Search by name or phone…"
+            value={customerSearch}
+            onChange={(e) => setCustomerSearch(e.target.value)}
+            className="mb-2"
+          />
+          <div className="max-h-56 overflow-y-auto space-y-1">
+            {filteredCustomers.length === 0 ? (
+              <div className="text-center py-6 text-sm text-gray-400">No customers found</div>
+            ) : filteredCustomers.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => { setLoyaltyCustomer(c); setCustomerPickerOpen(false); setCustomerSearch('') }}
+                className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-gray-50 border border-transparent hover:border-gray-200 transition-all text-left"
+              >
+                <div>
+                  <div className="text-sm font-semibold text-gray-900">{c.name}</div>
+                  {c.phone && <div className="text-xs text-gray-400">{c.phone}</div>}
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <div className="text-xs font-bold text-purple-600">{c.loyalty_points} pts</div>
+                  <div className="text-[10px] text-gray-400">= {fmtKES(Math.floor(c.loyalty_points * ksPerPoint))}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Redeem points dialog ──────────────────────────────────────────── */}
+      <Dialog open={redeemOpen} onOpenChange={(v) => !v && setRedeemOpen(false)}>
+        <DialogContent className="max-w-xs">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Gift size={16} />Redeem Points</DialogTitle></DialogHeader>
+          {loyaltyCustomer && (
+            <div>
+              <div className="bg-purple-50 border border-purple-100 rounded-xl px-4 py-3 mb-4 text-center">
+                <div className="text-2xl font-extrabold text-purple-700">{availablePoints}</div>
+                <div className="text-xs text-purple-500 mt-0.5">points available</div>
+                <div className="text-sm font-semibold text-purple-800 mt-1">= {fmtKES(maxRedeemKES)} discount</div>
+              </div>
+              <div className="text-xs text-gray-500 mb-2 text-center">Enter points to redeem (max {availablePoints})</div>
+              <Input
+                type="number"
+                min={minRedeem}
+                max={availablePoints}
+                defaultValue={pointsRedeemed > 0 ? pointsRedeemed : availablePoints}
+                className="text-center mb-4"
+                onChange={(e) => {
+                  const v = Math.min(availablePoints, Math.max(0, parseInt(e.target.value) || 0))
+                  setPointsRedeemed(v)
+                }}
+              />
+              <div className="flex gap-2">
+                {pointsRedeemed > 0 && (
+                  <Button variant="outline" className="flex-1" onClick={() => { setPointsRedeemed(0); setRedeemOpen(false) }}>
+                    Remove
+                  </Button>
+                )}
+                <Button
+                  className="flex-1 bg-purple-600 hover:bg-purple-700"
+                  onClick={() => setRedeemOpen(false)}
+                  disabled={pointsRedeemed < minRedeem}
+                >
+                  Apply −{fmtKES(redeemDiscount)}
+                </Button>
+              </div>
+              {pointsRedeemed < minRedeem && pointsRedeemed > 0 && (
+                <p className="text-xs text-red-500 text-center mt-2">Minimum {minRedeem} points to redeem</p>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

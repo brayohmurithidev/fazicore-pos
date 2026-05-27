@@ -1,12 +1,16 @@
+import math
 import random
 import string
 from datetime import date, datetime, timezone
 
 from fastapi import HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.audit_log import AuditLog
+from app.models.customer import Customer
 from app.models.inventory import TransactionType
+from app.models.loyalty import LoyaltySettings, PointsTransaction, PointsTransactionType
 from app.models.order import Order, OrderItem, OrderStatus, PaymentStatus
 from app.repositories.inventory import InventoryRepository
 from app.repositories.order import OrderRepository
@@ -143,6 +147,60 @@ class OrderService:
         self.session.add(order)
         await self.session.flush()
         await self.session.refresh(order)
+
+        # ── Loyalty points ────────────────────────────────────────────────
+        if data.customer_id:
+            ls_result = await self.session.execute(
+                select(LoyaltySettings).where(LoyaltySettings.org_id == org_id)
+            )
+            ls = ls_result.scalar_one_or_none()
+            if ls and ls.enabled:
+                cust_result = await self.session.execute(
+                    select(Customer).where(Customer.id == data.customer_id)
+                )
+                customer = cust_result.scalar_one_or_none()
+                if customer:
+                    balance = customer.loyalty_points
+
+                    # Redeem first (if requested)
+                    redeemed = int(data.loyalty_points_redeemed or 0)
+                    if redeemed > 0:
+                        if redeemed > balance:
+                            raise HTTPException(status_code=400, detail="Customer does not have enough loyalty points")
+                        customer.loyalty_points = balance - redeemed
+                        self.session.add(PointsTransaction(
+                            org_id=org_id,
+                            customer_id=customer.id,
+                            order_id=order.id,
+                            type=PointsTransactionType.REDEEM,
+                            points=-redeemed,
+                            balance_before=balance,
+                            balance_after=customer.loyalty_points,
+                            notes=f"Redeemed for order {order_number}",
+                        ))
+                        balance = customer.loyalty_points
+
+                    # Earn points on the net total paid (after redemption discount)
+                    earned = math.floor(float(total) * float(ls.points_per_kes))
+                    if earned > 0:
+                        customer.loyalty_points = balance + earned
+                        self.session.add(PointsTransaction(
+                            org_id=org_id,
+                            customer_id=customer.id,
+                            order_id=order.id,
+                            type=PointsTransactionType.EARN,
+                            points=earned,
+                            balance_before=balance,
+                            balance_after=customer.loyalty_points,
+                            notes=f"Earned for order {order_number}",
+                        ))
+
+                    # Update customer stats
+                    customer.total_spent = float(customer.total_spent) + float(total)
+                    customer.total_orders = customer.total_orders + 1
+
+                    await self.session.flush()
+
         return order
 
     async def void_order(
