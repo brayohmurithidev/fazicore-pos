@@ -91,44 +91,41 @@ jobs:
           VITE_MINIO_PUBLIC_URL=${{ vars.VITE_MINIO_PUBLIC_URL || 'https://fazistore-api.fazilabs.com/' }}
           EOF
 
-      # ── Build + publish ─────────────────────────────────────────────────────
-      # The action compiles Rust, bundles the frontend, and uploads artefacts
-      # to a (draft) GitHub Release for the given tag.
-      #
-      # macOS code signing / notarisation (all optional — unsigned if not set):
-      #   APPLE_CERTIFICATE          base64-encoded .p12 export
-      #   APPLE_CERTIFICATE_PASSWORD p12 export password
-      #   APPLE_SIGNING_IDENTITY     e.g. "Developer ID Application: Fazilabs (TEAMID)"
-      #   APPLE_ID                   Apple ID email used for notarisation
-      #   APPLE_PASSWORD             App-specific password for that Apple ID
-      #   APPLE_TEAM_ID              10-character team ID
-      #
-      # Windows code signing (optional):
-      #   TAURI_SIGNING_PRIVATE_KEY          base64-encoded updater signing key
-      #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD updater signing key password
-      - name: Build & release
+      # ── Detect whether Apple signing secrets are configured ─────────────────
+      # Passing empty strings to tauri-action still triggers the keychain import
+      # and fails. Only expose the APPLE_* vars when the certificate is present.
+      - name: Check Apple signing
+        id: apple
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          CERT: ${{ secrets.APPLE_CERTIFICATE }}
+        run: |
+          if [ -n "$CERT" ]; then
+            echo "sign=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "sign=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── Build + publish (macOS — with signing when certificate is present) ──
+      - name: Build & release (macOS, signed)
+        if: runner.os == 'macOS' && steps.apple.outputs.sign == 'true'
         uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # macOS signing (no-op when secrets are absent)
-          APPLE_CERTIFICATE:           ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD:  ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY:      ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID:                    ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD:              ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID:               ${{ secrets.APPLE_TEAM_ID }}
-          # Tauri updater signature — REQUIRED for in-app updates to work.
-          # Generate once with: pnpm tauri signer generate -w ~/.tauri/fazipos.key
-          # Then add TAURI_SIGNING_PRIVATE_KEY (base64 private key) and
-          # TAURI_SIGNING_PRIVATE_KEY_PASSWORD to GitHub repo secrets.
-          # Copy the printed public key into frontend/src-tauri/tauri.conf.json → plugins.updater.pubkey
+          GITHUB_TOKEN:                       ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE:                  ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD:         ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY:             ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID:                           ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD:                     ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID:                      ${{ secrets.APPLE_TEAM_ID }}
           TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: frontend
           tagName:      ${{ steps.tag.outputs.value }}
           releaseName:  'FaziPOS v__VERSION__'
-          releaseBody: |
+          releaseBody:  |
             ## FaziPOS __VERSION__
 
             | Platform | File |
@@ -137,8 +134,62 @@ jobs:
             | Windows 64-bit installer | `FaziPOS_*_x64-setup.exe` |
             | Windows 64-bit MSI | `FaziPOS_*_x64_en-US.msi` |
 
-            > The app will notify users automatically when this release is published.
-          releaseDraft: true      # publish manually after reviewing artefacts
+            > The app notifies users automatically when this release is published.
+          releaseDraft: true
           prerelease: false
-          updaterJsonKeepUniversal: true   # include all platforms in one latest.json
+          updaterJsonKeepUniversal: true
+          args: ${{ matrix.build-args }}
+
+      # ── Build + publish (macOS — unsigned, no Apple certificate) ────────────
+      - name: Build & release (macOS, unsigned)
+        if: runner.os == 'macOS' && steps.apple.outputs.sign != 'true'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN:                       ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: frontend
+          tagName:      ${{ steps.tag.outputs.value }}
+          releaseName:  'FaziPOS v__VERSION__'
+          releaseBody:  |
+            ## FaziPOS __VERSION__
+
+            | Platform | File |
+            |----------|------|
+            | macOS (Intel + Apple Silicon) | `FaziPOS_*_universal.dmg` |
+            | Windows 64-bit installer | `FaziPOS_*_x64-setup.exe` |
+            | Windows 64-bit MSI | `FaziPOS_*_x64_en-US.msi` |
+
+            > The app notifies users automatically when this release is published.
+          releaseDraft: true
+          prerelease: false
+          updaterJsonKeepUniversal: true
+          args: ${{ matrix.build-args }}
+
+      # ── Build + publish (Windows) ────────────────────────────────────────────
+      - name: Build & release (Windows)
+        if: runner.os == 'Windows'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN:                       ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: frontend
+          tagName:      ${{ steps.tag.outputs.value }}
+          releaseName:  'FaziPOS v__VERSION__'
+          releaseBody:  |
+            ## FaziPOS __VERSION__
+
+            | Platform | File |
+            |----------|------|
+            | macOS (Intel + Apple Silicon) | `FaziPOS_*_universal.dmg` |
+            | Windows 64-bit installer | `FaziPOS_*_x64-setup.exe` |
+            | Windows 64-bit MSI | `FaziPOS_*_x64_en-US.msi` |
+
+            > The app notifies users automatically when this release is published.
+          releaseDraft: true
+          prerelease: false
+          updaterJsonKeepUniversal: true
           args: ${{ matrix.build-args }}
