@@ -33,7 +33,7 @@ class ProductRepository(BaseRepository[Product, ProductCreate, ProductUpdate]):
     ) -> list[Product]:
         stmt = (
             select(Product)
-            .options(selectinload(Product.inventory), joinedload(Product.category))
+            .options(selectinload(Product.inventory), joinedload(Product.category), selectinload(Product.units))
             .where(Product.org_id == org_id)
         )
         if active_only:
@@ -56,7 +56,7 @@ class ProductRepository(BaseRepository[Product, ProductCreate, ProductUpdate]):
     async def get_with_stock(self, id: int) -> Product | None:
         result = await self.session.execute(
             select(Product)
-            .options(selectinload(Product.inventory), joinedload(Product.category))
+            .options(selectinload(Product.inventory), joinedload(Product.category), selectinload(Product.units))
             .where(Product.id == id)
         )
         return result.scalar_one_or_none()

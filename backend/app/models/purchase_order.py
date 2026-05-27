@@ -47,5 +47,9 @@ class PurchaseOrderItem(Base, TimestampMixin):
     quantity: Mapped[int] = mapped_column(Integer, default=0)
     unit_cost: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
     expiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Multi-unit fields — null means base unit
+    unit_id: Mapped[int | None] = mapped_column(ForeignKey("product_units.id", ondelete="SET NULL"), nullable=True)
+    unit_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    conversion_factor: Mapped[float] = mapped_column(Numeric(10, 4), default=1.0, nullable=False)
 
     order: Mapped["PurchaseOrder"] = relationship("PurchaseOrder", back_populates="items")

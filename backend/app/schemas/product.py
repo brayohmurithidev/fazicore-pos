@@ -3,6 +3,39 @@ from datetime import date, datetime
 from pydantic import BaseModel
 
 
+class ProductUnitCreate(BaseModel):
+    name: str
+    abbreviation: str | None = None
+    conversion_factor: float
+    price: float | None = None
+    barcode: str | None = None
+    sku: str | None = None
+    is_default: bool = False
+
+
+class ProductUnitUpdate(BaseModel):
+    name: str | None = None
+    abbreviation: str | None = None
+    conversion_factor: float | None = None
+    price: float | None = None
+    barcode: str | None = None
+    sku: str | None = None
+    is_default: bool | None = None
+
+
+class ProductUnitOut(BaseModel):
+    id: int
+    name: str
+    abbreviation: str | None
+    conversion_factor: float
+    price: float | None
+    barcode: str | None
+    sku: str | None
+    is_default: bool
+
+    model_config = {"from_attributes": True}
+
+
 class ProductCreate(BaseModel):
     name: str
     description: str | None = None
@@ -58,6 +91,7 @@ class ProductOut(BaseModel):
     is_active: bool
     track_inventory: bool
     stock_quantity: int = 0
+    units: list[ProductUnitOut] = []
     created_at: datetime
 
     model_config = {"from_attributes": True}

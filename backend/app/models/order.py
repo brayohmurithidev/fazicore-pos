@@ -80,6 +80,10 @@ class OrderItem(Base, TimestampMixin):
     unit_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     discount_amount: Mapped[float] = mapped_column(Numeric(10, 2), default=0, nullable=False)
     total: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    # Multi-unit fields — null means base unit (conversion_factor=1)
+    unit_id: Mapped[int | None] = mapped_column(ForeignKey("product_units.id", ondelete="SET NULL"), nullable=True)
+    unit_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    conversion_factor: Mapped[float] = mapped_column(Numeric(10, 4), default=1.0, nullable=False)
 
     order: Mapped["Order"] = relationship("Order", back_populates="items")
     product: Mapped["Product | None"] = relationship("Product", back_populates="order_items")

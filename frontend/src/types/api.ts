@@ -55,6 +55,7 @@ export interface ApiProduct {
   stock_quantity: number
   parent_product_id: number | null
   attributes: Record<string, string> | null
+  units: ApiProductUnit[]
   created_at: string
 }
 
@@ -79,6 +80,9 @@ export interface ApiOrderItem {
   unit_price: number
   discount_amount: number
   total: number
+  unit_id: number | null
+  unit_name: string | null
+  conversion_factor: number
 }
 
 export interface ApiOrder {
@@ -144,6 +148,17 @@ export interface ApiInventoryItem {
   reserved_quantity: number
   low_stock_threshold: number
   location: string | null
+}
+
+export interface ApiProductUnit {
+  id: number
+  name: string
+  abbreviation: string | null
+  conversion_factor: number
+  price: number | null
+  barcode: string | null
+  sku: string | null
+  is_default: boolean
 }
 
 export interface ApiInventoryBatch {

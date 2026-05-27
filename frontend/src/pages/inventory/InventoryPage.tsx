@@ -1825,7 +1825,7 @@ function NewPOModal({ open, onClose, products, branches }: {
 }) {
   const [supplier, setSupplier] = useState('')
   const [branchId, setBranchId] = useState('')
-  const [lines, setLines] = useState([{ product_id: '', product_name: '', qty: '', unit_cost: '', expiry_date: '' }])
+  const [lines, setLines] = useState([{ product_id: '', product_name: '', qty: '', unit_cost: '', unit_id: '', unit_name: '', conversion_factor: '1', expiry_date: '' }])
   const [quickCreateLineIdx, setQuickCreateLineIdx] = useState<number | null>(null)
   const [quickCreateSupplierOpen, setQuickCreateSupplierOpen] = useState(false)
   const { data: suppliers = [] } = useSuppliers()
@@ -1837,7 +1837,20 @@ function NewPOModal({ open, onClose, products, branches }: {
   const handleProductChange = (i: number, v: string) => {
     if (v === '__create__') { setQuickCreateLineIdx(i); return }
     const p = products.find((x) => x.id === Number(v))
-    setLines((l) => l.map((r, idx) => idx === i ? { ...r, product_id: v ?? '', product_name: p?.name ?? '', unit_cost: p?.cost ? String(p.cost) : r.unit_cost } : r))
+    setLines((l) => l.map((r, idx) => idx === i ? { ...r, product_id: v ?? '', product_name: p?.name ?? '', unit_cost: p?.cost ? String(p.cost) : r.unit_cost, unit_id: '', unit_name: '', conversion_factor: '1' } : r))
+  }
+
+  const handleUnitChange = (i: number, unitIdStr: string) => {
+    const line = lines[i]
+    const p = products.find((x) => String(x.id) === line.product_id)
+    if (unitIdStr === 'base' || !unitIdStr) {
+      setLines((l) => l.map((r, idx) => idx === i ? { ...r, unit_id: '', unit_name: '', conversion_factor: '1', unit_cost: p?.cost ? String(p.cost) : r.unit_cost } : r))
+    } else {
+      const u = p?.units.find((u) => String(u.id) === unitIdStr)
+      if (!u) return
+      const autoUnitCost = p?.cost ? String(Math.round(p.cost * u.conversion_factor * 100) / 100) : line.unit_cost
+      setLines((l) => l.map((r, idx) => idx === i ? { ...r, unit_id: unitIdStr, unit_name: u.name, conversion_factor: String(u.conversion_factor), unit_cost: autoUnitCost } : r))
+    }
   }
 
   const handleQuickCreated = (p: ApiProduct) => {
@@ -1855,10 +1868,13 @@ function NewPOModal({ open, onClose, products, branches }: {
       quantity: parseInt(l.qty) || 0,
       unit_cost: parseFloat(l.unit_cost) || 0,
       expiry_date: l.expiry_date || null,
+      unit_id: l.unit_id ? Number(l.unit_id) : undefined,
+      unit_name: l.unit_name || undefined,
+      conversion_factor: parseFloat(l.conversion_factor) || 1,
     }))
     await createPO.mutateAsync({ supplier, branch_id: branchId ? Number(branchId) : null, items })
     toast.success('Purchase order created')
-    setSupplier(''); setBranchId(''); setLines([{ product_id: '', product_name: '', qty: '', unit_cost: '', expiry_date: '' }])
+    setSupplier(''); setBranchId(''); setLines([{ product_id: '', product_name: '', qty: '', unit_cost: '', unit_id: '', unit_name: '', conversion_factor: '1', expiry_date: '' }])
     onClose()
   }
 
@@ -1904,7 +1920,7 @@ function NewPOModal({ open, onClose, products, branches }: {
           </div>
           <div className="mb-1 flex justify-between items-center">
             <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Order Lines</Label>
-            <button onClick={() => setLines((l) => [...l, { product_id: '', product_name: '', qty: '', unit_cost: '', expiry_date: '' }])}
+            <button onClick={() => setLines((l) => [...l, { product_id: '', product_name: '', qty: '', unit_cost: '', unit_id: '', unit_name: '', conversion_factor: '1', expiry_date: '' }])}
               className="text-xs text-gray-900 font-semibold flex items-center gap-1 hover:opacity-70">
               <Plus size={12} />Add line
             </button>
@@ -1914,21 +1930,25 @@ function NewPOModal({ open, onClose, products, branches }: {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">Product</th>
-                  <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500 w-16">Qty</th>
+                  <th className="text-left px-2 py-2 text-xs font-semibold text-gray-500 w-24">Unit</th>
+                  <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500 w-14">Qty</th>
                   <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500 w-24">Unit Cost</th>
-                  <th className="text-center px-2 py-2 text-xs font-semibold text-gray-500 w-32">Expiry Date</th>
-                  <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500 w-20">Total</th>
+                  <th className="text-center px-2 py-2 text-xs font-semibold text-gray-500 w-28">Expiry</th>
+                  <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500 w-18">Total</th>
                   <th className="w-8"></th>
                 </tr>
               </thead>
               <tbody>
-                {lines.map((line, i) => (
+                {lines.map((line, i) => {
+                  const lineProduct = products.find((p) => String(p.id) === line.product_id)
+                  const hasUnits = (lineProduct?.units?.length ?? 0) > 0
+                  return (
                   <tr key={i} className="border-t border-gray-100">
                     <td className="px-2 py-1.5">
                       <Select value={line.product_id ?? ''} onValueChange={(v) => v != null && handleProductChange(i, v)}>
                         <SelectTrigger className="h-8 text-xs">
                           <span className={line.product_id ? undefined : 'text-muted-foreground'}>
-                            {line.product_id ? (products.find((p) => String(p.id) === line.product_id)?.name ?? line.product_name) : 'Select product'}
+                            {line.product_id ? (lineProduct?.name ?? line.product_name) : 'Select product'}
                           </span>
                         </SelectTrigger>
                         <SelectContent className="min-w-[260px]">
@@ -1939,6 +1959,23 @@ function NewPOModal({ open, onClose, products, branches }: {
                         </SelectContent>
                       </Select>
                     </td>
+                    <td className="px-2 py-1.5">
+                      {hasUnits ? (
+                        <Select value={line.unit_id || 'base'} onValueChange={(v) => handleUnitChange(i, v === 'base' ? '' : v)}>
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="base">{lineProduct?.unit ?? 'Base'}</SelectItem>
+                            {lineProduct?.units.map((u) => (
+                              <SelectItem key={u.id} value={String(u.id)}>{u.name}{u.conversion_factor !== 1 ? ` ×${u.conversion_factor}` : ''}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <span className="text-xs text-gray-400 px-1">{lineProduct?.unit ?? '—'}</span>
+                      )}
+                    </td>
                     <td className="px-2 py-1.5"><Input type="number" value={line.qty} onChange={(e) => setLine(i, 'qty', e.target.value)} className="h-8 text-xs text-right" placeholder="0" /></td>
                     <td className="px-2 py-1.5"><Input type="number" value={line.unit_cost} onChange={(e) => setLine(i, 'unit_cost', e.target.value)} className="h-8 text-xs text-right" placeholder="0.00" /></td>
                     <td className="px-2 py-1.5"><Input type="date" value={line.expiry_date} onChange={(e) => setLine(i, 'expiry_date', e.target.value)} className="h-8 text-xs" /></td>
@@ -1947,7 +1984,8 @@ function NewPOModal({ open, onClose, products, branches }: {
                       {lines.length > 1 && <button onClick={() => setLines((l) => l.filter((_, idx) => idx !== i))} className="text-gray-400 hover:text-red-500 p-0.5"><XCircle size={13} /></button>}
                     </td>
                   </tr>
-                ))}
+                )})}
+
               </tbody>
             </table>
           </div>

@@ -63,6 +63,9 @@ async def create_purchase_order(
             quantity=item.quantity,
             unit_cost=item.unit_cost,
             expiry_date=item.expiry_date,
+            unit_id=item.unit_id,
+            unit_name=item.unit_name,
+            conversion_factor=item.conversion_factor,
         )
         for item in data.items
     ]
@@ -158,33 +161,36 @@ async def update_po_status(
                     session.add(inv)
                     await session.flush()
                     await session.refresh(inv)
+                # base_qty = received qty × conversion factor (e.g. 10 crates × 24 = 240 pieces)
+                base_qty = round(item.quantity * float(item.conversion_factor))
                 await inv_repo.adjust(
-                    inv, item.quantity, TransactionType.PURCHASE, current_user.id,
+                    inv, base_qty, TransactionType.PURCHASE, current_user.id,
                     f"PO {po.po_number} received"
                 )
 
-                # Create a batch record for FIFO expiry tracking
+                # Create a batch record for FIFO expiry tracking (always in base units)
+                base_unit_cost = float(item.unit_cost) / float(item.conversion_factor)
                 batch = InventoryBatch(
                     product_id=item.product_id,
                     branch_id=po.branch_id,
                     purchase_order_item_id=item.id,
-                    quantity_received=item.quantity,
-                    quantity_remaining=item.quantity,
-                    cost_per_unit=float(item.unit_cost),
+                    quantity_received=base_qty,
+                    quantity_remaining=base_qty,
+                    cost_per_unit=round(base_unit_cost, 4),
                     expiry_date=item.expiry_date,
                     received_date=today,
                 )
                 session.add(batch)
 
-                # Update product cost using Weighted Average Cost
+                # Update product cost using Weighted Average Cost (per base unit)
                 product = await session.get(Product, item.product_id)
                 if product is not None:
-                    old_cost = float(product.cost) if product.cost is not None else float(item.unit_cost)
+                    old_cost = float(product.cost) if product.cost is not None else base_unit_cost
                     if total_qty_before > 0:
-                        wac = (total_qty_before * old_cost + item.quantity * float(item.unit_cost)) / (total_qty_before + item.quantity)
+                        wac = (total_qty_before * old_cost + base_qty * base_unit_cost) / (total_qty_before + base_qty)
                     else:
-                        wac = float(item.unit_cost)
-                    product.cost = round(wac, 2)
+                        wac = base_unit_cost
+                    product.cost = round(wac, 4)
                     session.add(product)
 
     await session.refresh(po)

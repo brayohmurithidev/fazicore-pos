@@ -9,6 +9,17 @@ export interface Category {
   color: string
 }
 
+export interface ProductUnit {
+  id: number
+  name: string
+  abbreviation: string | null
+  conversion_factor: number
+  price: number | null  // null = product.price × factor
+  barcode: string | null
+  sku: string | null
+  is_default: boolean
+}
+
 export interface Product {
   id: string
   name: string
@@ -23,6 +34,7 @@ export interface Product {
   unit: string
   vatRate: number
   imageUrl?: string
+  units: ProductUnit[]
 }
 
 export interface Branch {
@@ -67,9 +79,18 @@ export interface PurchaseOrder {
   branch: string
 }
 
+export interface SelectedUnit {
+  id: number | null   // null = base unit
+  name: string
+  abbreviation: string | null
+  conversion_factor: number
+  price: number       // resolved sell price for this unit
+}
+
 export interface CartItem extends Product {
   qty: number
   itemDiscount: number  // percentage 0-100 off this line item
+  selectedUnit: SelectedUnit  // which unit is being sold
 }
 
 export interface SaleInfo {

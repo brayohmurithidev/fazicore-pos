@@ -7,10 +7,10 @@ from app.core.database import get_session
 from app.core.deps import get_current_active_user
 from app.models.inventory import TransactionType
 from app.models.organization import Organization
-from app.models.product import Product
+from app.models.product import Product, ProductUnit
 from app.models.user import User, UserRole
 from app.repositories.product import ProductRepository
-from app.schemas.product import ProductBulkCreate, ProductCreate, ProductOut, ProductUpdate
+from app.schemas.product import ProductBulkCreate, ProductCreate, ProductOut, ProductUpdate, ProductUnitCreate, ProductUnitOut, ProductUnitUpdate
 from app.services.inventory import InventoryService
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -218,6 +218,159 @@ async def adjust_price(
     await session.flush()
     await session.refresh(product)
     return ProductOut.model_validate(product)
+
+
+# ── Product units ─────────────────────────────────────────────────────────────
+
+async def _get_product_or_404(product_id: int, org_id: int, session: AsyncSession) -> Product:
+    product = await session.get(Product, product_id)
+    if not product or product.org_id != org_id:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return product
+
+
+@router.get("/{product_id}/units", response_model=list[ProductUnitOut])
+async def list_product_units(
+    product_id: int,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_active_user),
+) -> list[ProductUnitOut]:
+    from sqlalchemy.orm import selectinload
+    result = await session.execute(
+        select(Product).options(selectinload(Product.units)).where(Product.id == product_id)
+    )
+    product = result.scalar_one_or_none()
+    if not product or product.org_id != current_user.org_id:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return [ProductUnitOut.model_validate(u) for u in product.units]
+
+
+@router.post("/{product_id}/units", response_model=ProductUnitOut, status_code=status.HTTP_201_CREATED)
+async def create_product_unit(
+    product_id: int,
+    data: ProductUnitCreate,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_active_user),
+) -> ProductUnitOut:
+    if current_user.role not in (UserRole.ADMIN, UserRole.MANAGER):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    await _get_product_or_404(product_id, current_user.org_id, session)
+    # Unset existing default if this one is being set as default
+    if data.is_default:
+        await session.execute(
+            select(ProductUnit).where(ProductUnit.product_id == product_id, ProductUnit.is_default == True)
+        )
+        existing_defaults = (await session.execute(
+            select(ProductUnit).where(ProductUnit.product_id == product_id, ProductUnit.is_default == True)
+        )).scalars().all()
+        for d in existing_defaults:
+            d.is_default = False
+            session.add(d)
+    unit = ProductUnit(product_id=product_id, **data.model_dump())
+    session.add(unit)
+    await session.flush()
+    await session.refresh(unit)
+    return ProductUnitOut.model_validate(unit)
+
+
+@router.patch("/{product_id}/units/{unit_id}", response_model=ProductUnitOut)
+async def update_product_unit(
+    product_id: int,
+    unit_id: int,
+    data: ProductUnitUpdate,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_active_user),
+) -> ProductUnitOut:
+    if current_user.role not in (UserRole.ADMIN, UserRole.MANAGER):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    await _get_product_or_404(product_id, current_user.org_id, session)
+    unit = await session.get(ProductUnit, unit_id)
+    if not unit or unit.product_id != product_id:
+        raise HTTPException(status_code=404, detail="Unit not found")
+    if data.is_default:
+        existing_defaults = (await session.execute(
+            select(ProductUnit).where(
+                ProductUnit.product_id == product_id,
+                ProductUnit.is_default == True,
+                ProductUnit.id != unit_id,
+            )
+        )).scalars().all()
+        for d in existing_defaults:
+            d.is_default = False
+            session.add(d)
+    for field, value in data.model_dump(exclude_none=True).items():
+        setattr(unit, field, value)
+    session.add(unit)
+    await session.flush()
+    await session.refresh(unit)
+    return ProductUnitOut.model_validate(unit)
+
+
+@router.delete("/{product_id}/units/{unit_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_product_unit(
+    product_id: int,
+    unit_id: int,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_active_user),
+) -> None:
+    if current_user.role not in (UserRole.ADMIN, UserRole.MANAGER):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    await _get_product_or_404(product_id, current_user.org_id, session)
+    unit = await session.get(ProductUnit, unit_id)
+    if not unit or unit.product_id != product_id:
+        raise HTTPException(status_code=404, detail="Unit not found")
+    await session.delete(unit)
+    await session.flush()
+
+
+@router.get("/barcode/{barcode}")
+async def lookup_barcode(
+    barcode: str,
+    branch_id: int | None = Query(None),
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_active_user),
+) -> dict:
+    """Resolve a barcode to a product + optional unit. Checks product barcodes then unit barcodes."""
+    from sqlalchemy.orm import selectinload
+    # Check product barcode first
+    result = await session.execute(
+        select(Product)
+        .options(selectinload(Product.inventory), selectinload(Product.units))
+        .where(Product.org_id == current_user.org_id, Product.barcode == barcode, Product.is_active == True)
+    )
+    product = result.scalar_one_or_none()
+    matched_unit: ProductUnit | None = None
+
+    if product is None:
+        # Check unit barcodes
+        unit_result = await session.execute(
+            select(ProductUnit)
+            .join(Product, Product.id == ProductUnit.product_id)
+            .options(selectinload(ProductUnit.product).selectinload(Product.inventory),
+                     selectinload(ProductUnit.product).selectinload(Product.units))
+            .where(Product.org_id == current_user.org_id, ProductUnit.barcode == barcode, Product.is_active == True)
+        )
+        matched_unit = unit_result.scalar_one_or_none()
+        if matched_unit:
+            product = matched_unit.product
+
+    if product is None:
+        raise HTTPException(status_code=404, detail="Barcode not found")
+
+    effective_branch = branch_id if current_user.role == UserRole.ADMIN else current_user.branch_id
+    stock = sum(
+        inv.quantity for inv in product.inventory
+        if effective_branch is None or inv.branch_id == effective_branch
+    )
+    out = ProductOut.model_validate(product)
+    out.stock_quantity = stock
+    if product.category:
+        out.category_name = product.category.name
+
+    return {
+        "product": out.model_dump(),
+        "unit": ProductUnitOut.model_validate(matched_unit).model_dump() if matched_unit else None,
+    }
 
 
 @router.get("/{product_id}/price-history", response_model=list[PriceHistoryOut])

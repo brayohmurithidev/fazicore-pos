@@ -11,6 +11,9 @@ class POItemCreate(BaseModel):
     quantity: int
     unit_cost: float
     expiry_date: date | None = None
+    unit_id: int | None = None
+    unit_name: str | None = None
+    conversion_factor: float = 1.0
 
 
 class PurchaseOrderCreate(BaseModel):
@@ -26,6 +29,9 @@ class POItemOut(BaseModel):
     quantity: int
     unit_cost: float
     expiry_date: date | None = None
+    unit_id: int | None = None
+    unit_name: str | None = None
+    conversion_factor: float = 1.0
 
     model_config = {"from_attributes": True}
 

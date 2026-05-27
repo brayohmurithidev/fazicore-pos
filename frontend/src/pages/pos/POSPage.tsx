@@ -19,7 +19,7 @@ import { useBarcodeScanner } from '@/hooks/useBarcodeScanner'
 import { usePOSProducts } from '@/hooks/usePOSProducts'
 import { useOfflineStore } from '@/stores/offline'
 import { printESCPOS } from '@/lib/escpos'
-import type { CartItem, Product, SaleInfo } from '@/types'
+import type { CartItem, Product, SaleInfo, SelectedUnit } from '@/types'
 
 // ── Kbd hint badge ────────────────────────────────────────────────────────────
 
@@ -35,18 +35,35 @@ function Kbd({ children, light }: { children: React.ReactNode; light?: boolean }
   )
 }
 
+// ── Unit helpers ──────────────────────────────────────────────────────────────
+
+function baseUnitOf(product: Product): SelectedUnit {
+  const def = product.units.find((u) => u.is_default)
+  if (def) return { id: def.id, name: def.name, abbreviation: def.abbreviation, conversion_factor: def.conversion_factor, price: def.price ?? product.price * def.conversion_factor }
+  return { id: null, name: product.unit, abbreviation: null, conversion_factor: 1, price: product.price }
+}
+
+function stockInUnit(baseStock: number, factor: number) {
+  return Math.floor(baseStock / factor)
+}
+
 // ── Product tile ──────────────────────────────────────────────────────────────
 
 function ProductTile({
   product, catColor, cartQty, onAdd, expiryTracking,
 }: {
-  product: Product; catColor: string; cartQty: number; onAdd: () => void; expiryTracking: boolean
+  product: Product; catColor: string; cartQty: number; onAdd: (unit?: SelectedUnit) => void; expiryTracking: boolean
 }) {
   const [imgError, setImgError] = useState(false)
-  const available = product.stock - cartQty
+  const [unitPickerOpen, setUnitPickerOpen] = useState(false)
+  const defaultUnit = baseUnitOf(product)
+  // cartQty is base units already consumed from cart
+  const baseRemaining = product.stock - cartQty
+  const available = Math.floor(baseRemaining / defaultUnit.conversion_factor)
   const isOut = product.stock === 0
-  const isCapped = cartQty >= product.stock && product.stock > 0
-  const isLow = product.stock > 0 && product.stock <= product.minStock && !isCapped
+  const isCapped = baseRemaining < defaultUnit.conversion_factor && product.stock > 0
+  const isLow = product.stock > 0 && available <= Math.ceil(product.minStock / defaultUnit.conversion_factor) && !isCapped
+  const hasMultiUnit = product.units.length > 0
 
   const today = new Date(); today.setHours(0, 0, 0, 0)
   const expDate = product.expiryDate ? new Date(product.expiryDate) : null
@@ -56,9 +73,56 @@ function ProductTile({
 
   const blocked = isOut || isCapped || isExpired
 
+  const handleClick = () => {
+    if (blocked) return
+    if (hasMultiUnit) { setUnitPickerOpen(true); return }
+    onAdd(defaultUnit)
+  }
+
+  // All sellable units: additional units first (by factor desc), then base
+  const allUnits: SelectedUnit[] = [
+    ...product.units.map((u) => ({
+      id: u.id, name: u.name, abbreviation: u.abbreviation,
+      conversion_factor: u.conversion_factor,
+      price: u.price ?? product.price * u.conversion_factor,
+    })),
+    { id: null, name: product.unit, abbreviation: null, conversion_factor: 1, price: product.price },
+  ].sort((a, b) => b.conversion_factor - a.conversion_factor)
+
   return (
+    <>
+    {unitPickerOpen && (
+      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={() => setUnitPickerOpen(false)}>
+        <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-xs p-4" onClick={(e) => e.stopPropagation()}>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Select unit — {product.name}</p>
+          <div className="flex flex-col gap-2">
+            {allUnits.map((u) => {
+              const uStock = stockInUnit(product.stock, u.conversion_factor)
+              const uBlocked = uStock === 0
+              return (
+                <button
+                  key={u.id ?? 'base'}
+                  disabled={uBlocked}
+                  onClick={() => { setUnitPickerOpen(false); onAdd(u) }}
+                  className={`flex items-center justify-between px-3 py-2.5 rounded-xl border text-sm transition-all ${uBlocked ? 'opacity-40 cursor-not-allowed border-gray-100' : 'border-gray-200 hover:border-gray-800 hover:shadow-sm cursor-pointer'}`}
+                >
+                  <div className="text-left">
+                    <span className="font-semibold text-gray-900">{u.name}</span>
+                    {u.conversion_factor !== 1 && <span className="text-xs text-gray-400 ml-1.5">× {u.conversion_factor} {product.unit}</span>}
+                  </div>
+                  <div className="text-right">
+                    <div className="font-bold text-gray-900">{fmtKES(u.price)}</div>
+                    <div className="text-[10px] text-gray-400">{uBlocked ? 'Out' : `${uStock} left`}</div>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    )}
     <button
-      onClick={() => !blocked && onAdd()}
+      onClick={handleClick}
       disabled={blocked}
       title={isExpired ? `Expired ${product.expiryDate}` : isExpiringSoon ? `Expires in ${daysToExpiry} days` : undefined}
       className={`bg-white border rounded-xl p-2.5 text-left transition-all w-full ${
@@ -110,13 +174,20 @@ function ProductTile({
       <div className="text-xs font-semibold text-gray-900 leading-snug mb-1 line-clamp-2 min-h-[28px]">
         {product.name}
       </div>
-      <div className="text-[13px] font-bold text-gray-900">{fmtKES(product.price)}</div>
+      <div className="flex items-baseline gap-1">
+        <span className="text-[13px] font-bold text-gray-900">{fmtKES(defaultUnit.price)}</span>
+        {defaultUnit.conversion_factor !== 1 && (
+          <span className="text-[9px] text-gray-400 font-medium">{defaultUnit.name}</span>
+        )}
+        {hasMultiUnit && <span className="text-[9px] text-gray-400 ml-auto">▾</span>}
+      </div>
       <div className={`text-[10px] mt-0.5 font-medium ${
         isExpired ? 'text-red-500' : isOut ? 'text-red-500' : isCapped ? 'text-amber-500' : isLow ? 'text-orange-500' : 'text-gray-400'
       }`}>
-        {isExpired ? 'Expired' : isOut ? 'Out of stock' : isCapped ? `${product.stock} in cart` : isLow ? `Low: ${available}` : `${available} left`}
+        {isExpired ? 'Expired' : isOut ? 'Out of stock' : isCapped ? 'Max in cart' : isLow ? `Low: ${available}` : `${available} left`}
       </div>
     </button>
+    </>
   )
 }
 
@@ -182,7 +253,7 @@ function CartItemRow({ item, maxQty, catColor, onQty, onRemove, onItemDiscount, 
         <div className="flex-1 min-w-0">
           <div className="text-[13px] font-semibold text-gray-900 truncate">{item.name}</div>
           <div className="flex items-center gap-1.5">
-            <span className="text-[11px] text-gray-400">{fmtKES(item.price)} / {item.unit}</span>
+            <span className="text-[11px] text-gray-400">{fmtKES(item.price)} / {item.selectedUnit.name}</span>
             {item.itemDiscount > 0 && (
               <span className="text-[10px] font-semibold text-green-600 bg-green-50 px-1 rounded">
                 -{item.itemDiscount}%
@@ -390,6 +461,7 @@ export function POSPage() {
         unit: p.unit,
         vatRate: p.vat_rate,
         imageUrl: resolveImageUrl(p.image_url) ?? undefined,
+        units: p.units ?? [],
       })),
     [apiProducts]
   )
@@ -402,22 +474,39 @@ export function POSPage() {
   }, [])
 
   const handleScan = useCallback((code: string) => {
-    const match = products.find((p) => p.barcode === code || p.sku === code)
-    if (match) {
-      setCart((prev) => {
-        const existing = prev.find((i) => i.id === match.id)
-        const currentQty = existing?.qty ?? 0
-        if (currentQty >= match.stock) return prev
-        if (existing) return prev.map((i) => i.id === match.id ? { ...i, qty: i.qty + 1 } : i)
-        return [...prev, { ...match, qty: 1, itemDiscount: 0 }]
-      })
+    // First try local products list (product barcode or SKU)
+    const byBarcode = products.find((p) => p.barcode === code)
+    if (byBarcode) {
+      addToCart(byBarcode, baseUnitOf(byBarcode))
       setSearch('')
-      showScanFeedback(true, match.name)
-    } else {
-      setSearch(code)
-      showScanFeedback(false, code)
+      showScanFeedback(true, byBarcode.name)
+      return
     }
-  }, [products, showScanFeedback])
+    const bySku = products.find((p) => p.sku === code)
+    if (bySku) {
+      addToCart(bySku, baseUnitOf(bySku))
+      setSearch('')
+      showScanFeedback(true, bySku.name)
+      return
+    }
+    // Check unit barcodes across all products
+    for (const p of products) {
+      const unitMatch = p.units.find((u) => u.barcode === code)
+      if (unitMatch) {
+        const unit: SelectedUnit = {
+          id: unitMatch.id, name: unitMatch.name, abbreviation: unitMatch.abbreviation,
+          conversion_factor: unitMatch.conversion_factor,
+          price: unitMatch.price ?? p.price * unitMatch.conversion_factor,
+        }
+        addToCart(p, unit)
+        setSearch('')
+        showScanFeedback(true, `${p.name} (${unitMatch.name})`)
+        return
+      }
+    }
+    setSearch(code)
+    showScanFeedback(false, code)
+  }, [products, addToCart, showScanFeedback])
 
   useBarcodeScanner({ onScan: handleScan, enabled: noModalOpen })
 
@@ -435,29 +524,42 @@ export function POSPage() {
     })
   }, [products, search, activeCat])
 
-  // Cart quantity map for stock checking
-  const cartQtyMap = useMemo(() => new Map(cart.map((i) => [i.id, i.qty])), [cart])
+  // Cart quantity map — keyed by product id (base units consumed), for stock checking
+  const cartQtyMap = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const item of cart) {
+      const pid = item.id.split(':')[0]
+      m.set(pid, (m.get(pid) ?? 0) + item.qty * item.selectedUnit.conversion_factor)
+    }
+    return m
+  }, [cart])
 
   // ── Cart helpers ─────────────────────────────────────────────────────────
-  const addToCart = (product: Product) => {
+  const addToCart = (product: Product, unit?: SelectedUnit) => {
     if (settings.expiryTracking && product.expiryDate) {
       const today = new Date(); today.setHours(0, 0, 0, 0)
       if (new Date(product.expiryDate) < today) return
     }
+    const resolvedUnit = unit ?? baseUnitOf(product)
+    // Cart key includes unit so crate and bottle are separate line items
+    const cartKey = `${product.id}:${resolvedUnit.id ?? 'base'}`
     setCart((prev) => {
-      const existing = prev.find((i) => i.id === product.id)
-      const currentQty = existing?.qty ?? 0
-      if (currentQty >= product.stock) return prev
-      if (existing) return prev.map((i) => i.id === product.id ? { ...i, qty: i.qty + 1 } : i)
-      return [...prev, { ...product, qty: 1, itemDiscount: 0 }]
+      const existing = prev.find((i) => i.id === cartKey)
+      const currentBaseQty = (existing?.qty ?? 0) * resolvedUnit.conversion_factor
+      if (currentBaseQty + resolvedUnit.conversion_factor > product.stock) return prev
+      if (existing) return prev.map((i) => i.id === cartKey ? { ...i, qty: i.qty + 1 } : i)
+      return [...prev, { ...product, id: cartKey, price: resolvedUnit.price, qty: 1, itemDiscount: 0, selectedUnit: resolvedUnit }]
     })
   }
 
   const updateQty = (id: string, qty: number) => {
-    const product = products.find((p) => p.id === id)
-    if (!product) return
+    const item = cart.find((i) => i.id === id)
+    if (!item) return
     if (qty <= 0) setCart((prev) => prev.filter((i) => i.id !== id))
-    else setCart((prev) => prev.map((i) => i.id === id ? { ...i, qty: Math.min(qty, product.stock) } : i))
+    else {
+      const maxQty = Math.floor(item.stock / item.selectedUnit.conversion_factor)
+      setCart((prev) => prev.map((i) => i.id === id ? { ...i, qty: Math.min(qty, maxQty) } : i))
+    }
   }
 
   const removeItem = (id: string) => setCart((prev) => prev.filter((i) => i.id !== id))
@@ -470,12 +572,12 @@ export function POSPage() {
     if (e.key !== 'Enter') return
     const exact = products.find((p) => p.barcode === search || p.sku === search)
     if (exact) {
-      addToCart(exact)
+      addToCart(exact, baseUnitOf(exact))
       setSearch('')
       return
     }
     if (filtered.length === 1) {
-      addToCart(filtered[0])
+      addToCart(filtered[0], baseUnitOf(filtered[0]))
       setSearch('')
     }
   }
@@ -619,14 +721,17 @@ export function POSPage() {
       branch_id: effectiveBranchId ?? null,
       notes: orderNotes || undefined,
       items: cart.map((item) => ({
-        product_id: Number(item.id) || undefined,
+        product_id: Number(item.id.split(':')[0]) || undefined,
         product_name: item.name,
         product_sku: item.sku || undefined,
         quantity: item.qty,
-        unit_price: item.price,
+        unit_price: item.selectedUnit.price,
         discount_amount: item.itemDiscount > 0
-          ? Math.round(item.price * item.qty * item.itemDiscount / 100)
+          ? Math.round(item.selectedUnit.price * item.qty * item.itemDiscount / 100)
           : 0,
+        unit_id: item.selectedUnit.id ?? undefined,
+        unit_name: item.selectedUnit.id ? item.selectedUnit.name : undefined,
+        conversion_factor: item.selectedUnit.conversion_factor,
       })),
       discount_amount: cartDiscountAmt,
       amount_paid: (payInfo.cashTendered as number) ?? total,
@@ -640,8 +745,8 @@ export function POSPage() {
     if (!isLocalMode && isTauri() && !isOnline) {
       // Queue the sale locally for later sync; stock is decremented in SQLite immediately
       const stockItems: [number, number][] = cart
-        .filter((item) => Number(item.id) > 0)
-        .map((item) => [Number(item.id), item.qty])
+        .filter((item) => Number(item.id.split(':')[0]) > 0)
+        .map((item) => [Number(item.id.split(':')[0]), Math.round(item.qty * item.selectedUnit.conversion_factor)])
       await createOfflineOrder(JSON.stringify(orderPayload), effectiveBranchId ?? null, stockItems)
     } else {
       createOrder.mutate(orderPayload, {
@@ -770,7 +875,7 @@ export function POSPage() {
                   product={p}
                   catColor={catMap.get(p.category)?.color ?? '#9CA3AF'}
                   cartQty={cartQtyMap.get(p.id) ?? 0}
-                  onAdd={() => addToCart(p)}
+                  onAdd={(unit) => addToCart(p, unit)}
                   expiryTracking={settings.expiryTracking}
                 />
               ))}
@@ -876,12 +981,15 @@ export function POSPage() {
           ) : (
             cart.map((item) => {
               const catColor = catMap.get(item.category)?.color ?? '#9CA3AF'
-              const product = products.find((p) => p.id === item.id)
+              const product = products.find((p) => p.id === item.id.split(':')[0])
+              const maxQty = product
+                ? Math.floor(product.stock / item.selectedUnit.conversion_factor)
+                : item.qty
               return (
                 <CartItemRow
                   key={item.id}
                   item={item}
-                  maxQty={product?.stock ?? item.qty}
+                  maxQty={maxQty}
                   catColor={catColor}
                   onQty={updateQty}
                   onRemove={removeItem}

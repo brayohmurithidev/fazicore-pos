@@ -39,3 +39,24 @@ class Product(Base, TimestampMixin):
     order_items: Mapped[list["OrderItem"]] = relationship("OrderItem", back_populates="product")
     variants: Mapped[list["Product"]] = relationship("Product", foreign_keys=[parent_product_id], back_populates="parent")
     parent: Mapped["Product | None"] = relationship("Product", foreign_keys=[parent_product_id], back_populates="variants", remote_side=[id])
+    units: Mapped[list["ProductUnit"]] = relationship("ProductUnit", back_populates="product", cascade="all, delete-orphan", order_by="ProductUnit.conversion_factor")
+
+
+class ProductUnit(Base, TimestampMixin):
+    """Additional selling/purchasing units for a product (e.g. Crate=24, Pack=6)."""
+    __tablename__ = "product_units"
+    __table_args__ = (UniqueConstraint("product_id", "name", name="uq_product_units_product_name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(50), nullable=False)
+    abbreviation: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # How many base units = 1 of this unit (e.g. 1 crate = 24 pieces → factor=24)
+    conversion_factor: Mapped[float] = mapped_column(Numeric(10, 4), nullable=False, default=1)
+    # Explicit sell price for this unit; null → product.price × conversion_factor
+    price: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    barcode: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    sku: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    product: Mapped["Product"] = relationship("Product", back_populates="units")

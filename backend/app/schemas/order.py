@@ -12,6 +12,9 @@ class OrderItemEdit(BaseModel):
     quantity: int
     unit_price: float
     discount_amount: float = 0
+    unit_id: int | None = None
+    unit_name: str | None = None
+    conversion_factor: float = 1.0
 
 
 class OrderEdit(BaseModel):
@@ -33,6 +36,9 @@ class OrderItemCreate(BaseModel):
     quantity: int
     unit_price: float
     discount_amount: float = 0
+    unit_id: int | None = None
+    unit_name: str | None = None
+    conversion_factor: float = 1.0
 
 
 class OrderCreate(BaseModel):
@@ -60,6 +66,9 @@ class OrderItemOut(BaseModel):
     unit_price: float
     discount_amount: float
     total: float
+    unit_id: int | None = None
+    unit_name: str | None = None
+    conversion_factor: float = 1.0
 
     model_config = {"from_attributes": True}
 
