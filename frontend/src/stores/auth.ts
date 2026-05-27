@@ -16,11 +16,12 @@ interface AuthState {
   setClockedIn: (id: number, isoTime: string) => void
   setClockOut: () => void
   updateUser: (patch: Partial<User>) => void
+  setTokens: (accessToken: string, refreshToken?: string | null) => void
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       accessToken: null,
       refreshToken: null,
@@ -40,6 +41,8 @@ export const useAuthStore = create<AuthState>()(
       setClockedIn: (id, isoTime) => set({ attendanceId: id, clockInTime: isoTime }),
       setClockOut: () => set({ attendanceId: null, clockInTime: null }),
       updateUser: (patch) => set((s) => ({ user: s.user ? { ...s.user, ...patch } : s.user })),
+      setTokens: (accessToken, refreshToken) =>
+        set((s) => ({ accessToken, refreshToken: refreshToken ?? s.refreshToken })),
     }),
     { name: 'fazi-auth' }
   )

@@ -143,9 +143,38 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
 
     // Listen for sync-complete events from the Rust background worker
     let unlisten: (() => void) | undefined
+    let unlistenExpired: (() => void) | undefined
     if (isTauri()) {
       unlisten = await listen<SyncResult>('sync-complete', () => {
         get().refreshSyncStatus()
+      })
+      unlistenExpired = await listen('sync-token-expired', async () => {
+        // Try a silent token refresh. If it succeeds, the Axios interceptor will
+        // call useAuthStore.setTokens() which triggers useOfflineSync to push
+        // the fresh token back to Rust. If it fails, the interceptor redirects to /login.
+        const { default: axios } = await import('axios')
+        const raw = localStorage.getItem('fazi-auth')
+        if (raw) {
+          const state = JSON.parse(raw)?.state
+          if (state?.refreshToken) {
+            try {
+              const { data } = await axios.post(
+                `${import.meta.env.VITE_API_URL ?? ''}/api/v1/auth/refresh`,
+                { refresh_token: state.refreshToken },
+              )
+              const { useAuthStore } = await import('@/stores/auth')
+              useAuthStore.getState().setTokens(data.access_token, data.refresh_token ?? null)
+            } catch {
+              const { useAuthStore } = await import('@/stores/auth')
+              useAuthStore.getState().logout()
+              window.location.href = '/login'
+            }
+          } else {
+            const { useAuthStore } = await import('@/stores/auth')
+            useAuthStore.getState().logout()
+            window.location.href = '/login'
+          }
+        }
       })
       // Load initial sync status
       await store.refreshSyncStatus()
@@ -155,6 +184,7 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
       unlisten?.()
+      unlistenExpired?.()
     }
   },
 }))

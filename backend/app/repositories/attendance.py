@@ -11,19 +11,23 @@ class AttendanceRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def clock_in(self, user_id: int, org_id: int, branch_id: int | None) -> Attendance:
-        record = Attendance(user_id=user_id, org_id=org_id, branch_id=branch_id, date=date.today())
+    async def clock_in(self, user_id: int, org_id: int, branch_id: int | None, opening_float: float | None = None) -> Attendance:
+        record = Attendance(user_id=user_id, org_id=org_id, branch_id=branch_id, date=date.today(), opening_float=opening_float)
         self.session.add(record)
         await self.session.commit()
         await self.session.refresh(record)
         return record
 
-    async def clock_out(self, attendance_id: int) -> Attendance | None:
+    async def clock_out(self, attendance_id: int, closing_cash: float | None = None, shift_notes: str | None = None) -> Attendance | None:
         result = await self.session.execute(select(Attendance).where(Attendance.id == attendance_id))
         record = result.scalar_one_or_none()
         if not record:
             return None
         record.clock_out = datetime.now(timezone.utc)
+        if closing_cash is not None:
+            record.closing_cash = closing_cash
+        if shift_notes is not None:
+            record.shift_notes = shift_notes
         await self.session.commit()
         await self.session.refresh(record)
         return record

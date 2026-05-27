@@ -457,3 +457,69 @@ export interface ApiEtimsSubmission {
   submitted_at: string | null
   created_at: string
 }
+
+// ── Reports ───────────────────────────────────────────────────────────────────
+
+export interface ApiDailySummary {
+  report_date: string
+  total_revenue: number
+  total_orders: number
+  avg_order_value: number
+  total_discount: number
+  total_voids: number
+  void_amount: number
+  cash_total: number
+  mpesa_total: number
+  credit_total: number
+  split_total: number
+  other_total: number
+  by_payment: { method: string; count: number; total: number }[]
+  by_cashier: { cashier_id: number | null; cashier_name: string; count: number; total: number }[]
+  top_products: { name: string; qty: number; revenue: number }[]
+}
+
+export interface ApiShiftReport {
+  attendance_id: number
+  user_id: number
+  user_name: string
+  clock_in: string
+  clock_out: string | null
+  opening_float: number | null
+  closing_cash: number | null
+  shift_notes: string | null
+  sales_count: number
+  sales_total: number
+  cash_sales: number
+  mpesa_sales: number
+  expected_cash: number
+  variance: number | null
+}
+
+export interface ApiStockLevel {
+  product_id: number
+  product_name: string
+  sku: string | null
+  category_name: string | null
+  branch_id: number | null
+  branch_name: string | null
+  quantity: number
+  min_stock: number
+  cost: number
+  price: number
+  stock_value: number
+  status: 'ok' | 'low' | 'out_of_stock'
+}
+
+export interface ApiVoidLog {
+  order_id: number
+  order_number: string
+  voided_at: string | null
+  voided_by_name: string | null
+  void_reason: string | null
+  cashier_name: string | null
+  branch_id: number | null
+  branch_name: string | null
+  total: number
+  payment_method: string
+  items_count: number
+}

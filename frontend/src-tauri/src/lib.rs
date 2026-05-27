@@ -445,6 +445,19 @@ fn start_sync_worker(app: tauri::AppHandle) {
             let image_dir = app.state::<ImageDirState>();
             let result = sync::run_sync(&db, &config, &image_dir.0).await;
 
+            if result.token_expired {
+                // Clear the stale token so we stop hammering the server with 401s.
+                // The frontend will push a fresh token via setSyncConfig once it
+                // successfully refreshes (or will redirect to login if it can't).
+                {
+                    let state = app.state::<SyncConfigState>();
+                    *state.0.lock().unwrap() = None;
+                }
+                log::warn!("[sync] token expired — cleared sync config, emitting sync-token-expired");
+                let _ = app.emit("sync-token-expired", ());
+                continue;
+            }
+
             log::info!(
                 "[sync] pushed={} failed={} products={} customers={} errors={:?}",
                 result.pushed,

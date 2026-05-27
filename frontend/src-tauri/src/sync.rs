@@ -109,11 +109,27 @@ pub async fn check_online(base_url: &str) -> bool {
         return false;
     };
     client
-        .get(format!("{base_url}/api/v1/auth/me"))
+        .get(format!("{base_url}/health"))
         .send()
         .await
-        .map(|r| r.status().as_u16() < 500)
+        .map(|r| r.status().is_success())
         .unwrap_or(false)
+}
+
+// ── Sync errors ───────────────────────────────────────────────────────────────
+
+pub enum SyncApiError {
+    Unauthorized,
+    Other(String),
+}
+
+impl From<SyncApiError> for String {
+    fn from(e: SyncApiError) -> Self {
+        match e {
+            SyncApiError::Unauthorized => "401 Unauthorized".to_string(),
+            SyncApiError::Other(s) => s,
+        }
+    }
 }
 
 // ── Pull: products ────────────────────────────────────────────────────────────
@@ -121,7 +137,7 @@ pub async fn check_online(base_url: &str) -> bool {
 pub async fn pull_products(
     client: &Client,
     config: &SyncConfig,
-) -> Result<Vec<LocalProduct>, String> {
+) -> Result<Vec<LocalProduct>, SyncApiError> {
     let mut all: Vec<LocalProduct> = Vec::new();
     let mut skip = 0usize;
     let limit = 200usize;
@@ -135,13 +151,16 @@ pub async fn pull_products(
         if let Some(branch_id) = config.branch_id {
             req = req.query(&[("branch_id", branch_id.to_string())]);
         }
-        let resp = req.send().await.map_err(|e| e.to_string())?;
+        let resp = req.send().await.map_err(|e| SyncApiError::Other(e.to_string()))?;
 
+        if resp.status().as_u16() == 401 {
+            return Err(SyncApiError::Unauthorized);
+        }
         if !resp.status().is_success() {
-            return Err(format!("products API {}", resp.status()));
+            return Err(SyncApiError::Other(format!("products API {}", resp.status())));
         }
 
-        let page: Vec<ApiProductRaw> = resp.json().await.map_err(|e| e.to_string())?;
+        let page: Vec<ApiProductRaw> = resp.json().await.map_err(|e| SyncApiError::Other(e.to_string()))?;
         let done = page.len() < limit;
         all.extend(page.into_iter().map(Into::into));
         if done { break; }
@@ -156,7 +175,7 @@ pub async fn pull_products(
 pub async fn pull_customers(
     client: &Client,
     config: &SyncConfig,
-) -> Result<Vec<LocalCustomer>, String> {
+) -> Result<Vec<LocalCustomer>, SyncApiError> {
     let mut all: Vec<LocalCustomer> = Vec::new();
     let mut skip = 0usize;
     let limit = 200usize;
@@ -172,13 +191,16 @@ pub async fn pull_customers(
             ])
             .send()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| SyncApiError::Other(e.to_string()))?;
 
+        if resp.status().as_u16() == 401 {
+            return Err(SyncApiError::Unauthorized);
+        }
         if !resp.status().is_success() {
-            return Err(format!("customers API {}", resp.status()));
+            return Err(SyncApiError::Other(format!("customers API {}", resp.status())));
         }
 
-        let page: Vec<ApiCustomerRaw> = resp.json().await.map_err(|e| e.to_string())?;
+        let page: Vec<ApiCustomerRaw> = resp.json().await.map_err(|e| SyncApiError::Other(e.to_string()))?;
         let done = page.len() < limit;
         all.extend(page.into_iter().map(Into::into));
         if done { break; }
@@ -195,9 +217,9 @@ pub async fn push_order(
     config: &SyncConfig,
     order_id: &str,
     payload: &str,
-) -> Result<(), String> {
+) -> Result<(), SyncApiError> {
     let mut body: serde_json::Value =
-        serde_json::from_str(payload).map_err(|e| e.to_string())?;
+        serde_json::from_str(payload).map_err(|e| SyncApiError::Other(e.to_string()))?;
 
     // Attach idempotency key so server deduplicates on retry
     body["idempotency_key"] = serde_json::Value::String(order_id.to_string());
@@ -209,7 +231,7 @@ pub async fn push_order(
         .json(&body)
         .send()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| SyncApiError::Other(e.to_string()))?;
 
     let code = resp.status().as_u16();
     if code == 201 || code == 200 {
@@ -219,8 +241,11 @@ pub async fn push_order(
     if code == 409 {
         return Ok(());
     }
+    if code == 401 {
+        return Err(SyncApiError::Unauthorized);
+    }
     let text = resp.text().await.unwrap_or_default();
-    Err(format!("HTTP {code}: {text}"))
+    Err(SyncApiError::Other(format!("HTTP {code}: {text}")))
 }
 
 // ── Orchestration ─────────────────────────────────────────────────────────────
@@ -233,6 +258,8 @@ pub struct SyncResult {
     pub customers_pulled: usize,
     pub images_downloaded: usize,
     pub errors: Vec<String>,
+    #[serde(default)]
+    pub token_expired: bool,
 }
 
 const MINIO_INTERNAL: &str = "http://minio:9000/";
@@ -307,7 +334,7 @@ async fn download_images(
 pub async fn run_sync(db: &DbState, config: &SyncConfig, image_dir: &Path) -> SyncResult {
     let client = match make_client() {
         Ok(c) => c,
-        Err(e) => return SyncResult { pushed: 0, push_failed: 0, products_pulled: 0, customers_pulled: 0, images_downloaded: 0, errors: vec![e] },
+        Err(e) => return SyncResult { pushed: 0, push_failed: 0, products_pulled: 0, customers_pulled: 0, images_downloaded: 0, errors: vec![e], token_expired: false },
     };
 
     let mut result = SyncResult {
@@ -317,6 +344,7 @@ pub async fn run_sync(db: &DbState, config: &SyncConfig, image_dir: &Path) -> Sy
         customers_pulled: 0,
         images_downloaded: 0,
         errors: Vec::new(),
+        token_expired: false,
     };
 
     // 1. Push pending offline orders
@@ -336,7 +364,11 @@ pub async fn run_sync(db: &DbState, config: &SyncConfig, image_dir: &Path) -> Sy
                 let _ = db::mark_order_synced(&conn, &order.id);
                 result.pushed += 1;
             }
-            Err(e) => {
+            Err(SyncApiError::Unauthorized) => {
+                result.token_expired = true;
+                return result; // stop immediately — no point retrying other requests
+            }
+            Err(SyncApiError::Other(e)) => {
                 let conn = db.0.lock().unwrap();
                 let _ = db::mark_order_failed(&conn, &order.id, &e);
                 result.push_failed += 1;
@@ -364,7 +396,11 @@ pub async fn run_sync(db: &DbState, config: &SyncConfig, image_dir: &Path) -> Sy
             result.images_downloaded = n;
             result.errors.extend(errs);
         }
-        Err(e) => result.errors.push(format!("pull products: {e}")),
+        Err(SyncApiError::Unauthorized) => {
+            result.token_expired = true;
+            return result;
+        }
+        Err(SyncApiError::Other(e)) => result.errors.push(format!("pull products: {e}")),
     }
 
     // 3. Pull customers
@@ -378,7 +414,10 @@ pub async fn run_sync(db: &DbState, config: &SyncConfig, image_dir: &Path) -> Sy
                 let _ = db::set_meta(&conn, "customers_last_sync", &Utc::now().to_rfc3339());
             }
         }
-        Err(e) => result.errors.push(format!("pull customers: {e}")),
+        Err(SyncApiError::Unauthorized) => {
+            result.token_expired = true;
+        }
+        Err(SyncApiError::Other(e)) => result.errors.push(format!("pull customers: {e}")),
     }
 
     result

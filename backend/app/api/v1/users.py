@@ -37,7 +37,7 @@ async def create_user(
                 User.org_id == current_user.org_id, User.is_active == True  # noqa: E712
             )
         ) or 0
-        if user_count >= org.max_users:
+        if org.max_users is not None and user_count >= org.max_users:
             raise HTTPException(
                 status_code=status.HTTP_402_PAYMENT_REQUIRED,
                 detail={"code": "limit_exceeded", "resource": "users",

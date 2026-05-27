@@ -38,6 +38,7 @@ import type {
   ApiPermissions, ApiNotifications, ApiAnalyticsDailyItem, ReorderSuggestion, AgingItem, DashboardData, TokenResponse,
   ApiExpenditure, ApiExpenditureSummary, ApiLoyaltySettings,
   ApiEtimsConfig, ApiEtimsSubmission,
+  ApiDailySummary, ApiShiftReport, ApiStockLevel, ApiVoidLog,
 } from '@/types/api'
 
 // ── Local-mode adapters ───────────────────────────────────────────────────────
@@ -1314,5 +1315,39 @@ export function useRetryEtimsSubmission() {
   return useMutation({
     mutationFn: (id: number) => api.post(`/etims/submissions/${id}/retry`).then((r) => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['etims-submissions'] }),
+  })
+}
+
+// ── Reports ───────────────────────────────────────────────────────────────────
+
+export function useDailySummary(params: { report_date?: string; branch_id?: number }) {
+  return useQuery<ApiDailySummary>({
+    queryKey: ['report-daily', params],
+    queryFn: () => api.get('/reports/daily', { params }).then((r) => r.data),
+    staleTime: 60_000,
+  })
+}
+
+export function useShiftReport(params: { report_date?: string; user_id?: number; branch_id?: number }) {
+  return useQuery<ApiShiftReport[]>({
+    queryKey: ['report-shift', params],
+    queryFn: () => api.get('/reports/shift', { params }).then((r) => r.data),
+    staleTime: 60_000,
+  })
+}
+
+export function useStockLevels(params: { branch_id?: number; include_zero?: boolean }) {
+  return useQuery<ApiStockLevel[]>({
+    queryKey: ['report-stock-levels', params],
+    queryFn: () => api.get('/reports/stock-levels', { params }).then((r) => r.data),
+    staleTime: 30_000,
+  })
+}
+
+export function useVoidLog(params: { date_from?: string; date_to?: string; branch_id?: number }) {
+  return useQuery<ApiVoidLog[]>({
+    queryKey: ['report-voids', params],
+    queryFn: () => api.get('/reports/voids', { params }).then((r) => r.data),
+    staleTime: 30_000,
   })
 }

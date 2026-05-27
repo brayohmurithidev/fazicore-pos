@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { useAuthStore } from '@/stores/auth'
 
 const MINIO_INTERNAL = 'http://minio:9000/'
 const MINIO_PUBLIC = import.meta.env.VITE_MINIO_PUBLIC_URL ?? 'http://localhost:9002/'
@@ -43,13 +44,12 @@ api.interceptors.response.use(
               `${import.meta.env.VITE_API_URL ?? ''}/api/v1/auth/refresh`,
               { refresh_token: state.refreshToken },
             )
-            const stored = JSON.parse(localStorage.getItem('fazi-auth') || '{}')
-            stored.state.accessToken = data.access_token
-            localStorage.setItem('fazi-auth', JSON.stringify(stored))
+            // Update Zustand store so useOfflineSync re-pushes the fresh token to the Rust sync worker
+            useAuthStore.getState().setTokens(data.access_token, data.refresh_token ?? null)
             original.headers.Authorization = `Bearer ${data.access_token}`
             return api(original)
           } catch {
-            localStorage.removeItem('fazi-auth')
+            useAuthStore.getState().logout()
             window.location.href = '/login'
           }
         }

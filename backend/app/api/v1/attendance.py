@@ -7,7 +7,7 @@ from app.core.database import get_session
 from app.core.deps import get_current_active_user
 from app.models.user import User
 from app.repositories.attendance import AttendanceRepository
-from app.schemas.attendance import AttendanceOut, ClockOutRequest
+from app.schemas.attendance import AttendanceOut, ClockInRequest, ClockOutRequest
 
 router = APIRouter(prefix="/attendance", tags=["attendance"])
 
@@ -22,11 +22,15 @@ def _out(r, user_name: str | None = None) -> AttendanceOut:
         clock_out=r.clock_out,
         date=r.date,
         user_name=user_name or (r.user.name if hasattr(r, "user") and r.user else None),
+        opening_float=float(r.opening_float) if r.opening_float is not None else None,
+        closing_cash=float(r.closing_cash) if r.closing_cash is not None else None,
+        shift_notes=r.shift_notes,
     )
 
 
 @router.post("/clock-in", response_model=AttendanceOut)
 async def clock_in(
+    body: ClockInRequest = ClockInRequest(),
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_active_user),
 ) -> AttendanceOut:
@@ -34,7 +38,7 @@ async def clock_in(
     existing = await repo.get_active(current_user.id)
     if existing:
         return _out(existing)
-    record = await repo.clock_in(current_user.id, current_user.org_id, current_user.branch_id)
+    record = await repo.clock_in(current_user.id, current_user.org_id, current_user.branch_id, body.opening_float)
     return _out(record)
 
 
@@ -45,7 +49,7 @@ async def clock_out(
     current_user: User = Depends(get_current_active_user),
 ) -> AttendanceOut:
     repo = AttendanceRepository(session)
-    record = await repo.clock_out(body.attendance_id)
+    record = await repo.clock_out(body.attendance_id, body.closing_cash, body.shift_notes)
     if not record:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attendance record not found")
     return _out(record)
