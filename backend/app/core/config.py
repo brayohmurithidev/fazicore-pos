@@ -64,6 +64,10 @@ class Settings(BaseSettings):
     # Public URL of the POS web app (sent in welcome emails)
     WEBAPP_URL: str = "https://pos.fazilabs.com"
 
+    # Central billing system webhook
+    BILLING_ONBOARD_URL: str = ""
+    BILLING_WEBHOOK_SECRET: str = ""
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def parse_cors(cls, v: str | list) -> list:

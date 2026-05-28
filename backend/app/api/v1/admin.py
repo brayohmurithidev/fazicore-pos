@@ -580,6 +580,20 @@ async def set_org_subscription(
         )
 
     await session.refresh(sub)
+
+    # Notify central billing system (fire-and-forget)
+    import asyncio
+    from app.services.billing_webhook import notify_org_onboarded
+    asyncio.create_task(notify_org_onboarded(
+        org_id=org.id,
+        org_slug=org.slug,
+        org_name=org.name,
+        org_email=org.email or "",
+        org_phone=org.phone,
+        plan_slug=plan.slug,
+        billing_interval=data.billing_interval,
+    ))
+
     return _sub_out(sub, plan)
 
 

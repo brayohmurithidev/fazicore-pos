@@ -1,4 +1,5 @@
 import io
+import logging
 import uuid
 from pathlib import Path
 
@@ -7,7 +8,10 @@ from minio.error import S3Error
 
 from app.core.config import settings
 
+log = logging.getLogger(__name__)
+
 _client: Minio | None = None
+_bucket_ready: bool = False
 
 
 def _strip_scheme(endpoint: str) -> str:
@@ -27,11 +31,15 @@ def get_minio() -> Minio:
             secret_key=settings.MINIO_SECRET_KEY,
             secure=settings.MINIO_SECURE,
         )
-        _ensure_bucket(_client)
     return _client
 
 
-def _ensure_bucket(client: Minio) -> None:
+def _ensure_bucket() -> None:
+    """Idempotent bucket setup. Retries on each upload until successful."""
+    global _bucket_ready
+    if _bucket_ready:
+        return
+    client = get_minio()
     try:
         if not client.bucket_exists(settings.MINIO_BUCKET_NAME):
             client.make_bucket(settings.MINIO_BUCKET_NAME)
@@ -45,11 +53,14 @@ def _ensure_bucket(client: Minio) -> None:
                 }}]
             }}'''
             client.set_bucket_policy(settings.MINIO_BUCKET_NAME, policy)
-    except S3Error:
-        pass
+        _bucket_ready = True
+    except Exception as exc:
+        log.warning("MinIO bucket setup failed (will retry): %s", exc)
+        raise
 
 
 def upload_file(file_data: bytes, filename: str, content_type: str) -> str:
+    _ensure_bucket()
     client = get_minio()
     ext = Path(filename).suffix
     object_name = f"{uuid.uuid4()}{ext}"
@@ -70,8 +81,8 @@ def get_file_url(object_name: str) -> str:
 
 
 def delete_file(object_name: str) -> None:
-    client = get_minio()
     try:
+        client = get_minio()
         client.remove_object(settings.MINIO_BUCKET_NAME, object_name)
-    except S3Error:
-        pass
+    except Exception as exc:
+        log.warning("MinIO delete failed for %s: %s", object_name, exc)

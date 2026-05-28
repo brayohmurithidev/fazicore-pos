@@ -88,4 +88,13 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 
 @app.get("/health")
 async def health_check() -> dict:
-    return {"status": "ok", "service": "Fazi POS API"}
+    from sqlalchemy import text
+    from app.core.database import AsyncSessionLocal
+    db_ok = True
+    try:
+        async with AsyncSessionLocal() as session:
+            await session.execute(text("SELECT 1"))
+    except Exception:
+        db_ok = False
+    status = "ok" if db_ok else "degraded"
+    return {"status": status, "service": "Fazi POS API", "db": db_ok}

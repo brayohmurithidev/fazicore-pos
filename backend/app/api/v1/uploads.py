@@ -48,8 +48,11 @@ async def upload_product_image(
         old_name = product.image_url.rsplit("/", 1)[-1]
         delete_file(old_name)
 
-    object_name = upload_file(data, file.filename or "image.jpg", content_type)
-    url = get_file_url(object_name)
+    try:
+        object_name = upload_file(data, file.filename or "image.jpg", content_type)
+        url = get_file_url(object_name)
+    except Exception:
+        raise HTTPException(status_code=503, detail="File storage unavailable")
 
     product.image_url = url
     await session.commit()
@@ -79,8 +82,11 @@ async def upload_avatar(
         old_name = current_user.photo_url.rsplit("/", 1)[-1]
         delete_file(old_name)
 
-    object_name = upload_file(data, file.filename or "avatar.jpg", content_type)
-    url = get_file_url(object_name)
+    try:
+        object_name = upload_file(data, file.filename or "avatar.jpg", content_type)
+        url = get_file_url(object_name)
+    except Exception:
+        raise HTTPException(status_code=503, detail="File storage unavailable")
 
     repo = UserRepository(session)
     user = await repo.get(current_user.id)
