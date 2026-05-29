@@ -36,7 +36,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "REPLACE_WITH_YOUR_PUBLIC_KEY",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVBNTJDRDY0NTZCQjM1NTQKUldSVU5idFdaTTFTNnZRcG9KMkpuL2RCbnQ2eDdOR1J5Q0FKa0tZYW5MbW14YUJWenpJeFFLMmQK",
       "endpoints": [
         "https://github.com/brayohmurithidev/fazicore-pos/releases/latest/download/latest.json"
       ]
