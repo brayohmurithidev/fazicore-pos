@@ -6,7 +6,7 @@
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "Content-Security-Policy", "value": "frame-ancestors 'self' https://billing.fazilabs.com http://localhost:5173" },
+        { "key": "Content-Security-Policy", "value": "frame-ancestors 'self' https://invoicing.fazilabs.com https://fazi-invoicing-billing-system.vercel.app http://localhost:5173" },
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
       ]
