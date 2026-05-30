@@ -312,8 +312,8 @@ function PrinterSetupSection() {
             onChange={(e) => update({ printerMode: e.target.value as 'cups' | 'serial' })}
             className="text-sm border border-gray-200 rounded-md px-2.5 py-1.5 bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-300"
           >
-            <option value="cups">CUPS System Printer</option>
-            <option value="serial">USB / Serial (raw)</option>
+            <option value="cups">System Printer (USB / installed driver)</option>
+            <option value="serial">Serial / COM port (raw)</option>
           </select>
         </div>
       )}
