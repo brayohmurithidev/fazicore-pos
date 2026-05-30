@@ -61,7 +61,7 @@ async def create_product(
     current_user: User = Depends(get_current_active_user),
 ) -> ProductOut:
     org = await session.get(Organization, current_user.org_id)
-    if org:
+    if org and org.max_products is not None:
         active_count = await session.scalar(
             select(func.count(Product.id)).where(
                 Product.org_id == current_user.org_id, Product.is_active == True
@@ -73,13 +73,27 @@ async def create_product(
                 detail={"code": "limit_exceeded", "resource": "products",
                         "current": active_count, "max": org.max_products},
             )
-    repo = ProductRepository(session)
-    product_data = data.model_dump()
+
+    # initial_stock is not a Product column — it seeds the inventory record below
+    product_data = data.model_dump(exclude={"initial_stock"})
     product_data["org_id"] = current_user.org_id
     obj = Product(**product_data)
     session.add(obj)
     await session.flush()
     await session.refresh(obj)
+
+    if data.initial_stock > 0 and data.track_inventory:
+        inv_service = InventoryService(session)
+        await inv_service.adjust(
+            product_id=obj.id,
+            branch_id=current_user.branch_id,
+            qty_change=data.initial_stock,
+            type=TransactionType.PURCHASE,
+            performed_by=current_user.id,
+            notes="Initial stock",
+        )
+        await session.refresh(obj)
+
     return ProductOut.model_validate(obj)
 
 
