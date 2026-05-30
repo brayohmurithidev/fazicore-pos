@@ -50,10 +50,11 @@ class ProductCreate(BaseModel):
     expiry_date: date | None = None
     min_stock: int = 10
     track_inventory: bool = True
+    initial_stock: int = 0
 
 
 class ProductBulkCreate(ProductCreate):
-    initial_stock: int = 0
+    pass
 
 
 class ProductUpdate(BaseModel):
