@@ -149,31 +149,37 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
         get().refreshSyncStatus()
       })
       unlistenExpired = await listen('sync-token-expired', async () => {
-        // Try a silent token refresh. If it succeeds, the Axios interceptor will
-        // call useAuthStore.setTokens() which triggers useOfflineSync to push
-        // the fresh token back to Rust. If it fails, the interceptor redirects to /login.
+        // Background sync got a 401 — attempt a silent token refresh.
+        // Only logout on a real auth rejection (401/403); a network error
+        // means we're offline and the cashier should keep working locally.
         const { default: axios } = await import('axios')
         const raw = localStorage.getItem('fazi-auth')
-        if (raw) {
-          const state = JSON.parse(raw)?.state
-          if (state?.refreshToken) {
-            try {
-              const { data } = await axios.post(
-                `${import.meta.env.VITE_API_URL ?? ''}/api/v1/auth/refresh`,
-                { refresh_token: state.refreshToken },
-              )
-              const { useAuthStore } = await import('@/stores/auth')
-              useAuthStore.getState().setTokens(data.access_token, data.refresh_token ?? null)
-            } catch {
-              const { useAuthStore } = await import('@/stores/auth')
-              useAuthStore.getState().logout()
-              window.location.href = '/login'
-            }
-          } else {
+        if (!raw) return
+        const state = JSON.parse(raw)?.state
+        if (!state?.refreshToken) {
+          // No refresh token at all — session is unrecoverable.
+          const { useAuthStore } = await import('@/stores/auth')
+          useAuthStore.getState().logout()
+          window.location.href = '/login'
+          return
+        }
+        try {
+          const { data } = await axios.post(
+            `${import.meta.env.VITE_API_URL ?? ''}/api/v1/auth/refresh`,
+            { refresh_token: state.refreshToken },
+          )
+          const { useAuthStore } = await import('@/stores/auth')
+          useAuthStore.getState().setTokens(data.access_token, data.refresh_token ?? null)
+        } catch (err: any) {
+          const isAuthError = err?.response?.status === 401 || err?.response?.status === 403
+          if (isAuthError) {
+            // Refresh token itself is expired — logout is correct.
             const { useAuthStore } = await import('@/stores/auth')
             useAuthStore.getState().logout()
             window.location.href = '/login'
           }
+          // Network error: we're offline. Sync config already cleared by Rust.
+          // App keeps running with local SQLite data; sync resumes on reconnect.
         }
       })
       // Load initial sync status
