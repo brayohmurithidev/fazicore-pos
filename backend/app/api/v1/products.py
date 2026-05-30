@@ -92,9 +92,29 @@ async def create_product(
             performed_by=current_user.id,
             notes="Initial stock",
         )
-        await session.refresh(obj)
 
-    return ProductOut.model_validate(obj)
+    # Reload with relationships eager-loaded so ProductOut can serialize
+    # (units/category/inventory would otherwise lazy-load and raise MissingGreenlet)
+    from sqlalchemy.orm import selectinload
+    result = await session.execute(
+        select(Product)
+        .options(
+            selectinload(Product.units),
+            selectinload(Product.category),
+            selectinload(Product.inventory),
+        )
+        .where(Product.id == obj.id)
+    )
+    product = result.scalar_one()
+    out = ProductOut.model_validate(product)
+    if product.inventory:
+        out.stock_quantity = sum(
+            inv.quantity for inv in product.inventory
+            if current_user.branch_id is None or inv.branch_id == current_user.branch_id
+        )
+    if product.category:
+        out.category_name = product.category.name
+    return out
 
 
 @router.post("/bulk", status_code=status.HTTP_201_CREATED)
