@@ -114,12 +114,12 @@ fn print_raw_windows(printer: &str, data: &[u8]) -> Result<(), String> {
         }
 
         let result = (|| -> Result<(), String> {
-            StartPagePrinter(handle).ok().ok_or("StartPagePrinter failed")?;
+            StartPagePrinter(handle).ok().map_err(|e| format!("StartPagePrinter failed: {e}"))?;
             let mut written: u32 = 0;
             WritePrinter(handle, data.as_ptr() as *const _, data.len() as u32, &mut written)
                 .ok()
-                .ok_or("WritePrinter failed")?;
-            EndPagePrinter(handle).ok().ok_or("EndPagePrinter failed")?;
+                .map_err(|e| format!("WritePrinter failed: {e}"))?;
+            EndPagePrinter(handle).ok().map_err(|e| format!("EndPagePrinter failed: {e}"))?;
             Ok(())
         })();
 
