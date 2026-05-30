@@ -24,6 +24,10 @@ app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
+    # Tauri desktop webview origins differ per OS:
+    #   macOS/iOS → tauri://localhost   Windows/Linux → http(s)://tauri.localhost
+    # Match them all so the desktop app works regardless of platform.
+    allow_origin_regex=r"^(tauri://localhost|https?://tauri\.localhost)$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
