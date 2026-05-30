@@ -132,7 +132,7 @@ function PlanModal({ plan, onClose }: { plan: SubscriptionPlan | null; onClose: 
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent className="sm:max-w-2xl flex flex-col max-h-[calc(100vh-2rem)]" showCloseButton>
+      <DialogContent className="sm:max-w-2xl flex flex-col max-h-[calc(100vh-2rem)] overflow-hidden" showCloseButton>
         <DialogHeader>
           <DialogTitle>{plan ? "Edit Plan" : "New Plan"}</DialogTitle>
         </DialogHeader>
