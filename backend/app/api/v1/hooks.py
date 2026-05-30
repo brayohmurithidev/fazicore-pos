@@ -9,19 +9,86 @@ Registered paths (use these in Daraja portal):
 """
 
 import json
+import hashlib
+import hmac
+import logging
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Header, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.billing import renew_subscription
+from app.core.config import settings
 from app.core.database import get_session
 from app.models.mpesa import MpesaTransaction, MpesaTransactionStatus, MpesaTransactionType
 from app.models.organization import Organization, OrgStatus, SubscriptionPlan
 from app.models.subscription import BillingInterval, Plan, Subscription, SubscriptionStatus
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/hooks", tags=["hooks"])
+
+
+# ── Inbound from central billing system (Fazilabs Invoicing) ───────────────────
+# The billing system POSTs here when a subscription invoice is paid or goes
+# overdue. We flip org + subscription status accordingly. Body is HMAC-signed
+# with BILLING_WEBHOOK_SECRET (header: X-Webhook-Signature: sha256=<hex>).
+
+@router.post("/billing", include_in_schema=False)
+async def billing_status_hook(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    x_webhook_signature: str | None = Header(None),
+):
+    raw = await request.body()
+
+    secret = getattr(settings, "BILLING_WEBHOOK_SECRET", "")
+    if secret:
+        expected = "sha256=" + hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
+        if not x_webhook_signature or not hmac.compare_digest(expected, x_webhook_signature):
+            logger.warning("Billing webhook: bad signature")
+            return {"status": "rejected", "reason": "invalid signature"}
+
+    import json
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return {"status": "ignored", "reason": "bad json"}
+
+    event = payload.get("event")
+    external_ref = (payload.get("external_ref") or "")
+    # external_ref is "pos:<org_slug>"
+    org_slug = external_ref.split(":", 1)[1] if ":" in external_ref else external_ref
+    if not org_slug:
+        return {"status": "ignored", "reason": "no external_ref"}
+
+    org = await session.scalar(select(Organization).where(Organization.slug == org_slug))
+    if not org:
+        logger.warning("Billing webhook: no org for slug %s", org_slug)
+        return {"status": "ignored", "reason": "unknown org"}
+
+    sub = await session.scalar(
+        select(Subscription).where(Subscription.organization_id == org.id).limit(1)
+    )
+
+    if event == "subscription.activated":
+        org.status = OrgStatus.ACTIVE
+        if sub:
+            sub.status = SubscriptionStatus.ACTIVE
+        logger.info("Billing webhook: activated org %s", org_slug)
+    elif event == "subscription.past_due":
+        org.status = OrgStatus.SUSPENDED
+        if sub:
+            sub.status = SubscriptionStatus.PAST_DUE
+        logger.info("Billing webhook: suspended org %s (past due)", org_slug)
+    else:
+        return {"status": "ignored", "reason": f"unhandled event {event}"}
+
+    session.add(org)
+    if sub:
+        session.add(sub)
+    await session.commit()
+    return {"status": "ok"}
 
 
 @router.post("/{org_slug}/stk", include_in_schema=False)
