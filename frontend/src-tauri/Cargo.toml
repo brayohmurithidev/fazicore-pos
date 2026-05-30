@@ -1,6 +1,6 @@
 [package]
 name = "fazipos"
-version = "1.1.0"
+version = "1.2.0"
 edition = "2021"
 
 [lib]
@@ -35,3 +35,10 @@ tower-http = { version = "0.5", features = ["cors"] }
 sha2 = "0.10"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+
+# Windows raw printing via the print spooler (winspool) for USB thermal printers
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Printing",
+] }

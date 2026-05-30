@@ -24,31 +24,109 @@ pub struct ImageDirState(pub PathBuf);
 
 #[tauri::command]
 fn list_system_printers() -> Vec<String> {
-    let stdout = std::process::Command::new("lpstat")
-        .args(["-a"])
-        .output()
-        .map(|o| o.stdout)
-        .unwrap_or_default();
-    String::from_utf8_lossy(&stdout)
-        .lines()
-        .filter_map(|l| l.split_whitespace().next().map(str::to_string))
-        .collect()
+    #[cfg(target_os = "windows")]
+    {
+        // Get-Printer is reliable and needs no FFI for enumeration.
+        let output = std::process::Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-Command",
+                "Get-Printer | Select-Object -ExpandProperty Name",
+            ])
+            .output();
+        return match output {
+            Ok(o) => String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .map(|l| l.trim().to_string())
+                .filter(|l| !l.is_empty())
+                .collect(),
+            Err(_) => Vec::new(),
+        };
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let stdout = std::process::Command::new("lpstat")
+            .args(["-a"])
+            .output()
+            .map(|o| o.stdout)
+            .unwrap_or_default();
+        String::from_utf8_lossy(&stdout)
+            .lines()
+            .filter_map(|l| l.split_whitespace().next().map(str::to_string))
+            .collect()
+    }
 }
 
 #[tauri::command]
 fn print_raw_cups(printer: String, data: Vec<u8>) -> Result<(), String> {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0);
-    let tmp = format!("/tmp/fazi_receipt_{millis}.bin");
-    std::fs::write(&tmp, &data).map_err(|e| e.to_string())?;
-    let status = std::process::Command::new("lp")
-        .args(["-d", &printer, "-o", "raw", &tmp])
-        .status()
-        .map_err(|e| e.to_string())?;
-    let _ = std::fs::remove_file(&tmp);
-    if status.success() { Ok(()) } else { Err(format!("lp failed: {status}")) }
+    #[cfg(target_os = "windows")]
+    {
+        print_raw_windows(&printer, &data)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let millis = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        let tmp = std::env::temp_dir().join(format!("fazi_receipt_{millis}.bin"));
+        std::fs::write(&tmp, &data).map_err(|e| e.to_string())?;
+        let status = std::process::Command::new("lp")
+            .args(["-d", &printer, "-o", "raw"])
+            .arg(&tmp)
+            .status()
+            .map_err(|e| e.to_string())?;
+        let _ = std::fs::remove_file(&tmp);
+        if status.success() { Ok(()) } else { Err(format!("lp failed: {status}")) }
+    }
+}
+
+/// Send raw ESC/POS bytes to a Windows printer via the print spooler
+/// (OpenPrinter → StartDocPrinter "RAW" → WritePrinter → EndDoc).
+#[cfg(target_os = "windows")]
+fn print_raw_windows(printer: &str, data: &[u8]) -> Result<(), String> {
+    use windows::core::{PCWSTR, PWSTR};
+    use windows::Win32::Graphics::Printing::{
+        ClosePrinter, EndDocPrinter, EndPagePrinter, OpenPrinterW, StartDocPrinterW,
+        StartPagePrinter, WritePrinter, DOC_INFO_1W,
+    };
+    use windows::Win32::Foundation::HANDLE;
+
+    let mut printer_w: Vec<u16> = printer.encode_utf16().chain(std::iter::once(0)).collect();
+    let mut doc_w: Vec<u16> = "FaziPOS Receipt".encode_utf16().chain(std::iter::once(0)).collect();
+    let mut raw_w: Vec<u16> = "RAW".encode_utf16().chain(std::iter::once(0)).collect();
+
+    unsafe {
+        let mut handle = HANDLE::default();
+        OpenPrinterW(PCWSTR(printer_w.as_ptr()), &mut handle, None)
+            .map_err(|e| format!("OpenPrinter failed: {e}"))?;
+
+        let doc_info = DOC_INFO_1W {
+            pDocName: PWSTR(doc_w.as_mut_ptr()),
+            pOutputFile: PWSTR::null(),
+            pDatatype: PWSTR(raw_w.as_mut_ptr()),
+        };
+
+        let job = StartDocPrinterW(handle, 1, &doc_info);
+        if job == 0 {
+            let _ = ClosePrinter(handle);
+            return Err("StartDocPrinter failed".into());
+        }
+
+        let result = (|| -> Result<(), String> {
+            StartPagePrinter(handle).ok().ok_or("StartPagePrinter failed")?;
+            let mut written: u32 = 0;
+            WritePrinter(handle, data.as_ptr() as *const _, data.len() as u32, &mut written)
+                .ok()
+                .ok_or("WritePrinter failed")?;
+            EndPagePrinter(handle).ok().ok_or("EndPagePrinter failed")?;
+            Ok(())
+        })();
+
+        let _ = EndDocPrinter(handle);
+        let _ = ClosePrinter(handle);
+        result
+    }
 }
 
 #[tauri::command]
