@@ -113,8 +113,10 @@ async def update_purchase_order(
             setattr(po, field, value)
     session.add(po)
     await session.flush()
-    await session.refresh(po)
-    return PurchaseOrderOut.model_validate(po)
+    # Re-fetch with items eager-loaded (refresh() would expire the relationship
+    # and serializing PurchaseOrderOut.items would then MissingGreenlet).
+    full = await _get_po_with_items(session, po_id)
+    return PurchaseOrderOut.model_validate(full)
 
 
 @router.post("/{po_id}/status", response_model=PurchaseOrderOut)
@@ -193,8 +195,10 @@ async def update_po_status(
                     product.cost = round(wac, 4)
                     session.add(product)
 
-    await session.refresh(po)
-    return PurchaseOrderOut.model_validate(po)
+    await session.flush()
+    # Re-fetch with items eager-loaded (refresh() would expire the relationship).
+    full = await _get_po_with_items(session, po_id)
+    return PurchaseOrderOut.model_validate(full)
 
 
 @router.delete("/{po_id}", status_code=status.HTTP_204_NO_CONTENT)

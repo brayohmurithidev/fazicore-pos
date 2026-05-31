@@ -32,7 +32,7 @@ async def create_branch(
     current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
 ) -> BranchOut:
     org = await session.get(Organization, current_user.org_id)
-    if org:
+    if org and org.max_branches is not None:
         branch_count = await session.scalar(
             select(func.count(Branch.id)).where(
                 Branch.org_id == current_user.org_id, Branch.is_active == True
