@@ -24,7 +24,16 @@ class StockTransfer(Base, TimestampMixin):
     from_branch_id: Mapped[int] = mapped_column(ForeignKey("branches.id"), nullable=False)
     to_branch_id: Mapped[int] = mapped_column(ForeignKey("branches.id"), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
-    status: Mapped[TransferStatus] = mapped_column(Enum(TransferStatus), default=TransferStatus.INITIATED, nullable=False)
+    # The table column is a plain VARCHAR (see the phase2 migration), not a
+    # native Postgres enum. native_enum=False keeps SQLAlchemy from emitting a
+    # ::transferstatus cast (the type was never created), and values_callable
+    # stores/reads the lowercase .value ('initiated') to match the column's
+    # server_default and the frontend's expected values.
+    status: Mapped[TransferStatus] = mapped_column(
+        Enum(TransferStatus, native_enum=False, values_callable=lambda obj: [e.value for e in obj]),
+        default=TransferStatus.INITIATED,
+        nullable=False,
+    )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     initiated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     confirmed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
