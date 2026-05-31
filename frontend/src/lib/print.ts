@@ -196,8 +196,10 @@ async function _printReceipt(sale: SaleInfo, settings: Settings) {
 </body>
 </html>`
 
-  // A4 paper → a proper letterhead invoice; thermal paper → the receipt above.
-  const html = isA4
+  // Auto: a credit sale is an INVOICE → A4 letterhead layout; everything else is
+  // a receipt → thermal. (An explicit A4 paper setting still forces A4 receipts.)
+  const useInvoiceLayout = isCredit || isA4
+  const html = useInvoiceLayout
     ? buildA4Invoice(sale, settings, { dateStr, timeStr, cur, fmt, vatTotal, showVat, discountAmt, isCredit, isCash, isMpesa, isSplit })
     : receiptHtml
 
