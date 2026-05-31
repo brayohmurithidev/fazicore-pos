@@ -20,6 +20,13 @@ pub struct BranchServerState(pub Mutex<Option<branch_server::RunningServer>>);
 
 pub struct ImageDirState(pub PathBuf);
 
+// On Windows, spawning a console program (powershell/cmd) pops a visible black
+// window. CREATE_NO_WINDOW suppresses it so detection/printing runs silently.
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 // ── Printing commands ─────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -28,6 +35,7 @@ fn list_system_printers() -> Vec<String> {
     {
         // Get-Printer is reliable and needs no FFI for enumeration.
         let output = std::process::Command::new("powershell")
+            .creation_flags(CREATE_NO_WINDOW)
             .args([
                 "-NoProfile",
                 "-Command",
@@ -152,6 +160,7 @@ fn open_html_preview(html: String) -> Result<(), String> {
     std::process::Command::new("open").arg(&path).spawn().map_err(|e| e.to_string())?;
     #[cfg(target_os = "windows")]
     std::process::Command::new("cmd")
+        .creation_flags(CREATE_NO_WINDOW)
         .args(["/c", "start", "", &path.to_string_lossy().to_string()])
         .spawn()
         .map_err(|e| e.to_string())?;
