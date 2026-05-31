@@ -2406,16 +2406,31 @@ function NewTransferModal({ open, onClose, products, branches }: {
   const [qty, setQty] = useState('')
   const [notes, setNotes] = useState('')
   const [done, setDone] = useState(false)
+  const [error, setError] = useState('')
   const transfer = useInitiateTransfer()
 
   const selectedProduct = products.find((p) => p.id === Number(productId))
-  const canTransfer = fromBranch && toBranch && fromBranch !== toBranch && productId && parseInt(qty) > 0
+  // Stock actually held at the chosen source branch (not the all-branch total)
+  const { data: sourceLocations = [] } = useProductInventory(Number(productId) || 0)
+  const sourceQty = fromBranch
+    ? (sourceLocations.find((l: ApiInventoryItem) => String(l.branch_id) === fromBranch)?.quantity ?? 0)
+    : (selectedProduct?.stock_quantity ?? 0)
+  const canTransfer = fromBranch && toBranch && fromBranch !== toBranch && productId
+    && parseInt(qty) > 0 && parseInt(qty) <= sourceQty
 
   const handleTransfer = async () => {
-    await transfer.mutateAsync({ from_branch_id: Number(fromBranch), to_branch_id: Number(toBranch), product_id: Number(productId), quantity: parseInt(qty), notes: notes || undefined })
-    setDone(true)
+    setError('')
+    try {
+      await transfer.mutateAsync({ from_branch_id: Number(fromBranch), to_branch_id: Number(toBranch), product_id: Number(productId), quantity: parseInt(qty), notes: notes || undefined })
+      setDone(true)
+    } catch (err: unknown) {
+      setError(
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
+        (err instanceof Error ? err.message : 'Could not initiate transfer. Please try again.')
+      )
+    }
   }
-  const reset = () => { setFromBranch(''); setToBranch(''); setProductId(''); setQty(''); setNotes(''); setDone(false); onClose() }
+  const reset = () => { setFromBranch(''); setToBranch(''); setProductId(''); setQty(''); setNotes(''); setDone(false); setError(''); onClose() }
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && reset()}>
@@ -2458,19 +2473,32 @@ function NewTransferModal({ open, onClose, products, branches }: {
             <div>
               <Label className="mb-1.5 block text-xs text-gray-500">Product</Label>
               <Select value={productId} onValueChange={(v) => setProductId(v ?? '')}>
-                <SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger>
+                <SelectTrigger>
+                  <span className={productId ? undefined : 'text-muted-foreground'}>
+                    {productId ? (selectedProduct?.name ?? 'Select product') : 'Select product'}
+                  </span>
+                </SelectTrigger>
                 <SelectContent>{products.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.name} ({p.stock_quantity} {p.unit})</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div>
               <Label className="mb-1.5 block text-xs text-gray-500">Quantity</Label>
-              <Input type="number" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="0" min={1} max={selectedProduct?.stock_quantity} />
-              {selectedProduct && <p className="text-xs text-gray-400 mt-1">Available: {selectedProduct.stock_quantity} {selectedProduct.unit}</p>}
+              <Input type="number" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="0" min={1} max={sourceQty} />
+              {selectedProduct && (
+                <p className={`text-xs mt-1 ${fromBranch && sourceQty === 0 ? 'text-red-500' : 'text-gray-400'}`}>
+                  {fromBranch
+                    ? `Available at source: ${sourceQty} ${selectedProduct.unit}`
+                    : `Select a source branch — total ${selectedProduct.stock_quantity} ${selectedProduct.unit} across branches`}
+                </p>
+              )}
             </div>
             <div>
               <Label className="mb-1.5 block text-xs text-gray-500">Notes</Label>
               <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Reason for transfer (optional)" />
             </div>
+            {error && (
+              <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
+            )}
             <div className="flex gap-2 pt-1">
               <Button variant="outline" className="flex-1" onClick={reset}>Cancel</Button>
               <Button className="flex-1" disabled={!canTransfer || transfer.isPending} onClick={handleTransfer}>
