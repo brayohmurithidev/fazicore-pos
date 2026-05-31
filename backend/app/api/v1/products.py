@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
 from app.core.deps import get_current_active_user
-from app.models.inventory import TransactionType
+from app.models.inventory import Inventory, TransactionType
 from app.models.organization import Organization
 from app.models.product import Product, ProductUnit
 from app.models.user import User, UserRole
@@ -190,6 +190,17 @@ async def update_product(
     if not product or product.org_id != current_user.org_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
     updated = await repo.update(product, data)
+
+    # Keep the per-row threshold (internal duplicate) in sync with the reorder
+    # level so the per-location stock display matches the alert logic.
+    if data.min_stock is not None:
+        await session.execute(
+            update(Inventory)
+            .where(Inventory.product_id == product_id)
+            .values(low_stock_threshold=data.min_stock)
+        )
+        await session.flush()
+
     return ProductOut.model_validate(updated)
 
 

@@ -37,7 +37,9 @@ class InventoryRepository(BaseRepository[Inventory, InventoryUpdate, InventoryUp
                 Product.org_id == org_id,
                 Product.is_active == True,
                 Product.track_inventory == True,
-                Inventory.quantity <= Inventory.low_stock_threshold,
+                # min_stock is the user-facing reorder level (single source of
+                # truth); low_stock_threshold is an internal duplicate that lags.
+                Inventory.quantity <= Product.min_stock,
             )
         )
         if branch_id is not None:

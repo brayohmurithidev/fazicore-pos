@@ -608,7 +608,10 @@ async def get_notifications(
 
     for inv, prod in rows:
         qty = inv.quantity or 0
-        threshold = inv.low_stock_threshold or prod.min_stock or 0
+        # Product.min_stock is the user-facing "minimum reorder" field and is the
+        # single source of truth. (Inventory.low_stock_threshold is an internal
+        # duplicate that isn't editable in the UI and can lag behind.)
+        threshold = prod.min_stock if prod.min_stock is not None else 0
         branch_name = inv.branch.name if inv.branch else None
         if qty <= 0:
             out_of_stock.append(NotificationItem(
