@@ -1,6 +1,6 @@
 {
   "productName": "FaziPOS",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "identifier": "com.fazicore.pos",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -57,6 +57,11 @@
     "copyright": "© 2025 Fazilabs",
     "category": "Business",
     "shortDescription": "Point of Sale system by Fazilabs",
-    "longDescription": "FaziPOS is a modern, fast point-of-sale system for retail businesses."
+    "longDescription": "FaziPOS is a modern, fast point-of-sale system for retail businesses.",
+    "windows": {
+      "webviewInstallMode": {
+        "type": "offlineInstaller"
+      }
+    }
   }
 }
