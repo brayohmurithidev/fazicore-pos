@@ -189,19 +189,42 @@ async def update_product(
     product = await repo.get(product_id)
     if not product or product.org_id != current_user.org_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
-    updated = await repo.update(product, data)
+    await repo.update(product, data)
 
     # Keep the per-row threshold (internal duplicate) in sync with the reorder
     # level so the per-location stock display matches the alert logic.
+    # synchronize_session=False: we re-fetch below, so no need to sync ORM state.
     if data.min_stock is not None:
         await session.execute(
             update(Inventory)
             .where(Inventory.product_id == product_id)
             .values(low_stock_threshold=data.min_stock)
+            .execution_options(synchronize_session=False)
         )
         await session.flush()
 
-    return ProductOut.model_validate(updated)
+    # Reload with relationships eager-loaded so ProductOut can serialize without
+    # tripping MissingGreenlet (units/category/inventory lazy-load otherwise).
+    from sqlalchemy.orm import selectinload
+    result = await session.execute(
+        select(Product)
+        .options(
+            selectinload(Product.units),
+            selectinload(Product.category),
+            selectinload(Product.inventory),
+        )
+        .where(Product.id == product_id)
+    )
+    fresh = result.scalar_one()
+    out = ProductOut.model_validate(fresh)
+    if fresh.inventory:
+        out.stock_quantity = sum(
+            inv.quantity for inv in fresh.inventory
+            if current_user.branch_id is None or inv.branch_id == current_user.branch_id
+        )
+    if fresh.category:
+        out.category_name = fresh.category.name
+    return out
 
 
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
