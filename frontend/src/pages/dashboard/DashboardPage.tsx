@@ -54,7 +54,7 @@ function MiniStat({ label, value, sub, icon: Icon, tint }: {
   tint: { bg: string; fg: string }
 }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3.5 bg-white rounded-xl ring-1 ring-gray-200/70">
+    <div className="flex items-center gap-3 px-4 py-3.5 bg-white rounded-xl ring-1 ring-gray-200/70 h-full">
       <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${tint.bg}`}>
         <Icon size={18} className={tint.fg} />
       </div>
@@ -153,6 +153,9 @@ export function DashboardPage() {
   const prevRevenue = revenueSeries[5]
   const trendPct = prevRevenue > 0 ? ((todayRevenue - prevRevenue) / prevRevenue) * 100 : null
   const trendUp = (trendPct ?? 0) >= 0
+  const hasWeekData = revenueSeries.some((v) => v > 0)
+  const peakRevenue = Math.max(...revenueSeries)
+  const avgSale = todayTxCount > 0 ? todayRevenue / todayTxCount : 0
 
   const payBreak = dashData?.payment_breakdown
     ? Object.entries(dashData.payment_breakdown).map(([m, v]) => ({ m, ...v })).filter((p) => p.count > 0)
@@ -181,7 +184,7 @@ export function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4 mb-5 sm:mb-6">
         {/* Revenue hero */}
         <Card className="lg:col-span-2 ring-amber-200/60 bg-gradient-to-br from-white to-amber-50/40">
-          <CardContent className="p-5 sm:p-6">
+          <CardContent className="p-5 sm:p-6 flex flex-col h-full">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <div className="text-xs text-amber-700/80 font-semibold uppercase tracking-wider">Today's Revenue</div>
@@ -203,17 +206,33 @@ export function DashboardPage() {
                   <span className="text-gray-400"> · vs {fmtKES(prevRevenue)} yesterday</span>
                 </div>
               </div>
+              {/* In-hero secondary stat — earns the card's width on slow days */}
+              <div className="text-right flex-shrink-0 pl-2">
+                <div className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide">Avg sale</div>
+                <div className="text-lg sm:text-xl font-bold text-gray-700 mt-1 leading-none">{fmtKES(avgSale)}</div>
+              </div>
             </div>
-            {/* 7-day trend */}
-            <div className="mt-4">
-              <MiniAreaChart data={revenueSeries} className="w-full h-14" />
-              <div className="text-[11px] text-gray-400 mt-1.5">Last 7 days</div>
+            {/* 7-day trend — pinned to the bottom so the card never feels empty */}
+            <div className="mt-auto pt-5">
+              {hasWeekData ? (
+                <>
+                  <MiniAreaChart data={revenueSeries} className="w-full h-16" />
+                  <div className="flex justify-between text-[11px] text-gray-400 mt-1.5">
+                    <span>Last 7 days</span>
+                    <span>Peak {fmtKES(peakRevenue)}</span>
+                  </div>
+                </>
+              ) : (
+                <div className="h-16 rounded-lg border border-dashed border-amber-200 flex items-center justify-center text-[12px] text-gray-400">
+                  No sales in the last 7 days
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
 
         {/* Secondary metrics — slim, tinted, clearly subordinate */}
-        <div className="grid grid-cols-1 gap-3">
+        <div className="grid grid-rows-3 gap-3">
           <MiniStat label="Items Sold" value={itemsSold} sub="today" icon={Package}
             tint={{ bg: 'bg-blue-50', fg: 'text-blue-600' }} />
           <MiniStat label="Low Stock" value={lowStockCount} sub={lowStockCount > 0 ? 'attention' : 'all good'} icon={AlertTriangle}
