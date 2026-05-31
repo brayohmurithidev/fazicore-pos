@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Phone, User, CheckCircle2, XCircle, RefreshCw, Wifi } from 'lucide-react'
+import { Phone, CheckCircle2, XCircle, RefreshCw, Wifi, Search } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,7 +9,7 @@ import { useFeatureFlags } from '@/hooks/useFeature'
 import { fmtKES } from '@/lib/data'
 import {
   useInitiateStkPush, useStkStatus, useMpesaCredentials,
-  useMpesaTransactions, type MpesaTransactionItem,
+  useMpesaTransactions, useCustomers, type MpesaTransactionItem,
 } from '@/lib/queries'
 import type { PaymentMethod, Settings } from '@/types'
 
@@ -265,9 +265,14 @@ export function PaymentModal({ open, onClose, total, onComplete, settings }: Pro
   const [mpesaMode, setMpesaMode]     = useState<'stk' | 'manual'>('stk')
   const [creditName, setCreditName]   = useState('')
   const [creditPhone, setCreditPhone] = useState('')
+  const [custOpen, setCustOpen]       = useState(false)
   const [stkOpen, setStkOpen]         = useState(false)
   const [showPicker, setShowPicker]   = useState(false)
   const flags = useFeatureFlags()
+  // Existing-customer search for credit sales (matches by name/phone)
+  const { data: custMatches = [] } = useCustomers(
+    method === 'credit' && creditName.trim().length > 0 ? creditName.trim() : undefined
+  )
   const { data: darajaConfigs = [] }   = useMpesaCredentials()
   const darajaConfig = darajaConfigs.find((c) => c.is_live && c.is_active) ?? null
   const hasDaraja = !!darajaConfig
@@ -279,7 +284,7 @@ export function PaymentModal({ open, onClose, total, onComplete, settings }: Pro
   useEffect(() => {
     if (open) {
       setCashStr(''); setMpesaCashStr(''); setMpesaRef('')
-      setCreditName(''); setCreditPhone('')
+      setCreditName(''); setCreditPhone(''); setCustOpen(false)
       setStkOpen(false); setShowPicker(false)
       setMethod('cash')
       setMpesaMode(hasStk ? 'stk' : 'manual')
@@ -536,9 +541,46 @@ export function PaymentModal({ open, onClose, total, onComplete, settings }: Pro
                   <div>
                     <Label className="mb-1.5 block">Customer Name *</Label>
                     <div className="relative">
-                      <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                      <Input className="pl-9" placeholder="e.g. John Kamau" value={creditName} onChange={(e) => setCreditName(e.target.value)} />
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <Input
+                        className="pl-9"
+                        placeholder="Search existing or type a new name…"
+                        value={creditName}
+                        onChange={(e) => { setCreditName(e.target.value); setCustOpen(true) }}
+                        onFocus={() => setCustOpen(true)}
+                        onBlur={() => setTimeout(() => setCustOpen(false), 150)}
+                        autoComplete="off"
+                      />
+                      {/* Existing-customer matches */}
+                      {custOpen && creditName.trim().length > 0 && custMatches.length > 0 && (
+                        <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+                          {custMatches.slice(0, 6).map((c) => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onMouseDown={(e) => {
+                                e.preventDefault()
+                                setCreditName(c.name)
+                                setCreditPhone(c.phone ?? '')
+                                setCustOpen(false)
+                              }}
+                              className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-gray-50 border-b border-gray-50 last:border-0"
+                            >
+                              <div className="min-w-0">
+                                <div className="text-sm font-medium text-gray-900 truncate">{c.name}</div>
+                                <div className="text-[11px] text-gray-400">{c.phone ?? 'No phone'}</div>
+                              </div>
+                              {c.credit_balance > 0 && (
+                                <span className="text-[11px] font-semibold text-amber-600 whitespace-nowrap">
+                                  owes {fmtKES(c.credit_balance)}
+                                </span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
+                    <p className="text-[11px] text-gray-400 mt-1">Pick a saved customer or type a new one.</p>
                   </div>
                   <div>
                     <Label className="mb-1.5 block">Phone Number *</Label>
