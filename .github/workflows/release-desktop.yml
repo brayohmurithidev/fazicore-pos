@@ -96,16 +96,18 @@ jobs:
       # of the (possibly ancient) WebView2 on the client machine. tauri.conf.json
       # points bundle.windows.webviewInstallMode at ./webview2-runtime.
       #
-      # Set repo variable WEBVIEW2_FIXED_URL to the official Microsoft
-      # "Fixed Version" x64 .cab download link:
+      # Set WEBVIEW2_FIXED_URL (repo Variable or Secret — either works) to the
+      # official Microsoft "Fixed Version" x64 .cab download link:
       #   https://developer.microsoft.com/microsoft-edge/webview2/  → Fixed Version → x64
       - name: Fetch fixed WebView2 runtime
         if: runner.os == 'Windows'
         shell: pwsh
+        env:
+          WEBVIEW2_FIXED_URL: ${{ secrets.WEBVIEW2_FIXED_URL || vars.WEBVIEW2_FIXED_URL }}
         run: |
-          $url = "${{ vars.WEBVIEW2_FIXED_URL }}"
+          $url = $env:WEBVIEW2_FIXED_URL
           if ([string]::IsNullOrWhiteSpace($url)) {
-            Write-Error "Repository variable WEBVIEW2_FIXED_URL is not set. Add the Microsoft WebView2 Fixed Version x64 .cab link under Settings → Secrets and variables → Actions → Variables."
+            Write-Error "WEBVIEW2_FIXED_URL is not set. Add the Microsoft WebView2 Fixed Version x64 .cab link under Settings -> Secrets and variables -> Actions (Variables or Secrets tab)."
             exit 1
           }
           $dest = "frontend/src-tauri/webview2-runtime"

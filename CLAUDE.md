@@ -39,7 +39,7 @@ pnpm tauri:dev
 
 - `TAURI_SIGNING_PRIVATE_KEY` + `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — **required** (updater pubkey is baked into `tauri.conf.json`; build fails without the private key)
 - `APPLE_*` — optional; without them macOS builds are unsigned (Gatekeeper warning). Windows is unsigned (SmartScreen warning).
-- `WEBVIEW2_FIXED_URL` (repository **variable**, not secret) — **required for Windows.** The official Microsoft WebView2 *Fixed Version* x64 `.cab` link (from https://developer.microsoft.com/microsoft-edge/webview2/ → Fixed Version → x64). CI downloads + extracts it into `src-tauri/webview2-runtime/`.
+- `WEBVIEW2_FIXED_URL` (repository **variable or secret** — CI reads either) — **required for Windows.** The official Microsoft WebView2 *Fixed Version* x64 `.cab` link (from https://developer.microsoft.com/microsoft-edge/webview2/ → Fixed Version → x64). CI downloads + extracts it into `src-tauri/webview2-runtime/`.
 
 ## Windows WebView2 (fixed runtime)
 
