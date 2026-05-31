@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { useSearchParams } from 'react-router'
 import { downloadTextFile, buildCSV, downloadXlsx, openPrintHtml } from '@/lib/download'
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
@@ -1231,7 +1232,14 @@ function ProductsTab({ branchId }: { branchId?: number }) {
   const canManage = role === 'admin' || role === 'manager'
     || (role === 'cashier' && permsData?.permissions?.cashier?.manage_inventory === true)
     || (role === 'stock' && permsData?.permissions?.stock?.manage_inventory !== false)
-  const [search, setSearch] = useState('')
+  const [searchParams] = useSearchParams()
+  const [search, setSearch] = useState(searchParams.get('q') ?? '')
+  // Keep the search box in sync when the global topbar search navigates here
+  // with a new ?q= while this page is already mounted.
+  useEffect(() => {
+    const q = searchParams.get('q')
+    if (q !== null) setSearch(q)
+  }, [searchParams])
   const [catFilter, setCatFilter] = useState('all')
   const [stockFilter, setStockFilter] = useState<StockFilter>('all')
   const [addOpen, setAddOpen] = useState(false)

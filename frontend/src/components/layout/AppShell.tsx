@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router'
 import {
   LayoutDashboard, Monitor, Package, Receipt, Building2, Settings,
-  ChevronLeft, ChevronRight, LogOut, BarChart3, UserCheck, Menu, X, Clock, TrendingDown, UserCircle,
+  ChevronLeft, ChevronRight, LogOut, BarChart3, UserCheck, Menu, X, Clock, TrendingDown, UserCircle, Search, Plus,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Toaster } from '@/components/ui/Toaster'
@@ -56,6 +56,7 @@ export function AppShell() {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [topSearch, setTopSearch] = useState('')
   const profileCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const profileRef = useRef<HTMLDivElement>(null)
 
@@ -99,6 +100,7 @@ export function AppShell() {
   if (!user) return null
 
   const isAdmin = user.role === 'admin'
+  const canSell = ['admin', 'manager', 'cashier'].includes(user.role)
   const isMultiBranch = liveBranches.length > 1
   const userBranchId = user.branch ? Number(user.branch) : null
 
@@ -125,6 +127,13 @@ export function AppShell() {
     logout()
     queryClient.clear()
     navigate('/login')
+  }
+
+  const submitSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    const q = topSearch.trim()
+    if (!q) return
+    navigate(`/inventory?q=${encodeURIComponent(q)}`)
   }
 
   const handleClockOut = () => {
@@ -220,18 +229,22 @@ export function AppShell() {
                     'relative w-full flex items-center gap-3 px-2.5 py-2.5 rounded-xl mb-1 text-[14px] font-semibold transition-colors',
                     collapsed ? 'justify-center' : '',
                     isActive
-                      ? 'bg-amber-50 text-gray-900'
+                      ? 'bg-amber-50 text-amber-900'
                       : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
                   )
                 }
               >
                 {({ isActive }: { isActive: boolean }) => (
                   <>
+                    {/* Left accent bar — confident active marker */}
+                    {isActive && !collapsed && (
+                      <span className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 rounded-r-full bg-amber-500" />
+                    )}
                     <div className={cn(
                       'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors',
-                      isActive ? 'bg-amber-100' : 'bg-gray-100'
+                      isActive ? 'bg-amber-500 shadow-sm shadow-amber-500/30' : 'bg-gray-100'
                     )}>
-                      <Icon size={20} className="text-gray-900" />
+                      <Icon size={20} className={isActive ? 'text-white' : 'text-gray-500'} />
                     </div>
                     {!collapsed && <span className="flex-1 whitespace-nowrap">{item.label}</span>}
                     {showBadge && !collapsed && (
@@ -332,7 +345,31 @@ export function AppShell() {
           >
             <Menu size={17} />
           </button>
-          <div className="flex-1" />
+
+          {/* Global product search */}
+          <form onSubmit={submitSearch} className="hidden md:flex items-center relative flex-1 max-w-sm">
+            <Search size={15} className="absolute left-3 text-gray-400 pointer-events-none" />
+            <input
+              value={topSearch}
+              onChange={(e) => setTopSearch(e.target.value)}
+              placeholder="Search products…"
+              className="w-full h-8 pl-9 pr-3 rounded-lg bg-gray-100 text-[13px] text-gray-700 placeholder:text-gray-400 outline-none focus:bg-white focus:ring-2 focus:ring-amber-200 transition-all"
+            />
+          </form>
+
+          <div className="flex-1 md:flex-none" />
+
+          {/* New Sale — primary action, always within reach */}
+          {canSell && (
+            <button
+              onClick={() => navigate('/pos')}
+              className="hidden sm:inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[13px] font-semibold transition-colors"
+            >
+              <Plus size={15} />
+              New Sale
+            </button>
+          )}
+
           {isClockedIn && clockDisplay && (
             <div className="hidden sm:flex items-center gap-1.5 text-[12px] text-gray-400">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
