@@ -491,7 +491,7 @@ function ProductsTab({ period }: { period: Period }) {
       <div className="flex items-center gap-3 no-print">
         <span className="text-sm text-gray-500">Sort by:</span>
         <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
-          <SelectTrigger className="w-36 h-8"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-36 h-8"><SelectValue>{{ revenue: 'Revenue', profit: 'Profit', qty: 'Qty Sold' }[sortBy]}</SelectValue></SelectTrigger>
           <SelectContent>
             <SelectItem value="revenue">Revenue</SelectItem>
             <SelectItem value="profit">Profit</SelectItem>
@@ -806,7 +806,7 @@ export function ReportsPage() {
         <div className="flex items-center gap-3 no-print">
           {showPeriod && (
             <Select value={period} onValueChange={(v) => setPeriod(v as Period)}>
-              <SelectTrigger className="w-36 h-8"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-36 h-8"><SelectValue>{{ day: 'Today', week: 'Last 7 days', month: 'Last 30 days' }[period]}</SelectValue></SelectTrigger>
               <SelectContent>
                 <SelectItem value="day">Today</SelectItem>
                 <SelectItem value="week">Last 7 days</SelectItem>

@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { PaymentModal } from './PaymentModal'
 import { ReceiptModal } from './ReceiptModal'
 import { ManagerApprovalModal } from '@/components/shared/ManagerApprovalModal'
@@ -868,7 +868,9 @@ export function POSPage() {
               onValueChange={(v) => setAdminBranchId(v ? Number(v) : undefined)}
             >
               <SelectTrigger className={`h-7 text-xs w-44 bg-white ${adminBranchId ? 'border-amber-200' : 'border-red-300'}`}>
-                <SelectValue placeholder="Pick a branch…" />
+                <span className={adminBranchId ? undefined : 'text-muted-foreground'}>
+                  {adminBranchId ? (apiBranches.find((b) => b.id === adminBranchId)?.name ?? 'Pick a branch…') : 'Pick a branch…'}
+                </span>
               </SelectTrigger>
               <SelectContent>
                 {apiBranches.map((b) => (

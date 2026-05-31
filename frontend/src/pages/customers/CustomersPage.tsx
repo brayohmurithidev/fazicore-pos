@@ -145,7 +145,7 @@ function RecordPaymentModal({ open, onClose, customer, preselectedInvoice }: {
           <div>
             <Label className="text-xs text-gray-500 mb-1.5 block">Payment Method</Label>
             <Select value={method} onValueChange={(v) => setMethod(v ?? 'cash')}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger><SelectValue>{{ cash: 'Cash', mpesa: 'M-Pesa', other: 'Other' }[method] ?? 'Cash'}</SelectValue></SelectTrigger>
               <SelectContent>
                 <SelectItem value="cash">Cash</SelectItem>
                 <SelectItem value="mpesa">M-Pesa</SelectItem>

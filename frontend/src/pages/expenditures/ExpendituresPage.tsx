@@ -135,7 +135,11 @@ function ExpenditureModal({
             <div>
               <Label className="text-xs text-gray-500 mb-1.5 block">Branch</Label>
               <Select value={form.branch_id} onValueChange={(v) => set('branch_id', v ?? '')}>
-                <SelectTrigger><SelectValue placeholder="All branches" /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="All branches">
+                    {form.branch_id ? (branches.find((b) => String(b.id) === form.branch_id)?.name ?? 'All branches') : 'All branches'}
+                  </SelectValue>
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="">All branches</SelectItem>
                   {branches.map((b) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}

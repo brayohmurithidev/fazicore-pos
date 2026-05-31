@@ -553,7 +553,7 @@ function ProductFormModal({ open, onClose, initial, categories, allProducts, isP
           <div>
             <Label className="mb-1.5 block text-xs text-gray-500">VAT Rate</Label>
             <Select value={form.vat_rate} onValueChange={(v) => set('vat_rate', v ?? '')}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger><SelectValue>{{ '0': '0% — Zero-rated', '0.16': '16% — Standard' }[form.vat_rate] ?? `${form.vat_rate}`}</SelectValue></SelectTrigger>
               <SelectContent>
                 <SelectItem value="0">0% — Zero-rated</SelectItem>
                 <SelectItem value="0.16">16% — Standard</SelectItem>
@@ -694,7 +694,9 @@ function StockAdjustModal({ product, onClose, onSave, isPending, branches, defau
               <Label className="mb-1.5 block text-xs text-gray-500">Branch *</Label>
               <Select value={pickedBranch ? String(pickedBranch) : ''} onValueChange={(v) => setPickedBranch(Number(v))}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select branch…" />
+                  <SelectValue placeholder="Select branch…">
+                    {pickedBranch ? (branches!.find((b) => b.id === pickedBranch)?.name ?? 'Select branch…') : 'Select branch…'}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {branches!.map((b) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
@@ -725,7 +727,9 @@ function StockAdjustModal({ product, onClose, onSave, isPending, branches, defau
             <Label className="mb-1.5 block text-xs text-gray-500">Reason</Label>
             <Select value={type} onValueChange={(v) => setType(v as typeof type)}>
               <SelectTrigger className="w-full">
-                <SelectValue />
+                <SelectValue>
+                  {{ adjustment: 'Manual Count Correction', return: 'Customer Return', purchase: 'Stock Receipt (no PO)' }[type]}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent alignItemWithTrigger={false}>
                 <SelectItem value="adjustment">Manual Count Correction</SelectItem>
@@ -1508,14 +1512,20 @@ function ProductsTab({ branchId }: { branchId?: number }) {
           )}
         </div>
         <Select value={catFilter} onValueChange={(v) => setCatFilter(v ?? 'all')}>
-          <SelectTrigger className="w-40"><SelectValue placeholder="All Categories" /></SelectTrigger>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="All Categories">
+              {catFilter === 'all' ? 'All Categories' : (categories.find((c) => String(c.id) === catFilter)?.name ?? 'All Categories')}
+            </SelectValue>
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Categories</SelectItem>
             {categories.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={stockFilter} onValueChange={(v) => setStockFilter(v as StockFilter)}>
-          <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-36">
+            <SelectValue>{{ 'all': 'All stock', 'in-stock': 'In stock', 'low': 'Low stock', 'out': 'Out of stock' }[stockFilter]}</SelectValue>
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All stock</SelectItem>
             <SelectItem value="in-stock">In stock</SelectItem>
@@ -3022,7 +3032,7 @@ function ReportsTab({ products, branchId, isMultiBranch }: { products: ApiProduc
           </div>
           <div className="flex items-center gap-2">
             <Select value={String(velocityDays)} onValueChange={(v) => setVelocityDays(Number(v))}>
-              <SelectTrigger className="h-8 text-xs w-28"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-8 text-xs w-28"><SelectValue>{velocityDays}-day window</SelectValue></SelectTrigger>
               <SelectContent>
                 <SelectItem value="7">7-day window</SelectItem>
                 <SelectItem value="14">14-day window</SelectItem>
