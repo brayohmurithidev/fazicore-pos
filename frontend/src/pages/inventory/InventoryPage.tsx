@@ -1044,6 +1044,27 @@ function ProductDetailPane({ product, categories, onClose, onEdit, onAdjust, onD
         </button>
       </div>
 
+      {/* Quick actions */}
+      {(canManage || isAdmin) && (
+        <div className="px-5 py-3 border-b border-gray-100 bg-gray-50/50 shrink-0 space-y-2">
+          <div className="flex gap-2">
+            {canManage && (
+              <Button variant="outline" size="sm" className="flex-1" onClick={onEdit}>
+                <Pencil size={13} className="mr-1.5" />Edit <kbd className="ml-auto text-[10px] text-gray-400 font-mono bg-gray-100 px-1 rounded">E</kbd>
+              </Button>
+            )}
+            <Button size="sm" className="flex-1" onClick={onAdjust}>
+              <SlidersHorizontal size={13} className="mr-1.5" />Adjust <kbd className="ml-auto text-[10px] text-gray-100/70 font-mono bg-white/20 px-1 rounded">A</kbd>
+            </Button>
+          </div>
+          {isAdmin && (
+            <Button variant="outline" size="sm" className="w-full" onClick={() => setPriceModalOpen(true)}>
+              <Tag size={13} className="mr-1.5" />Edit Price
+            </Button>
+          )}
+        </div>
+      )}
+
       {/* Scrollable body */}
       <div className="flex-1 overflow-y-auto">
         {/* Stock overview */}
@@ -1181,24 +1202,9 @@ function ProductDetailPane({ product, categories, onClose, onEdit, onAdjust, onD
 
       <PriceAdjustModal product={product} open={priceModalOpen} onClose={() => setPriceModalOpen(false)} />
 
-      {/* Actions footer */}
-      <div className="px-5 py-4 border-t border-gray-100 bg-gray-50/50 shrink-0 space-y-2">
-        <div className="flex gap-2">
-          {canManage && (
-            <Button variant="outline" size="sm" className="flex-1" onClick={onEdit}>
-              <Pencil size={13} className="mr-1.5" />Edit <kbd className="ml-auto text-[10px] text-gray-400 font-mono bg-gray-100 px-1 rounded">E</kbd>
-            </Button>
-          )}
-          <Button size="sm" className="flex-1" onClick={onAdjust}>
-            <SlidersHorizontal size={13} className="mr-1.5" />Adjust <kbd className="ml-auto text-[10px] text-gray-100/70 font-mono bg-white/20 px-1 rounded">A</kbd>
-          </Button>
-        </div>
-        {isAdmin && (
-          <Button variant="outline" size="sm" className="w-full" onClick={() => setPriceModalOpen(true)}>
-            <Tag size={13} className="mr-1.5" />Edit Price
-          </Button>
-        )}
-        {canManage && (
+      {/* Delete footer */}
+      {canManage && (
+        <div className="px-5 py-4 border-t border-gray-100 bg-gray-50/50 shrink-0">
           <Button
             variant="outline"
             size="sm"
@@ -1207,8 +1213,8 @@ function ProductDetailPane({ product, categories, onClose, onEdit, onAdjust, onD
           >
             <Trash2 size={13} className="mr-1.5" />Delete Product
           </Button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }
