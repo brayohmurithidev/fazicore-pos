@@ -284,8 +284,30 @@ async def adjust_price(
     product.price = data.new_price
     session.add(product)
     await session.flush()
-    await session.refresh(product)
-    return ProductOut.model_validate(product)
+
+    # Reload with relationships eager-loaded so ProductOut can serialize without
+    # tripping MissingGreenlet (refresh() above would expire units/category and
+    # they'd then lazy-load in async context).
+    from sqlalchemy.orm import selectinload
+    result = await session.execute(
+        select(Product)
+        .options(
+            selectinload(Product.units),
+            selectinload(Product.category),
+            selectinload(Product.inventory),
+        )
+        .where(Product.id == product_id)
+    )
+    fresh = result.scalar_one()
+    out = ProductOut.model_validate(fresh)
+    if fresh.inventory:
+        out.stock_quantity = sum(
+            inv.quantity for inv in fresh.inventory
+            if current_user.branch_id is None or inv.branch_id == current_user.branch_id
+        )
+    if fresh.category:
+        out.category_name = fresh.category.name
+    return out
 
 
 # ── Product units ─────────────────────────────────────────────────────────────
@@ -403,7 +425,7 @@ async def lookup_barcode(
     # Check product barcode first
     result = await session.execute(
         select(Product)
-        .options(selectinload(Product.inventory), selectinload(Product.units))
+        .options(selectinload(Product.inventory), selectinload(Product.units), selectinload(Product.category))
         .where(Product.org_id == current_user.org_id, Product.barcode == barcode, Product.is_active == True)
     )
     product = result.scalar_one_or_none()
@@ -415,7 +437,8 @@ async def lookup_barcode(
             select(ProductUnit)
             .join(Product, Product.id == ProductUnit.product_id)
             .options(selectinload(ProductUnit.product).selectinload(Product.inventory),
-                     selectinload(ProductUnit.product).selectinload(Product.units))
+                     selectinload(ProductUnit.product).selectinload(Product.units),
+                     selectinload(ProductUnit.product).selectinload(Product.category))
             .where(Product.org_id == current_user.org_id, ProductUnit.barcode == barcode, Product.is_active == True)
         )
         matched_unit = unit_result.scalar_one_or_none()
