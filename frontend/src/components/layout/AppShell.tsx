@@ -136,7 +136,8 @@ export function AppShell() {
   }
 
   return (
-    <div className="flex flex-col h-dvh overflow-hidden bg-white">
+    // Use 100vh (h-screen). Dynamic viewport units need Chromium >=108 and break on old WebView2.
+    <div className="flex flex-col h-screen overflow-hidden bg-white">
       {/* Native title bar — only in Tauri desktop */}
       {isTauri && <TitleBar />}
 

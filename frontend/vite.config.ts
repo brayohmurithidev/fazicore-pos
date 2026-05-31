@@ -29,17 +29,54 @@ function oklchToRgb(L: number, C: number, H: number): [number, number, number] {
   }) as [number, number, number]
 }
 
-function oklchToHexPlugin(): Plugin {
+// ── translate: → transform: translate() ─────────────────────────────────────
+// Tailwind v4 emits the standalone `translate:` CSS property (and `scale:` /
+// `rotate:`), which only works on Chromium ≥104. Old WebView2 ignores it, so
+// translate-based centering (modals, sidebar slide, icon alignment) collapses
+// to the element's top-left corner. We rewrite `translate:` into the legacy
+// `transform: translate()` form, which works on every engine. We only touch
+// translate (positioning); scale/rotate are animation-only and cosmetic.
+function splitTopLevel(value: string): string[] {
+  const parts: string[] = []
+  let depth = 0, cur = ''
+  for (const ch of value) {
+    if (ch === '(') depth++
+    if (ch === ')') depth--
+    if (ch === ' ' && depth === 0) {
+      if (cur.trim()) parts.push(cur.trim())
+      cur = ''
+    } else cur += ch
+  }
+  if (cur.trim()) parts.push(cur.trim())
+  return parts
+}
+
+function translateValueToTransform(rawValue: string): string {
+  const value = rawValue.trim()
+  if (value === 'none') return 'none'
+  // Give bare custom props a 0 fallback — old engines lack @property defaults,
+  // so an unset axis would otherwise invalidate the whole declaration.
+  const parts = splitTopLevel(value).map((p) =>
+    p.replace(/var\(\s*(--[\w-]+)\s*\)/g, 'var($1,0)')
+  )
+  const fn = parts.length >= 3 ? 'translate3d' : 'translate'
+  return `${fn}(${parts.join(',')})`
+}
+
+function legacyWebviewCssPlugin(): Plugin {
   const num = (s: string) => (s.trim().endsWith('%') ? parseFloat(s) / 100 : parseFloat(s))
-  const re = /oklch\(\s*([\d.]+%?)\s+([\d.]+%?)\s+([\d.]+)(?:deg)?\s*(?:\/\s*([\d.]+%?))?\s*\)/gi
+  const oklchRe = /oklch\(\s*([\d.]+%?)\s+([\d.]+%?)\s+([\d.]+)(?:deg)?\s*(?:\/\s*([\d.]+%?))?\s*\)/gi
+  const translateRe = /([{;])translate:\s*([^;}]+)/g
   return {
-    name: 'oklch-to-hex',
+    name: 'legacy-webview-css',
     enforce: 'post',
     generateBundle(_opts, bundle) {
       for (const file of Object.values(bundle)) {
         if (file.type !== 'asset' || !file.fileName.endsWith('.css')) continue
-        const css = typeof file.source === 'string' ? file.source : file.source.toString()
-        file.source = css.replace(re, (_m, lRaw, cRaw, hRaw, aRaw) => {
+        let css = typeof file.source === 'string' ? file.source : file.source.toString()
+
+        // oklch() → hex / rgba
+        css = css.replace(oklchRe, (_m, lRaw, cRaw, hRaw, aRaw) => {
           const L = num(lRaw)
           const C = cRaw.trim().endsWith('%') ? (parseFloat(cRaw) / 100) * 0.4 : parseFloat(cRaw)
           const H = parseFloat(hRaw)
@@ -51,6 +88,11 @@ function oklchToHexPlugin(): Plugin {
           const hex = (n: number) => n.toString(16).padStart(2, '0')
           return `#${hex(r)}${hex(g)}${hex(b)}`
         })
+
+        // standalone translate: → transform: translate()
+        css = css.replace(translateRe, (_m, sep, val) => `${sep}transform:${translateValueToTransform(val)}`)
+
+        file.source = css
       }
     },
   }
@@ -60,7 +102,7 @@ export default defineConfig({
   // Vite output is consumed by Tauri — keep it quiet
   clearScreen: false,
 
-  plugins: [react(), tailwindcss(), oklchToHexPlugin()],
+  plugins: [react(), tailwindcss(), legacyWebviewCssPlugin()],
 
   resolve: {
     alias: {

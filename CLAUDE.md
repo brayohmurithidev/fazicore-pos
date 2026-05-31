@@ -39,6 +39,16 @@ pnpm tauri:dev
 
 - `TAURI_SIGNING_PRIVATE_KEY` + `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — **required** (updater pubkey is baked into `tauri.conf.json`; build fails without the private key)
 - `APPLE_*` — optional; without them macOS builds are unsigned (Gatekeeper warning). Windows is unsigned (SmartScreen warning).
+- `WEBVIEW2_FIXED_URL` (repository **variable**, not secret) — **required for Windows.** The official Microsoft WebView2 *Fixed Version* x64 `.cab` link (from https://developer.microsoft.com/microsoft-edge/webview2/ → Fixed Version → x64). CI downloads + extracts it into `src-tauri/webview2-runtime/`.
+
+## Windows WebView2 (fixed runtime)
+
+Tailwind v4 / our CSS target Chromium ≥111 (oklch, color-mix, `:has`, dvh, the standalone `translate`/`scale` properties). Client machines often have an **old WebView2** that can't render these → white UI, off-center modals, broken layout. So the Windows build **bundles its own modern Chromium** instead of relying on the system runtime:
+
+- `tauri.conf.json` → `bundle.windows.webviewInstallMode = { type: "fixedRuntime", path: "./webview2-runtime/" }`.
+- The runtime folder is **gitignored**; CI fetches it via `WEBVIEW2_FIXED_URL` (see above). The installer grows ~150 MB but renders correctly on any machine and needs no internet at install time.
+- **Local Windows builds:** download the same Fixed Version x64 CAB, `expand webview2.cab -F:* src-tauri/webview2-runtime`, flatten the inner `Microsoft.WebView2.FixedVersionRuntime.*` folder so `msedgewebview2.exe` sits directly in `webview2-runtime/`.
+- Belt-and-suspenders CSS fallbacks for old engines still live in `vite.config.ts` (`legacyWebviewCssPlugin`: oklch→hex, `translate:`→`transform:`) — harmless with the fixed runtime, useful for `vite preview` / the web admin.
 
 ## Central billing integration (Fazilabs Invoicing)
 

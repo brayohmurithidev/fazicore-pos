@@ -91,6 +91,42 @@ jobs:
           VITE_MINIO_PUBLIC_URL=${{ vars.VITE_MINIO_PUBLIC_URL || 'https://fazistore-api.fazilabs.com/' }}
           EOF
 
+      # ── Bundle a fixed WebView2 runtime (Windows only) ───────────────────────
+      # The app ships its own modern Chromium so it renders correctly regardless
+      # of the (possibly ancient) WebView2 on the client machine. tauri.conf.json
+      # points bundle.windows.webviewInstallMode at ./webview2-runtime.
+      #
+      # Set repo variable WEBVIEW2_FIXED_URL to the official Microsoft
+      # "Fixed Version" x64 .cab download link:
+      #   https://developer.microsoft.com/microsoft-edge/webview2/  → Fixed Version → x64
+      - name: Fetch fixed WebView2 runtime
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $url = "${{ vars.WEBVIEW2_FIXED_URL }}"
+          if ([string]::IsNullOrWhiteSpace($url)) {
+            Write-Error "Repository variable WEBVIEW2_FIXED_URL is not set. Add the Microsoft WebView2 Fixed Version x64 .cab link under Settings → Secrets and variables → Actions → Variables."
+            exit 1
+          }
+          $dest = "frontend/src-tauri/webview2-runtime"
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Write-Host "Downloading WebView2 Fixed Version runtime…"
+          Invoke-WebRequest -Uri $url -OutFile webview2.cab
+          # The CAB lays files out under a versioned folder; expand, then flatten it.
+          expand webview2.cab -F:* $dest | Out-Null
+          $inner = Get-ChildItem -Path $dest -Directory |
+                   Where-Object { $_.Name -like 'Microsoft.WebView2.FixedVersionRuntime*' } |
+                   Select-Object -First 1
+          if ($inner) {
+            Move-Item -Path (Join-Path $inner.FullName '*') -Destination $dest -Force
+            Remove-Item $inner.FullName -Recurse -Force
+          }
+          if (-not (Test-Path (Join-Path $dest 'msedgewebview2.exe'))) {
+            Write-Error "msedgewebview2.exe not found after extraction — check WEBVIEW2_FIXED_URL points to the x64 Fixed Version CAB."
+            exit 1
+          }
+          Write-Host "Fixed runtime ready ($([math]::Round((Get-ChildItem $dest -Recurse | Measure-Object Length -Sum).Sum / 1MB)) MB)."
+
       # ── Detect whether Apple signing secrets are configured ─────────────────
       # Passing empty strings to tauri-action still triggers the keychain import
       # and fails. Only expose the APPLE_* vars when the certificate is present.

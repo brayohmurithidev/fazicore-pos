@@ -1,6 +1,6 @@
 {
   "productName": "FaziPOS",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "identifier": "com.fazicore.pos",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -60,7 +60,8 @@
     "longDescription": "FaziPOS is a modern, fast point-of-sale system for retail businesses.",
     "windows": {
       "webviewInstallMode": {
-        "type": "offlineInstaller"
+        "type": "fixedRuntime",
+        "path": "./webview2-runtime/"
       }
     }
   }
