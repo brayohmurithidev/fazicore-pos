@@ -167,8 +167,8 @@ class _Wordmark extends StatelessWidget {
   const _Wordmark();
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: const [
+    return const Column(
+      children: [
         Text.rich(
           TextSpan(children: [
             TextSpan(text: 'FAZI', style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: 1)),

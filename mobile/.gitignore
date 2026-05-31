@@ -4,7 +4,8 @@
 build/
 .flutter-plugins
 .flutter-plugins-dependencies
-pubspec.lock
+# Note: pubspec.lock IS committed — this is an application, so we want
+# reproducible dependency resolution across machines and CI.
 
 # Generated platform folders (regenerate with `flutter create --platforms=android .`)
 /android/
