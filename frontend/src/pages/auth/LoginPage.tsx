@@ -4,6 +4,8 @@ import { ChevronLeft, Building2, Lock, AlertCircle, Loader2, Delete, HardDrive }
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { RoleBadge } from '@/components/shared/RoleBadge'
 import { useAuthStore } from '@/stores/auth'
+import { useOfflineAuthStore, type CachedRosterUser } from '@/stores/offlineAuth'
+import { hashPin } from '@/lib/pinHash'
 import { useOrgUsers, usePinLogin, useClockIn } from '@/lib/queries'
 import { isLocalMode } from '@/lib/local-mode'
 import { localCountUsers, localGetUsers, localVerifyPin, localCreateUser } from '@/lib/local-commands'
@@ -360,27 +362,50 @@ function OnlineLoginPage() {
   const pinLogin = usePinLogin()
   const clockIn = useClockIn()
 
-  const allUsers: SelectableUser[] = apiUsers
-    ? apiUsers.map((u) => ({
-        id: u.id,
-        name: u.name,
-        role: u.role as User['role'],
-        branch_id: u.branch_id,
-        branch_name: u.branch_name,
-        avatar: u.avatar ?? getInitials(u.name),
-        _api: u,
-      }))
-    : []
+  // Offline fallback: cached roster + per-user PIN hashes (see offlineAuth store)
+  const setRoster = useOfflineAuthStore((s) => s.setRoster)
+  const rememberCred = useOfflineAuthStore((s) => s.rememberCred)
+  const cachedRoster = useOfflineAuthStore((s) => (orgSlug ? s.roster[orgSlug] : undefined))
 
-  const branches: { id: string | number; name: string }[] = apiUsers
-    ? [
-        ...new Map(
-          apiUsers
-            .filter((u) => u.branch_id != null)
-            .map((u) => [u.branch_id, { id: u.branch_id!, name: u.branch_name ?? `Branch ${u.branch_id}` }])
-        ).values(),
-      ]
-    : []
+  // Cache the roster whenever we successfully fetch it online.
+  useEffect(() => {
+    if (apiUsers && orgSlug) {
+      setRoster(orgSlug, apiUsers.map((u) => ({
+        id: u.id, name: u.name, role: u.role,
+        branch_id: u.branch_id ?? null, branch_name: u.branch_name ?? null,
+        avatar: u.avatar ?? null, photo_url: u.photo_url ?? null,
+      })))
+    }
+  }, [apiUsers, orgSlug, setRoster])
+
+  // Use the live roster when online; fall back to the cached roster when offline.
+  const rosterSource: CachedRosterUser[] = apiUsers
+    ? apiUsers.map((u) => ({
+        id: u.id, name: u.name, role: u.role,
+        branch_id: u.branch_id ?? null, branch_name: u.branch_name ?? null,
+        avatar: u.avatar ?? null, photo_url: u.photo_url ?? null,
+      }))
+    : (cachedRoster ?? [])
+
+  const allUsers: SelectableUser[] = rosterSource.map((u) => ({
+    id: u.id,
+    name: u.name,
+    role: u.role as User['role'],
+    branch_id: u.branch_id,
+    branch_name: u.branch_name,
+    avatar: u.avatar ?? getInitials(u.name),
+    _api: { ...u, branch_name: u.branch_name ?? undefined, avatar: u.avatar ?? undefined, photo_url: u.photo_url ?? undefined } as unknown as ApiUser,
+  }))
+  // True when we're showing the locally cached roster (offline) rather than live.
+  const usingCachedRoster = !apiUsers && allUsers.length > 0
+
+  const branches: { id: string | number; name: string }[] = [
+    ...new Map(
+      rosterSource
+        .filter((u) => u.branch_id != null)
+        .map((u) => [u.branch_id, { id: u.branch_id!, name: u.branch_name ?? `Branch ${u.branch_id}` }])
+    ).values(),
+  ]
 
   const isMultiBranch = branches.length > 1
 
@@ -426,6 +451,45 @@ function OnlineLoginPage() {
     })
   }
 
+  const registerFailedAttempt = () => {
+    setTimeout(() => {
+      setPin('')
+      const attempts = pinAttempts + 1
+      setPinAttempts(attempts)
+      setShakeKey((k) => k + 1)
+      if (attempts >= MAX_ATTEMPTS) {
+        setPinLocked(true)
+        setError('')
+      } else {
+        const rem = MAX_ATTEMPTS - attempts
+        setError(`Incorrect PIN · ${rem} attempt${rem === 1 ? '' : 's'} remaining`)
+      }
+    }, 300)
+  }
+
+  // Verify the PIN against the locally cached hash and start an offline session.
+  const tryOfflineLogin = async (enteredPin: string): Promise<boolean> => {
+    if (!selectedUser) return false
+    const cred = useOfflineAuthStore.getState().creds[orgSlug]?.[Number(selectedUser.id)]
+    if (!cred) {
+      setTimeout(() => { setPin(''); setShakeKey((k) => k + 1); setError('First login for this user needs internet') }, 300)
+      return true // handled (don't also count as wrong PIN)
+    }
+    const entered = await hashPin(enteredPin)
+    if (entered === cred.pinHash) {
+      const u = selectedUser
+      const user: User = {
+        id: String(u.id), name: u.name, role: u.role as User['role'],
+        branch: String(u.branch_id ?? ''), branch_name: u.branch_name ?? undefined,
+        avatar: u.avatar ?? getInitials(u.name), photo_url: u._api?.photo_url ?? undefined, pin: '',
+      }
+      setTimeout(() => doSuccessLogin(user, cred.accessToken, cred.refreshToken), 200)
+    } else {
+      registerFailedAttempt()
+    }
+    return true
+  }
+
   const handlePinKey = (k: string) => {
     if (pinLocked || !selectedUser) return
     if (k === 'del') { setPin((p) => p.slice(0, -1)); setError(''); return }
@@ -434,10 +498,18 @@ function OnlineLoginPage() {
     setPin(next)
     if (next.length < 4) return
 
+    // Offline (or roster came from cache): verify locally without hitting the API.
+    if (!navigator.onLine || usersError) { void tryOfflineLogin(next); return }
+
     pinLogin.mutate(
       { org_slug: orgSlug, user_id: Number(selectedUser.id), pin: next },
       {
-        onSuccess: (data) => {
+        onSuccess: async (data) => {
+          // Cache the hash + tokens so this user can log in offline next time.
+          try {
+            const ph = await hashPin(next)
+            rememberCred(orgSlug, data.user.id, ph, data.access_token, data.refresh_token)
+          } catch { /* hashing unsupported — skip offline caching */ }
           const user: User = {
             id: String(data.user.id),
             name: data.user.name,
@@ -450,20 +522,11 @@ function OnlineLoginPage() {
           }
           setTimeout(() => doSuccessLogin(user, data.access_token, data.refresh_token), 200)
         },
-        onError: () => {
-          setTimeout(() => {
-            setPin('')
-            const attempts = pinAttempts + 1
-            setPinAttempts(attempts)
-            setShakeKey((k) => k + 1)
-            if (attempts >= MAX_ATTEMPTS) {
-              setPinLocked(true)
-              setError('')
-            } else {
-              const rem = MAX_ATTEMPTS - attempts
-              setError(`Incorrect PIN · ${rem} attempt${rem === 1 ? '' : 's'} remaining`)
-            }
-          }, 300)
+        onError: (err) => {
+          // No HTTP response → network/offline, not a wrong PIN: fall back to local verify.
+          const noResponse = !(err as { response?: unknown })?.response
+          if (noResponse) { void tryOfflineLogin(next); return }
+          registerFailedAttempt()
         },
       }
     )
@@ -678,21 +741,21 @@ function OnlineLoginPage() {
 
         {!selectedBranch && !overrideMode && <SlugSwitcher />}
 
-        {usersLoading && (
+        {usersLoading && allUsers.length === 0 && (
           <div className="flex flex-col items-center py-12 text-gray-400">
             <Loader2 size={26} className="animate-spin mb-3 text-amber-500" />
             <span className="text-sm">Connecting to {orgSlug}…</span>
           </div>
         )}
 
-        {!usersLoading && usersError && (
+        {!usersLoading && usersError && allUsers.length === 0 && (
           <div className="flex flex-col items-center py-8 text-center">
             <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mb-3">
               <AlertCircle size={22} className="text-red-500" />
             </div>
             <div className="font-semibold text-gray-900 mb-1">Can't reach "{orgSlug}"</div>
             <div className="text-sm text-gray-500 mb-5">
-              Check the business slug or try again.
+              No internet and no saved sign-in for this business yet. Connect once to enable offline login.
             </div>
             <button
               onClick={() => { setEditingSlug(true); setSlugInput(orgSlug) }}
@@ -703,7 +766,14 @@ function OnlineLoginPage() {
           </div>
         )}
 
-        {!usersLoading && !usersError && apiUsers && (
+        {usingCachedRoster && (
+          <div className="mb-4 flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            <HardDrive size={13} />
+            <span>Offline — showing saved staff. Only those who've signed in here before can log in.</span>
+          </div>
+        )}
+
+        {allUsers.length > 0 && (
           showBranchScreen ? (
             <>
               <h2 className="font-bold text-xl text-gray-900 mb-1">Select your branch</h2>
