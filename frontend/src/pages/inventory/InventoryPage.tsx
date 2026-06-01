@@ -323,13 +323,15 @@ function StatCard({ label, value, sub, icon: Icon, accent = '#111827' }: {
 
 const BLANK_FORM = { name: '', category_id: '', price: '', cost: '', sku: '', barcode: '', stock: '', min_stock: '10', unit: 'piece', vat_rate: '0.16', expiry_date: '', description: '' }
 
-function ProductFormModal({ open, onClose, initial, categories, allProducts, isPending, onSave, onSelectExisting }: {
+function ProductFormModal({ open, onClose, initial, categories, allProducts, isPending, onSave, onSelectExisting, branches, defaultBranchId }: {
   open: boolean; onClose: () => void; initial: ApiProduct | null
   categories: ApiCategory[]; allProducts: ApiProduct[]; isPending: boolean
-  onSave: (data: Record<string, unknown>, initialStock: number, imageFile?: File) => Promise<void>
+  onSave: (data: Record<string, unknown>, initialStock: number, imageFile?: File, stockBranchId?: number) => Promise<void>
   onSelectExisting: (product: ApiProduct) => void
+  branches?: { id: number; name: string }[]; defaultBranchId?: number
 }) {
   const [form, setForm] = useState(BLANK_FORM)
+  const [stockBranch, setStockBranch] = useState<number | undefined>(defaultBranchId)
   const [creatingCat, setCreatingCat] = useState(false)
   const [newCatName, setNewCatName] = useState('')
   const [imageFile, setImageFile] = useState<File | null>(null)
@@ -351,6 +353,7 @@ function ProductFormModal({ open, onClose, initial, categories, allProducts, isP
     if (!open) return
     setCreatingCat(false); setNewCatName('')
     setImageFile(null); setImagePreview(null); setImageUrlBroken(false)
+    setStockBranch(defaultBranchId)
     if (initial) {
       setForm({
         name: initial.name,
@@ -366,6 +369,11 @@ function ProductFormModal({ open, onClose, initial, categories, allProducts, isP
   }, [open, initial])
 
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }))
+
+  // For a multi-branch admin adding opening stock, ask which branch it lands in
+  // (otherwise it would be recorded against no branch and show nowhere).
+  const enteredStock = parseInt(form.stock) || 0
+  const needsBranchPicker = !initial && enteredStock > 0 && !!branches && branches.length > 1 && !defaultBranchId
 
   const handleCreateCat = async () => {
     if (!newCatName.trim()) return
@@ -405,6 +413,7 @@ function ProductFormModal({ open, onClose, initial, categories, allProducts, isP
 
   const handleSave = async () => {
     if (!form.name.trim() || !form.price) return
+    if (needsBranchPicker && !stockBranch) { setSaveError('Select which branch the opening stock belongs to.'); return }
     setSaveError(null)
     try {
       await onSave({
@@ -414,7 +423,7 @@ function ProductFormModal({ open, onClose, initial, categories, allProducts, isP
         category_id: form.category_id ? Number(form.category_id) : null,
         unit: form.unit, vat_rate: parseFloat(form.vat_rate) || 0,
         min_stock: parseInt(form.min_stock) || 0, expiry_date: form.expiry_date || null,
-      }, parseInt(form.stock) || 0, imageFile ?? undefined)
+      }, enteredStock, imageFile ?? undefined, stockBranch ?? defaultBranchId)
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
@@ -545,6 +554,20 @@ function ProductFormModal({ open, onClose, initial, categories, allProducts, isP
             <div>
               <Label className="mb-1.5 block text-xs text-gray-500">Initial Stock</Label>
               <Input value={form.stock} onChange={(e) => set('stock', e.target.value)} type="number" placeholder="0" />
+            </div>
+          )}
+          {needsBranchPicker && (
+            <div className="col-span-2">
+              <Label className="mb-1.5 block text-xs text-gray-500">Opening stock branch *</Label>
+              <Select value={stockBranch ? String(stockBranch) : ''} onValueChange={(v) => setStockBranch(v ? Number(v) : undefined)}>
+                <SelectTrigger>
+                  <span className={stockBranch ? undefined : 'text-muted-foreground'}>
+                    {stockBranch ? (branches!.find((b) => b.id === stockBranch)?.name ?? 'Select branch…') : 'Select branch…'}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>{branches!.map((b) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}</SelectContent>
+              </Select>
+              <p className="text-[11px] text-gray-400 mt-1">Which location this opening stock is held at.</p>
             </div>
           )}
           <div>
@@ -1429,7 +1452,7 @@ function ProductsTab({ branchId }: { branchId?: number }) {
 
   const uploadImage = useUploadProductImage()
 
-  const handleSave = async (data: Record<string, unknown>, initialStock: number, imageFile?: File) => {
+  const handleSave = async (data: Record<string, unknown>, initialStock: number, imageFile?: File, stockBranchId?: number) => {
     try {
       if (editProduct) {
         await updateProduct.mutateAsync({ id: editProduct.id, data })
@@ -1438,7 +1461,14 @@ function ProductsTab({ branchId }: { branchId?: number }) {
       } else {
         const created = await createProduct.mutateAsync(data) as ApiProduct
         if (initialStock > 0) {
-          await adjustInventory.mutateAsync({ product_id: created.id, branch_id: user?.branch ? (Number(user.branch) || null) : null, qty_change: initialStock, notes: 'Initial stock' })
+          // Seed opening stock against a real branch — never null in a multi-branch
+          // shop (which would make the stock show in no branch). Staff: their branch;
+          // admin: the picked/active branch, or the only branch.
+          const activeBranches = rawBranches.filter((b) => b.is_active !== false)
+          const targetBranch = user?.branch
+            ? (Number(user.branch) || null)
+            : (stockBranchId ?? branchId ?? (activeBranches.length === 1 ? activeBranches[0].id : null))
+          await adjustInventory.mutateAsync({ product_id: created.id, branch_id: targetBranch, qty_change: initialStock, notes: 'Initial stock' })
         }
         if (imageFile) await uploadImage.mutateAsync({ productId: created.id, file: imageFile })
         toast.success('Product created')
@@ -1764,7 +1794,9 @@ function ProductsTab({ branchId }: { branchId?: number }) {
       <ProductFormModal open={addOpen} onClose={() => { setAddOpen(false); setEditProduct(null) }}
         initial={editProduct} categories={categories} allProducts={products}
         isPending={createProduct.isPending || updateProduct.isPending} onSave={handleSave}
-        onSelectExisting={(p) => { setEditProduct(p); }} />
+        onSelectExisting={(p) => { setEditProduct(p); }}
+        branches={role === 'admin' ? rawBranches.map((b) => ({ id: b.id, name: b.name })) : undefined}
+        defaultBranchId={branchId} />
       <StockAdjustModal
         product={adjustProduct}
         onClose={() => setAdjustProduct(null)}

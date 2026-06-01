@@ -1,4 +1,5 @@
 from fastapi import HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.inventory import Inventory, TransactionType
@@ -20,11 +21,27 @@ class InventoryService:
         performed_by: int,
         notes: str | None,
     ) -> Inventory:
+        product = await self.session.get(Product, product_id)
+
+        # Safety net: if no branch was given but the org has branches, anchor the
+        # stock to the oldest active branch instead of a NULL branch (which would
+        # leave the product showing zero stock in every branch). Covers admins
+        # (no assigned branch) creating/importing products in a multi-branch shop.
+        if branch_id is None and product is not None:
+            from app.models.branch import Branch
+            oldest_branch_id = await self.session.scalar(
+                select(Branch.id)
+                .where(Branch.org_id == product.org_id, Branch.is_active == True)
+                .order_by(Branch.id.asc())
+                .limit(1)
+            )
+            if oldest_branch_id is not None:
+                branch_id = oldest_branch_id
+
         inv = await self.inventory_repo.get_by_product_branch(product_id, branch_id)
         if inv is None:
             # Seed the per-row threshold from the product's reorder level so the
             # internal duplicate doesn't drift from the user-set min_stock.
-            product = await self.session.get(Product, product_id)
             inv = Inventory(
                 product_id=product_id,
                 branch_id=branch_id,
