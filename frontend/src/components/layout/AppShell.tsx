@@ -12,6 +12,7 @@ import { RoleBadge } from '@/components/shared/RoleBadge'
 import { NotificationBell } from '@/components/shared/NotificationBell'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
+import { usePlanStore } from '@/stores/plan'
 import { useBranches, useDashboard, useOrgInfo, useClockOut } from '@/lib/queries'
 import { useQueryClient } from '@tanstack/react-query'
 import { useFeatureFlags } from '@/hooks/useFeature'
@@ -94,7 +95,11 @@ export function AppShell() {
   const { isOnline, syncStatus, syncNow, isSyncing } = useOfflineStore()
 
   useEffect(() => {
-    if (orgInfo) seedFromOrg(orgInfo)
+    if (orgInfo) {
+      seedFromOrg(orgInfo)
+      // Persist plan limits so they stay enforceable offline.
+      usePlanStore.getState().setFromOrg(orgInfo)
+    }
   }, [orgInfo, seedFromOrg])
 
   if (!user) return null

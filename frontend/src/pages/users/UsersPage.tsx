@@ -11,7 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/u
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { RoleBadge } from '@/components/shared/RoleBadge'
 import { LimitReachedDialog, parseLimitError, type LimitError } from '@/components/shared/LimitReachedDialog'
-import { useUsers, useCreateUser, useDeleteUser, useUpdateUserById, useBranches, useOrgInfo } from '@/lib/queries'
+import { useUsers, useCreateUser, useDeleteUser, useUpdateUserById, useBranches } from '@/lib/queries'
+import { usePlanLimits, atPlanLimit } from '@/hooks/usePlanLimits'
 import { toast } from '@/lib/toast'
 import type { ApiUser, ApiBranch, ApiRole } from '@/types/api'
 
@@ -50,7 +51,6 @@ function StatCard({ label, value, icon: Icon, accent = '#111827' }: { label: str
 export function UsersPage() {
   const { data: users = [], isLoading } = useUsers()
   const { data: branches = [] } = useBranches()
-  const { data: orgInfo } = useOrgInfo()
   const createUser = useCreateUser()
   const deleteUser = useDeleteUser()
   const updateUser = useUpdateUserById()
@@ -61,7 +61,9 @@ export function UsersPage() {
   const [limitError, setLimitError] = useState<LimitError | null>(null)
 
   const activeUsers = users.filter((u) => u.is_active)
-  const atLimit = orgInfo ? (orgInfo.max_users !== null && activeUsers.length >= orgInfo.max_users) : false
+  // Enforce the plan limit even offline (persisted via usePlanLimits).
+  const { maxUsers } = usePlanLimits()
+  const atLimit = atPlanLimit(maxUsers, activeUsers.length)
 
   const roleCount = (r: ApiRole) => users.filter((u) => u.role === r).length
 
@@ -93,9 +95,9 @@ export function UsersPage() {
           <p className="text-sm text-gray-400 mt-0.5">Create and manage staff accounts across all branches</p>
         </div>
         <div className="flex items-center gap-3">
-          {orgInfo && (
+          {maxUsers !== undefined && (
             <span className={`text-xs font-medium ${atLimit ? 'text-amber-600' : 'text-gray-400'}`}>
-              {activeUsers.length}/{orgInfo.max_users === null ? '∞' : orgInfo.max_users} users
+              {activeUsers.length}/{maxUsers === null ? '∞' : maxUsers} users
               {atLimit && ' — limit reached'}
             </span>
           )}

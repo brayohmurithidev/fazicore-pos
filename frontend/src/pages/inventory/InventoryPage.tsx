@@ -33,6 +33,7 @@ import {
   useAdjustPrice, usePriceHistory, type ApiPriceHistory,
   useProductUnits, useCreateProductUnit, useDeleteProductUnit,
 } from '@/lib/queries'
+import { usePlanLimits, atPlanLimit } from '@/hooks/usePlanLimits'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import { toast } from '@/lib/toast'
@@ -1262,7 +1263,6 @@ function ProductsTab({ branchId }: { branchId?: number }) {
   // Always load all products — filter locally for zero-latency
   const { data: products = [], isLoading } = useProducts(undefined, undefined, branchId)
   const { data: categories = [] } = useCategories()
-  const { data: orgInfo } = useOrgInfo()
   const createProduct = useCreateProduct()
   const updateProduct = useUpdateProductById()
   const deleteProduct = useDeleteProduct()
@@ -1371,7 +1371,9 @@ function ProductsTab({ branchId }: { branchId?: number }) {
     return list
   }, [products, search, catFilter, stockFilter])
 
-  const atLimit = orgInfo ? (orgInfo.max_products !== null && products.filter((p) => p.is_active).length >= orgInfo.max_products) : false
+  // Enforce the plan limit even offline (persisted via usePlanLimits).
+  const { maxProducts } = usePlanLimits()
+  const atLimit = atPlanLimit(maxProducts, products.filter((p) => p.is_active).length)
   const isLargeScreen = useMediaQuery('(min-width: 1024px)')
   const detailOpen = !!currentSelected
 
@@ -1693,7 +1695,7 @@ function ProductsTab({ branchId }: { branchId?: number }) {
           {/* Footer */}
           <div className="flex items-center justify-between px-4 py-2.5 border-t border-gray-100 bg-gray-50/50 text-xs text-gray-400 shrink-0">
             <span>{filtered.length} products {stockFilter !== 'all' || search ? '(filtered)' : ''}</span>
-            {orgInfo && <span>{products.filter((p) => p.is_active).length} / {orgInfo.max_products === null ? '∞' : orgInfo.max_products} slots used</span>}
+            {maxProducts !== undefined && <span>{products.filter((p) => p.is_active).length} / {maxProducts === null ? '∞' : maxProducts} slots used</span>}
           </div>
         </div>
 

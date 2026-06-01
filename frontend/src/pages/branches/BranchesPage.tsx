@@ -8,7 +8,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { LimitReachedDialog, parseLimitError, type LimitError } from '@/components/shared/LimitReachedDialog'
-import { useBranches, useCreateBranch, useCreateUser, useUpdateUserById, useUsers, useOrgInfo } from '@/lib/queries'
+import { useBranches, useCreateBranch, useCreateUser, useUpdateUserById, useUsers } from '@/lib/queries'
+import { usePlanLimits, atPlanLimit } from '@/hooks/usePlanLimits'
 import { toast } from '@/lib/toast'
 import type { ApiBranch, ApiUser } from '@/types/api'
 
@@ -32,13 +33,14 @@ function StatCard({ label, value, icon: Icon, accent = '#111827' }: { label: str
 
 export function BranchesPage() {
   const { data: apiBranches } = useBranches()
-  const { data: orgInfo } = useOrgInfo()
   const [selected, setSelected] = useState<ApiBranch | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [limitError, setLimitError] = useState<LimitError | null>(null)
 
   const branches: ApiBranch[] = apiBranches ?? []
-  const atLimit = orgInfo ? (orgInfo.max_branches !== null && branches.filter((b) => b.is_active).length >= orgInfo.max_branches) : false
+  // Enforce the plan limit even offline (persisted via usePlanLimits).
+  const { maxBranches } = usePlanLimits()
+  const atLimit = atPlanLimit(maxBranches, branches.filter((b) => b.is_active).length)
 
   return (
     <div className="p-4 sm:p-6 overflow-y-auto h-full">
@@ -48,11 +50,11 @@ export function BranchesPage() {
           <p className="text-sm text-gray-400 mt-0.5">Oversee all business locations</p>
         </div>
         <div className="flex items-center gap-3">
-          {orgInfo && (
+          {maxBranches !== undefined && (
             <span className={`text-xs font-medium ${atLimit ? 'text-amber-600' : 'text-gray-400'}`}>
-              {orgInfo.max_branches === 1
+              {maxBranches === 1
                 ? `Single business${atLimit ? ' — limit reached' : ''}`
-                : `${branches.filter((b) => b.is_active).length}/${orgInfo.max_branches === null ? '∞' : orgInfo.max_branches} branches${atLimit ? ' — limit reached' : ''}`
+                : `${branches.filter((b) => b.is_active).length}/${maxBranches === null ? '∞' : maxBranches} branches${atLimit ? ' — limit reached' : ''}`
               }
             </span>
           )}
