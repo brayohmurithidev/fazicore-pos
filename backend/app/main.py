@@ -15,7 +15,7 @@ from app.services.etims_worker import start_worker
 
 app = FastAPI(
     title="Fazi POS API",
-    version="1.0.0",
+    version="1.1.0",
     description="Multi-tenant Point of Sale system API",
 )
 
