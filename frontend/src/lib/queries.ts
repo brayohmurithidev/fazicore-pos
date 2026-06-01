@@ -1,6 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
 import { isLocalMode } from '@/lib/local-mode'
+import { isTauri } from '@/hooks/useTauri'
+
+// Read from local SQLite when standalone (isLocalMode) or when a Tauri build is
+// offline — and fall back to local if a network call fails outright — so the
+// desktop app keeps showing data with no/poor internet.
+async function withOfflineFallback<T>(apiCall: () => Promise<T>, localCall: () => Promise<T>): Promise<T> {
+  if (isLocalMode) return localCall()
+  if (isTauri && typeof navigator !== 'undefined' && !navigator.onLine) return localCall()
+  try {
+    return await apiCall()
+  } catch (e) {
+    const noResponse = !(e as { response?: unknown })?.response
+    if (isTauri && noResponse) return localCall()
+    throw e
+  }
+}
 import {
   localGetProducts, localCreateProduct, localUpdateProduct, localDeleteProduct,
   localGetCategories, localCreateCategory,
@@ -213,15 +229,12 @@ export function useDashboard(branchId?: number) {
 export function useProducts(q?: string, categoryId?: number, branchId?: number) {
   return useQuery<ApiProduct[]>({
     queryKey: ['products', q, categoryId, branchId],
-    queryFn: async () => {
-      if (isLocalMode) {
-        const products = await localGetProducts()
-        return products.map(localProductToApi)
-      }
-      return api
+    queryFn: () => withOfflineFallback(
+      () => api
         .get('/products/', { params: { q: q || undefined, category_id: categoryId || undefined, branch_id: branchId || undefined, limit: 200 } })
-        .then((r) => r.data)
-    },
+        .then((r) => r.data),
+      async () => (await localGetProducts()).map(localProductToApi),
+    ),
     staleTime: 30_000,
   })
 }
@@ -469,13 +482,10 @@ export function useOrders(filters: OrderFilters | number = {}) {
   if (!params.limit) params.limit = 50
   return useQuery<ApiOrder[]>({
     queryKey: ['orders', params],
-    queryFn: async () => {
-      if (isLocalMode) {
-        const orders = await localGetOrders(params.limit, 0, params.date_from, params.date_to)
-        return orders.map(localOrderToApi)
-      }
-      return api.get('/orders/', { params }).then((r) => r.data)
-    },
+    queryFn: () => withOfflineFallback(
+      () => api.get('/orders/', { params }).then((r) => r.data),
+      async () => (await localGetOrders(params.limit, 0, params.date_from, params.date_to)).map(localOrderToApi),
+    ),
     refetchInterval: isLocalMode ? false : 30_000,
   })
 }
@@ -827,13 +837,10 @@ export function useDeleteProductUnit() {
 export function useCustomers(q?: string) {
   return useQuery<ApiCustomer[]>({
     queryKey: ['customers', q],
-    queryFn: async () => {
-      if (isLocalMode) {
-        const customers = await localGetCustomers()
-        return customers.map(localCustomerToApi)
-      }
-      return api.get('/customers/', { params: q ? { q, limit: 100 } : { limit: 100 } }).then((r) => r.data)
-    },
+    queryFn: () => withOfflineFallback(
+      () => api.get('/customers/', { params: q ? { q, limit: 100 } : { limit: 100 } }).then((r) => r.data),
+      async () => (await localGetCustomers()).map(localCustomerToApi),
+    ),
     staleTime: 30_000,
   })
 }
