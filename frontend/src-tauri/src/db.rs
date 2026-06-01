@@ -814,6 +814,20 @@ pub fn set_meta(conn: &Connection, key: &str, value: &str) -> SqlResult<()> {
     Ok(())
 }
 
+/// Wipe the server-synced tenant mirror so a different org never sees the
+/// previous shop's catalogue. Called when the logged-in org changes.
+/// Sync watermarks are reset so the next sync pulls a fresh full snapshot.
+/// Pending offline orders are intentionally left untouched.
+pub fn clear_synced_data(conn: &Connection) -> SqlResult<()> {
+    conn.execute_batch(
+        "DELETE FROM products;
+         DELETE FROM customers;
+         DELETE FROM local_categories;
+         DELETE FROM sync_meta WHERE key LIKE '%last_sync%';",
+    )?;
+    Ok(())
+}
+
 pub fn get_sync_status(conn: &Connection) -> SqlResult<SyncStatus> {
     let pending_count: i64 = conn.query_row(
         "SELECT COUNT(*) FROM offline_orders WHERE status IN ('pending','syncing')",

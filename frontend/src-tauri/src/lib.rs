@@ -470,12 +470,26 @@ fn get_branch_server_status(bs: tauri::State<'_, BranchServerState>) -> BranchSe
 #[tauri::command]
 fn set_sync_config(
     cfg: tauri::State<SyncConfigState>,
+    db: tauri::State<DbState>,
     base_url: String,
     token: String,
     org_slug: String,
     branch_id: Option<i64>,
     minio_public_url: String,
 ) {
+    // Tenant isolation: if the logged-in org changed since the local DB was last
+    // populated, wipe the synced mirror so the new shop never sees the previous
+    // shop's products/customers/categories.
+    {
+        let conn = db.0.lock().unwrap();
+        let prev = db::get_meta(&conn, "synced_org_slug").ok().flatten();
+        if prev.as_deref() != Some(org_slug.as_str()) {
+            if prev.is_some() {
+                let _ = db::clear_synced_data(&conn);
+            }
+            let _ = db::set_meta(&conn, "synced_org_slug", &org_slug);
+        }
+    }
     let mut guard = cfg.0.lock().unwrap();
     *guard = Some(SyncConfig { base_url, token, org_slug, branch_id, minio_public_url });
 }
