@@ -33,23 +33,44 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 fn list_system_printers() -> Vec<String> {
     #[cfg(target_os = "windows")]
     {
-        // Get-Printer is reliable and needs no FFI for enumeration.
-        let output = std::process::Command::new("powershell")
-            .creation_flags(CREATE_NO_WINDOW)
-            .args([
-                "-NoProfile",
-                "-Command",
-                "Get-Printer | Select-Object -ExpandProperty Name",
-            ])
-            .output();
-        return match output {
-            Ok(o) => String::from_utf8_lossy(&o.stdout)
-                .lines()
-                .map(|l| l.trim().to_string())
-                .filter(|l| !l.is_empty())
-                .collect(),
-            Err(_) => Vec::new(),
+        // Enumerate via the Win32 spooler API (EnumPrinters) instead of shelling
+        // out to PowerShell — no console-window flash, and it can't be broken by
+        // the CREATE_NO_WINDOW flag interfering with stdout capture.
+        use windows::Win32::Graphics::Printing::{
+            EnumPrintersW, PRINTER_ENUM_CONNECTIONS, PRINTER_ENUM_LOCAL, PRINTER_INFO_4W,
         };
+        use windows::core::PCWSTR;
+        unsafe {
+            let flags = PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS;
+            let mut needed: u32 = 0;
+            let mut count: u32 = 0;
+            // First call discovers the required buffer size (returns an error).
+            let _ = EnumPrintersW(flags, PCWSTR::null(), 4, None, &mut needed, &mut count);
+            if needed == 0 {
+                return Vec::new();
+            }
+            // Use a u64-backed buffer so it's 8-byte aligned for PRINTER_INFO_4W
+            // (which contains pointers).
+            let mut backing: Vec<u64> = vec![0u64; ((needed as usize) + 7) / 8];
+            let buf =
+                std::slice::from_raw_parts_mut(backing.as_mut_ptr() as *mut u8, needed as usize);
+            if EnumPrintersW(flags, PCWSTR::null(), 4, Some(buf), &mut needed, &mut count).is_err() {
+                return Vec::new();
+            }
+            let infos =
+                std::slice::from_raw_parts(backing.as_ptr() as *const PRINTER_INFO_4W, count as usize);
+            return infos
+                .iter()
+                .filter_map(|p| {
+                    if p.pPrinterName.is_null() {
+                        None
+                    } else {
+                        p.pPrinterName.to_string().ok()
+                    }
+                })
+                .filter(|s| !s.is_empty())
+                .collect();
+        }
     }
     #[cfg(not(target_os = "windows"))]
     {
