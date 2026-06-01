@@ -36,44 +36,53 @@ function localToApi(p: LocalProduct): ApiProduct {
 }
 
 /**
- * Offline-aware product source for the POS screen.
+ * Local-first product source for the POS screen.
  *
- * Tauri + online  → API products (same as web)
- * Tauri + offline → SQLite local cache
- * Web             → API products always
+ * In Tauri, the local SQLite cache is the PRIMARY source — it's instant and
+ * never blocks on the network (critical where internet is unreliable). We show
+ * SQLite as soon as it has data; the background sync worker keeps it current and
+ * fires `sync-complete` to refresh it. The API query still runs online to keep
+ * React Query warm and to serve the very first run before SQLite is populated.
  *
- * When coming back online in Tauri, the API query refetches automatically
- * and the background sync worker keeps SQLite current for the next outage.
+ * Tauri, SQLite has data → SQLite (online or offline)
+ * Tauri, SQLite empty     → API (first run) / empty when offline
+ * Web                     → API always
  */
 export function usePOSProducts(branchId?: number) {
   const qc = useQueryClient()
   const { isOnline, getProducts } = useOfflineStore()
-  const useOfflineSource = isTauri() && !isOnline
+  const inTauri = isTauri()
 
-  // Standard API query — runs when online or not in Tauri
+  // API query — runs online (and on web). In Tauri it's background revalidation.
   const apiQuery = useProducts(undefined, undefined, branchId)
 
-  // SQLite query — only active when offline in Tauri
+  // SQLite query — always active in Tauri so it's ready as the primary source.
   const sqliteQuery = useQuery<ApiProduct[]>({
     queryKey: ['offline-products-local'],
     queryFn: async () => {
       const products = await getProducts()
       return products.map(localToApi)
     },
-    enabled: useOfflineSource,
+    enabled: inTauri,
     staleTime: Infinity,
   })
 
-  // When reconnecting, invalidate the API query so it refetches fresh data
+  const sqliteHasData = (sqliteQuery.data?.length ?? 0) > 0
+  // Prefer SQLite whenever it has data (instant, no network wait), or whenever
+  // we're offline. Fall back to the API only before the first sync populates
+  // SQLite, or on the web.
+  const useLocal = inTauri && (sqliteHasData || !isOnline)
+
+  // When reconnecting, refetch the API query so the background sync/refresh runs.
   useEffect(() => {
-    if (isOnline && isTauri()) {
+    if (isOnline && inTauri) {
       qc.invalidateQueries({ queryKey: ['products'] })
     }
   }, [isOnline])
 
-  // When a background sync completes, refresh the local SQLite query
+  // When a background sync completes, refresh the local SQLite query.
   useEffect(() => {
-    if (!isTauri()) return
+    if (!inTauri) return
     let unlisten: (() => void) | undefined
     listen('sync-complete', () => {
       qc.invalidateQueries({ queryKey: ['offline-products-local'] })
@@ -81,10 +90,10 @@ export function usePOSProducts(branchId?: number) {
     return () => { unlisten?.() }
   }, [])
 
-  if (useOfflineSource) {
+  if (useLocal) {
     return {
       data: sqliteQuery.data ?? [],
-      isLoading: sqliteQuery.isLoading,
+      isLoading: sqliteQuery.isLoading && !sqliteHasData,
       isOfflineSource: true,
     }
   }
