@@ -136,10 +136,12 @@ async function sendToSerial(data: Uint8Array, baudRate = 9600): Promise<boolean>
 }
 
 // ── Route to the active transport ─────────────────────────────────────────────
-async function send(data: Uint8Array, settings: Settings): Promise<boolean> {
+// `printerName` overrides the default receipt printer (used for invoices).
+async function send(data: Uint8Array, settings: Settings, printerName?: string): Promise<boolean> {
   if (_bleChar) return sendViaBluetooth(data)
-  if (isTauri && settings.printerMode === 'cups' && settings.cupsName) {
-    return sendViaCups(data, settings.cupsName)
+  const cups = printerName || settings.cupsName
+  if (isTauri && settings.printerMode === 'cups' && cups) {
+    return sendViaCups(data, cups)
   }
   return sendToSerial(data, settings.printerBaudRate ?? 9600)
 }
@@ -166,5 +168,9 @@ export async function testPrint(settings: Settings): Promise<boolean> {
 // ── Main print function ───────────────────────────────────────────────────────
 export async function printESCPOS(sale: SaleInfo, settings: Settings): Promise<boolean> {
   const data = await renderReceipt(sale, settings)
-  return send(data, settings)
+  // Credit sales are invoices — route to the invoice printer if one is set,
+  // otherwise fall back to the receipt printer.
+  const isInvoice = sale.payment === 'credit'
+  const printer = isInvoice && settings.invoiceCupsName ? settings.invoiceCupsName : settings.cupsName
+  return send(data, settings, printer)
 }

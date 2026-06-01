@@ -139,6 +139,7 @@ export interface Settings {
   printerBaudRate: 9600 | 19200 | 38400 | 57600 | 115200
   printerMode: 'serial' | 'cups'
   cupsName: string
+  invoiceCupsName?: string   // optional separate printer for credit-sale invoices
   showVat: boolean
   showLogo: boolean
   smsReceipt: boolean

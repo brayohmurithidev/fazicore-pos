@@ -324,10 +324,10 @@ function PrinterSetupSection() {
           <div className="flex items-center justify-between py-2.5 border-b border-gray-100">
             <div>
               <div className="text-sm font-medium text-gray-900 flex items-center gap-1.5">
-                <PrinterIcon size={13} className="text-gray-400" /> System Printer
+                <PrinterIcon size={13} className="text-gray-400" /> Receipt Printer
               </div>
               <div className="text-xs text-gray-400 mt-0.5">
-                Printers registered in macOS Printers &amp; Scanners
+                Where sales receipts print (your thermal printer)
               </div>
             </div>
             <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${cupsReady ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
@@ -359,6 +359,28 @@ function PrinterSetupSection() {
           {cupsMsg && (
             <p className={`text-xs mt-1 px-0.5 ${cupsStatus === 'error' ? 'text-red-500' : 'text-green-600'}`}>{cupsMsg}</p>
           )}
+
+          {/* Invoice printer (optional, separate from receipts) */}
+          <div className="flex items-center justify-between py-2.5 border-t border-gray-100 mt-3">
+            <div>
+              <div className="text-sm font-medium text-gray-900 flex items-center gap-1.5">
+                <PrinterIcon size={13} className="text-gray-400" /> Invoice Printer
+              </div>
+              <div className="text-xs text-gray-400 mt-0.5">
+                Where credit-sale invoices print. Leave as “Same as receipt” to use the receipt printer.
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 mt-2 mb-1">
+            <select
+              value={settings.invoiceCupsName ?? ''}
+              onChange={(e) => update({ invoiceCupsName: e.target.value })}
+              className="flex-1 text-sm border border-gray-200 rounded-md px-2.5 py-1.5 bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-300"
+            >
+              <option value="">Same as receipt printer</option>
+              {cupsPrinters.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
         </>
       )}
 
