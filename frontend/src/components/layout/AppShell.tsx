@@ -362,7 +362,7 @@ export function AppShell() {
             />
           </form>
 
-          <div className="flex-1 md:flex-none" />
+          <div className="flex-1" />
 
           {/* New Sale — primary action, always within reach */}
           {canSell && (
