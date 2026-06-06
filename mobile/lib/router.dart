@@ -8,6 +8,7 @@ import 'features/customers/customer_detail_screen.dart';
 import 'features/customers/customers_screen.dart';
 import 'features/inventory/inventory_screen.dart';
 import 'features/sales/sale_detail_screen.dart';
+import 'features/sell/sell_screen.dart';
 import 'features/shell/home_shell.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -31,6 +32,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, state) =>
             SaleDetailScreen(orderId: int.parse(state.pathParameters['id']!)),
       ),
+      GoRoute(path: '/sell', builder: (_, __) => const SellScreen()),
       GoRoute(path: '/inventory', builder: (_, __) => const InventoryScreen()),
       GoRoute(path: '/customers', builder: (_, __) => const CustomersScreen()),
       GoRoute(

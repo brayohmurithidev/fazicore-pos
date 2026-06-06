@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../dashboard/dashboard_screen.dart';
 import '../products/products_screen.dart';
@@ -50,6 +51,11 @@ class _HomeShellState extends ConsumerState<HomeShell> {
 
     return Scaffold(
       body: IndexedStack(index: _index, children: _tabs),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => context.push('/sell'),
+        icon: const Icon(Icons.point_of_sale),
+        label: const Text('Sell'),
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
