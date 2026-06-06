@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../auth/auth_controller.dart';
+import '../sync/sync_status_card.dart';
 
 class MoreScreen extends ConsumerWidget {
   const MoreScreen({super.key});
@@ -13,6 +14,7 @@ class MoreScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('More')),
       body: ListView(
         children: [
+          const SyncStatusCard(),
           ListTile(
             leading: const Icon(Icons.warehouse_outlined),
             title: const Text('Inventory'),
