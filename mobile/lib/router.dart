@@ -4,7 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import 'features/auth/auth_controller.dart';
 import 'features/auth/login_screen.dart';
-import 'features/dashboard/dashboard_screen.dart';
+import 'features/sales/sale_detail_screen.dart';
+import 'features/shell/home_shell.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -20,8 +21,13 @@ final routerProvider = Provider<GoRouter>((ref) {
     },
     refreshListenable: _AuthListenable(ref),
     routes: [
-      GoRoute(path: '/', builder: (_, __) => const DashboardScreen()),
+      GoRoute(path: '/', builder: (_, __) => const HomeShell()),
       GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
+      GoRoute(
+        path: '/sales/:id',
+        builder: (_, state) =>
+            SaleDetailScreen(orderId: int.parse(state.pathParameters['id']!)),
+      ),
     ],
   );
 });
