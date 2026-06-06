@@ -4,6 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import 'features/auth/auth_controller.dart';
 import 'features/auth/login_screen.dart';
+import 'features/customers/customer_detail_screen.dart';
+import 'features/customers/customers_screen.dart';
+import 'features/inventory/inventory_screen.dart';
 import 'features/sales/sale_detail_screen.dart';
 import 'features/shell/home_shell.dart';
 
@@ -27,6 +30,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/sales/:id',
         builder: (_, state) =>
             SaleDetailScreen(orderId: int.parse(state.pathParameters['id']!)),
+      ),
+      GoRoute(path: '/inventory', builder: (_, __) => const InventoryScreen()),
+      GoRoute(path: '/customers', builder: (_, __) => const CustomersScreen()),
+      GoRoute(
+        path: '/customers/:id',
+        builder: (_, state) =>
+            CustomerDetailScreen(customerId: int.parse(state.pathParameters['id']!)),
       ),
     ],
   );

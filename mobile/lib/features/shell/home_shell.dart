@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../dashboard/dashboard_screen.dart';
 import '../products/products_screen.dart';
+import '../reports/reports_screen.dart';
 import '../sales/sales_screen.dart';
+import 'more_screen.dart';
 
 /// Bottom-nav container for the companion's main tabs.
 class HomeShell extends StatefulWidget {
@@ -19,6 +21,8 @@ class _HomeShellState extends State<HomeShell> {
     DashboardScreen(),
     ProductsScreen(),
     SalesScreen(),
+    ReportsScreen(),
+    MoreScreen(),
   ];
 
   @override
@@ -32,6 +36,8 @@ class _HomeShellState extends State<HomeShell> {
           NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Dashboard'),
           NavigationDestination(icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2), label: 'Products'),
           NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Sales'),
+          NavigationDestination(icon: Icon(Icons.bar_chart_outlined), selectedIcon: Icon(Icons.bar_chart), label: 'Reports'),
+          NavigationDestination(icon: Icon(Icons.more_horiz), label: 'More'),
         ],
       ),
     );
