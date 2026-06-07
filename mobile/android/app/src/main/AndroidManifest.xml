@@ -7,6 +7,15 @@
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
 
+    <!-- Bluetooth thermal printing (print_bluetooth_thermal). Legacy perms for
+         Android ≤11; CONNECT/SCAN for Android 12+. neverForLocation avoids the
+         location permission since we only talk to paired printers. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation"/>
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false"/>
+
     <application
         android:label="fazipos_mobile"
         android:name="${applicationName}"

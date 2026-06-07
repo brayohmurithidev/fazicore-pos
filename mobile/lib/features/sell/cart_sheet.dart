@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import 'cart_controller.dart';
-import 'checkout_sheet.dart';
+import 'checkout_screen.dart';
 
 Future<void> showCartSheet(BuildContext context) {
   return showModalBottomSheet<void>(
@@ -107,7 +107,9 @@ class _CartSheet extends ConsumerWidget {
                   ? null
                   : () {
                       Navigator.of(context).pop(); // close cart sheet
-                      showCheckoutSheet(context);
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const CheckoutScreen()),
+                      );
                     },
             ),
           ],

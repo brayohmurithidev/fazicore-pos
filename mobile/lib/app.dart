@@ -29,6 +29,16 @@ class FaziPosApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: appTheme,
       routerConfig: router,
+      // Bump everything up a notch for readability, on top of the user's system
+      // text-size preference (clamped so layouts don't break).
+      builder: (context, child) {
+        final sys = MediaQuery.textScalerOf(context).scale(1.0);
+        final scale = (sys * 1.12).clamp(1.0, 1.4);
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(scale)),
+          child: child!,
+        );
+      },
     );
   }
 }

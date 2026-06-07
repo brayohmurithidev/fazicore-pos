@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/api_client.dart';
 import '../../core/db/app_database.dart';
 import '../../core/providers.dart';
+import '../printing/printer_service.dart';
 
 const _kProductsSync = 'products_last_sync';
 const _kCustomersSync = 'customers_last_sync';
@@ -88,6 +89,8 @@ class SyncController extends StateNotifier<SyncState> {
       await _pushPending();
       await _pullProducts();
       await _pullCustomers();
+      await _pullOrgInfo();
+      await ref.read(printerProvider.notifier).reload(); // refresh receipt header
     } catch (e) {
       error = apiError(e);
     }
@@ -185,5 +188,16 @@ class SyncController extends StateNotifier<SyncState> {
     }
     await _db.replaceCustomers(rows);
     await _db.setMeta(_kCustomersSync, DateTime.now().toIso8601String());
+  }
+
+  /// Cache the business profile (GET /org/info) so receipts can print the same
+  /// header as the web/desktop app, even offline.
+  Future<void> _pullOrgInfo() async {
+    final res = await _api.dio.get('/org/info');
+    final j = res.data as Map<String, dynamic>;
+    await _db.setMeta('org_name', (j['name'] ?? '').toString());
+    await _db.setMeta('org_phone', (j['phone'] ?? '').toString());
+    await _db.setMeta('org_email', (j['email'] ?? '').toString());
+    await _db.setMeta('org_currency', (j['currency'] ?? 'KES').toString());
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/providers.dart';
+import '../sales/sales_repository.dart';
 
 class ReportProduct {
   final String name;
@@ -12,6 +13,15 @@ class ReportProduct {
       ReportProduct((j['name'] ?? '') as String, (j['qty'] ?? 0) as num, (j['revenue'] ?? 0) as num);
 }
 
+class PaymentLine {
+  final String method;
+  final int count;
+  final num total;
+  PaymentLine(this.method, this.count, this.total);
+  factory PaymentLine.fromJson(Map<String, dynamic> j) =>
+      PaymentLine((j['method'] ?? '').toString(), (j['count'] ?? 0) as int, (j['total'] ?? 0) as num);
+}
+
 class DailyReport {
   final String reportDate;
   final num totalRevenue;
@@ -20,12 +30,8 @@ class DailyReport {
   final num totalDiscount;
   final int totalVoids;
   final num voidAmount;
-  final num cashTotal;
-  final num mpesaTotal;
-  final num creditTotal;
-  final num splitTotal;
-  final num otherTotal;
   final List<ReportProduct> topProducts;
+  final List<PaymentLine> payments;
 
   DailyReport({
     required this.reportDate,
@@ -35,53 +41,111 @@ class DailyReport {
     required this.totalDiscount,
     required this.totalVoids,
     required this.voidAmount,
-    required this.cashTotal,
-    required this.mpesaTotal,
-    required this.creditTotal,
-    required this.splitTotal,
-    required this.otherTotal,
     required this.topProducts,
+    required this.payments,
   });
 
-  /// Non-zero payment-method buckets, as (label, amount) pairs.
-  List<(String, num)> get paymentBreakdown => [
-        ('Cash', cashTotal),
-        ('M-Pesa', mpesaTotal),
-        ('Credit', creditTotal),
-        ('Split', splitTotal),
-        ('Other', otherTotal),
-      ].where((e) => e.$2 > 0).toList();
+  /// Revenue minus discounts.
+  num get netSales => (totalRevenue - totalDiscount).clamp(0, double.infinity);
 
-  factory DailyReport.fromJson(Map<String, dynamic> j) => DailyReport(
-        reportDate: (j['report_date'] ?? '') as String,
-        totalRevenue: (j['total_revenue'] ?? 0) as num,
-        totalOrders: (j['total_orders'] ?? 0) as int,
-        avgOrderValue: (j['avg_order_value'] ?? 0) as num,
-        totalDiscount: (j['total_discount'] ?? 0) as num,
-        totalVoids: (j['total_voids'] ?? 0) as int,
-        voidAmount: (j['void_amount'] ?? 0) as num,
-        cashTotal: (j['cash_total'] ?? 0) as num,
-        mpesaTotal: (j['mpesa_total'] ?? 0) as num,
-        creditTotal: (j['credit_total'] ?? 0) as num,
-        splitTotal: (j['split_total'] ?? 0) as num,
-        otherTotal: (j['other_total'] ?? 0) as num,
-        topProducts: ((j['top_products'] ?? []) as List)
-            .map((e) => ReportProduct.fromJson(e as Map<String, dynamic>))
-            .toList(),
-      );
+  factory DailyReport.fromJson(Map<String, dynamic> j) {
+    final payments = ((j['by_payment'] ?? []) as List)
+        .map((e) => PaymentLine.fromJson(e as Map<String, dynamic>))
+        .where((p) => p.total > 0)
+        .toList()
+      ..sort((a, b) => b.total.compareTo(a.total));
+    return DailyReport(
+      reportDate: (j['report_date'] ?? '') as String,
+      totalRevenue: (j['total_revenue'] ?? 0) as num,
+      totalOrders: (j['total_orders'] ?? 0) as int,
+      avgOrderValue: (j['avg_order_value'] ?? 0) as num,
+      totalDiscount: (j['total_discount'] ?? 0) as num,
+      totalVoids: (j['total_voids'] ?? 0) as int,
+      voidAmount: (j['void_amount'] ?? 0) as num,
+      topProducts: ((j['top_products'] ?? []) as List)
+          .map((e) => ReportProduct.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      payments: payments,
+    );
+  }
 }
 
 /// Selected report date (defaults to today).
 final reportDateProvider = StateProvider.autoDispose<DateTime>((_) => DateTime.now());
 
-/// GET /reports/daily?report_date=YYYY-MM-DD
+/// Daily report computed client-side from /orders/ for the selected *local* day.
+/// This avoids the UTC day-boundary mismatch in /reports/daily (a sale just
+/// after local midnight would otherwise land in the previous UTC day).
 final dailyReportProvider = FutureProvider.autoDispose<DailyReport>((ref) async {
   final api = ref.read(apiClientProvider);
   final date = ref.watch(reportDateProvider);
-  final res = await api.dio.get('/reports/daily', queryParameters: {
-    'report_date': DateFormat('yyyy-MM-dd').format(date),
-  });
-  return DailyReport.fromJson(res.data as Map<String, dynamic>);
+  final day = DateTime(date.year, date.month, date.day);
+  // Over-fetch a day on each side so the local window is fully covered.
+  final from = day.subtract(const Duration(days: 1));
+  final to = day.add(const Duration(days: 1));
+
+  // /orders/ caps limit at 200 — paginate so busy days aggregate fully.
+  final orders = <Order>[];
+  var skip = 0;
+  const limit = 200;
+  while (true) {
+    final res = await api.dio.get('/orders/', queryParameters: {
+      'date_from': DateFormat('yyyy-MM-dd').format(from),
+      'date_to': DateFormat('yyyy-MM-dd').format(to),
+      'skip': skip,
+      'limit': limit,
+    });
+    final page = (res.data as List).map((e) => Order.fromJson(e as Map<String, dynamic>)).toList();
+    orders.addAll(page);
+    if (page.length < limit) break;
+    skip += limit;
+  }
+
+  bool sameDay(DateTime d) => d.year == day.year && d.month == day.month && d.day == day.day;
+  final dayOrders = orders.where((o) => sameDay(o.createdAt)).toList();
+  final completed = dayOrders.where((o) => o.status == 'completed').toList();
+  final voided = dayOrders.where((o) => o.isVoided).toList();
+
+  final revenue = completed.fold<num>(0, (s, o) => s + o.total);
+  final discount = completed.fold<num>(0, (s, o) => s + o.discountAmount);
+
+  // Payment breakdown.
+  final payMap = <String, ({int count, num total})>{};
+  for (final o in completed) {
+    final m = o.paymentMethod;
+    final cur = payMap[m] ?? (count: 0, total: 0);
+    payMap[m] = (count: cur.count + 1, total: cur.total + o.total);
+  }
+  final payments = payMap.entries
+      .map((e) => PaymentLine(e.key, e.value.count, e.value.total))
+      .where((p) => p.total > 0)
+      .toList()
+    ..sort((a, b) => b.total.compareTo(a.total));
+
+  // Best-selling products.
+  final prodMap = <String, ({num qty, num revenue})>{};
+  for (final o in completed) {
+    for (final it in o.items) {
+      final cur = prodMap[it.productName] ?? (qty: 0, revenue: 0);
+      prodMap[it.productName] = (qty: cur.qty + it.quantity, revenue: cur.revenue + it.total);
+    }
+  }
+  final topProducts = prodMap.entries
+      .map((e) => ReportProduct(e.key, e.value.qty, e.value.revenue))
+      .toList()
+    ..sort((a, b) => b.revenue.compareTo(a.revenue));
+
+  return DailyReport(
+    reportDate: DateFormat('yyyy-MM-dd').format(day),
+    totalRevenue: revenue,
+    totalOrders: completed.length,
+    avgOrderValue: completed.isEmpty ? 0 : revenue / completed.length,
+    totalDiscount: discount,
+    totalVoids: voided.length,
+    voidAmount: voided.fold<num>(0, (s, o) => s + o.total),
+    topProducts: topProducts.take(5).toList(),
+    payments: payments,
+  );
 });
 
 class TrendPoint {

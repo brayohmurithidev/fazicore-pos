@@ -16,6 +16,12 @@ class MoreScreen extends ConsumerWidget {
         children: [
           const SyncStatusCard(),
           ListTile(
+            leading: const Icon(Icons.inventory_2_outlined),
+            title: const Text('Products'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/products'),
+          ),
+          ListTile(
             leading: const Icon(Icons.warehouse_outlined),
             title: const Text('Inventory'),
             trailing: const Icon(Icons.chevron_right),
@@ -26,6 +32,12 @@ class MoreScreen extends ConsumerWidget {
             title: const Text('Customers'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/customers'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.print_outlined),
+            title: const Text('Receipt printer'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/printer'),
           ),
           const Divider(),
           ListTile(

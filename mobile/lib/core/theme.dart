@@ -18,6 +18,7 @@ class AppColors {
 
 final appTheme = ThemeData(
   useMaterial3: true,
+  fontFamily: 'Rubik',
   colorScheme: ColorScheme.fromSeed(
     seedColor: AppColors.brand,
     primary: AppColors.brand,
@@ -47,5 +48,15 @@ final appTheme = ThemeData(
     backgroundColor: Colors.white,
     surfaceTintColor: Colors.transparent,
     elevation: 1,
+  ),
+  // Outlined buttons: ink text (more prominent than orange-on-white) with a
+  // brand-coloured border + subtle tint so they still read as actionable.
+  outlinedButtonTheme: OutlinedButtonThemeData(
+    style: OutlinedButton.styleFrom(
+      foregroundColor: AppColors.ink,
+      backgroundColor: AppColors.brand.withValues(alpha: 0.06),
+      side: const BorderSide(color: AppColors.brand, width: 1.4),
+      textStyle: const TextStyle(fontWeight: FontWeight.w600),
+    ),
   ),
 );

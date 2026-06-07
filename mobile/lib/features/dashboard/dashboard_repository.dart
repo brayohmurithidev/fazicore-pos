@@ -2,27 +2,52 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 
+class PaymentStat {
+  final String method;
+  final int count;
+  final num total;
+  PaymentStat(this.method, this.count, this.total);
+}
+
 class DashboardSummary {
   final num todayRevenue;
   final int todayTransactions;
   final int lowStockCount;
   final List<TopProduct> topProducts;
+  final List<PaymentStat> payments;
 
   DashboardSummary({
     required this.todayRevenue,
     required this.todayTransactions,
     required this.lowStockCount,
     required this.topProducts,
+    required this.payments,
   });
 
-  factory DashboardSummary.fromJson(Map<String, dynamic> j) => DashboardSummary(
-        todayRevenue: (j['today_revenue'] ?? 0) as num,
-        todayTransactions: (j['today_transactions'] ?? 0) as int,
-        lowStockCount: (j['low_stock_count'] ?? 0) as int,
-        topProducts: ((j['top_products'] ?? []) as List)
-            .map((e) => TopProduct.fromJson(e as Map<String, dynamic>))
-            .toList(),
-      );
+  num get avgSale => todayTransactions == 0 ? 0 : todayRevenue / todayTransactions;
+
+  factory DashboardSummary.fromJson(Map<String, dynamic> j) {
+    final pb = (j['payment_breakdown'] ?? {}) as Map;
+    final payments = pb.entries
+        .map((e) => PaymentStat(
+              e.key.toString(),
+              (e.value['count'] ?? 0) as int,
+              (e.value['total'] ?? 0) as num,
+            ))
+        .where((p) => p.count > 0)
+        .toList()
+      ..sort((a, b) => b.total.compareTo(a.total));
+
+    return DashboardSummary(
+      todayRevenue: (j['today_revenue'] ?? 0) as num,
+      todayTransactions: (j['today_transactions'] ?? 0) as int,
+      lowStockCount: (j['low_stock_count'] ?? 0) as int,
+      topProducts: ((j['top_products'] ?? []) as List)
+          .map((e) => TopProduct.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      payments: payments,
+    );
+  }
 }
 
 class TopProduct {

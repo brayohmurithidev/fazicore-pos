@@ -41,6 +41,8 @@ class AuthController extends StateNotifier<AuthState> {
     final store = ref.read(secureStoreProvider);
     await store.saveSlug(slug.trim());
     await store.saveTokens(result.accessToken, result.refreshToken);
+    // Persist the cashier name so receipts can attribute the sale across restarts.
+    await ref.read(appDatabaseProvider).setMeta('cashier_name', result.user.name);
     state = AuthState(AuthStatus.loggedIn, result.user);
   }
 

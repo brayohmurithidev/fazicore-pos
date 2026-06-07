@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
+import '../../core/theme.dart';
 import '../dashboard/dashboard_screen.dart';
-import '../products/products_screen.dart';
 import '../reports/reports_screen.dart';
 import '../sales/sales_screen.dart';
+import '../sell/sell_screen.dart';
 import '../sync/connectivity.dart';
 import '../sync/sync_engine.dart';
 import 'more_screen.dart';
@@ -22,8 +22,8 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   int _index = 0;
 
   static const _tabs = [
+    SellScreen(),
     DashboardScreen(),
-    ProductsScreen(),
     SalesScreen(),
     ReportsScreen(),
     MoreScreen(),
@@ -65,23 +65,76 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
       }
     });
 
+    final onSell = _index == 0;
     return Scaffold(
       body: IndexedStack(index: _index, children: _tabs),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push('/sell'),
-        icon: const Icon(Icons.point_of_sale),
-        label: const Text('Sell'),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      floatingActionButton: SizedBox(
+        width: 64,
+        height: 64,
+        child: FloatingActionButton(
+          onPressed: () => setState(() => _index = 0),
+          backgroundColor: AppColors.brand,
+          foregroundColor: Colors.white,
+          elevation: onSell ? 6 : 3,
+          shape: const CircleBorder(),
+          child: const Icon(Icons.point_of_sale, size: 28),
+        ),
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Dashboard'),
-          NavigationDestination(icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2), label: 'Products'),
-          NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Sales'),
-          NavigationDestination(icon: Icon(Icons.bar_chart_outlined), selectedIcon: Icon(Icons.bar_chart), label: 'Reports'),
-          NavigationDestination(icon: Icon(Icons.more_horiz), label: 'More'),
-        ],
+      bottomNavigationBar: BottomAppBar(
+        height: 64,
+        color: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        shape: const CircularNotchedRectangle(),
+        notchMargin: 8,
+        padding: EdgeInsets.zero,
+        child: Row(
+          children: [
+            _NavItem(icon: Icons.dashboard_outlined, activeIcon: Icons.dashboard, label: 'Dashboard', index: 1, current: _index, onTap: _select),
+            _NavItem(icon: Icons.receipt_long_outlined, activeIcon: Icons.receipt_long, label: 'Sales', index: 2, current: _index, onTap: _select),
+            const SizedBox(width: 64), // notch gap for the Sell FAB
+            _NavItem(icon: Icons.bar_chart_outlined, activeIcon: Icons.bar_chart, label: 'Reports', index: 3, current: _index, onTap: _select),
+            _NavItem(icon: Icons.more_horiz, activeIcon: Icons.more_horiz, label: 'More', index: 4, current: _index, onTap: _select),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _select(int i) => setState(() => _index = i);
+}
+
+class _NavItem extends StatelessWidget {
+  final IconData icon;
+  final IconData activeIcon;
+  final String label;
+  final int index;
+  final int current;
+  final ValueChanged<int> onTap;
+  const _NavItem({
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+    required this.index,
+    required this.current,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = current == index;
+    final color = selected ? AppColors.brand : Colors.grey.shade500;
+    return Expanded(
+      child: InkWell(
+        onTap: () => onTap(index),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(selected ? activeIcon : icon, color: color, size: 22),
+            const SizedBox(height: 2),
+            Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w500)),
+          ],
+        ),
       ),
     );
   }
