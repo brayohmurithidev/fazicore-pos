@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api_client.dart';
 import '../../core/format.dart';
+import '../../core/theme.dart';
 import '../auth/auth_controller.dart';
 import 'dashboard_repository.dart';
 
@@ -45,7 +46,7 @@ class DashboardScreen extends ConsumerWidget {
             children: [
               Row(
                 children: [
-                  _StatCard(label: "Today's Revenue", value: kes(d.todayRevenue), color: const Color(0xFF059669)),
+                  _StatCard(label: "Today's Revenue", value: kes(d.todayRevenue)),
                   const SizedBox(width: 12),
                   _StatCard(label: 'Transactions', value: '${d.todayTransactions}'),
                 ],
@@ -56,7 +57,7 @@ class DashboardScreen extends ConsumerWidget {
                   _StatCard(
                     label: 'Low Stock',
                     value: '${d.lowStockCount}',
-                    color: d.lowStockCount > 0 ? const Color(0xFFb45309) : null,
+                    color: d.lowStockCount > 0 ? AppColors.warning : null,
                   ),
                   const SizedBox(width: 12),
                   const Expanded(child: SizedBox()),

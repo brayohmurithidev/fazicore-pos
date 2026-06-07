@@ -18,7 +18,7 @@ class HomeShell extends ConsumerStatefulWidget {
   ConsumerState<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends ConsumerState<HomeShell> {
+class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserver {
   int _index = 0;
 
   static const _tabs = [
@@ -32,10 +32,26 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Initial sync once we're logged in (the shell only mounts post-login).
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(syncControllerProvider.notifier).syncNow();
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Pull the latest catalog/customers (and flush any queued sales) each time
+    // the app returns to the foreground, so edits made elsewhere show up.
+    if (state == AppLifecycleState.resumed) {
+      ref.read(syncControllerProvider.notifier).syncNow();
+    }
   }
 
   @override

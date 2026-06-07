@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api_client.dart';
 import '../../core/format.dart';
+import '../../core/theme.dart';
 import 'customers_repository.dart';
 
 class CustomersScreen extends ConsumerStatefulWidget {
@@ -105,7 +106,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                           subtitle: c.phone != null ? Text(c.phone!) : null,
                           trailing: c.creditBalance > 0
                               ? Text('Owes ${kes(c.creditBalance)}',
-                                  style: const TextStyle(color: Color(0xFFb45309), fontWeight: FontWeight.w600))
+                                  style: const TextStyle(color: AppColors.warning, fontWeight: FontWeight.w600))
                               : Text(kes(c.totalSpent), style: const TextStyle(color: Colors.grey)),
                         ),
                       );

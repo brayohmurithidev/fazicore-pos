@@ -41,12 +41,14 @@ class SaleDetailScreen extends ConsumerWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFdc2626).withValues(alpha: 0.12),
+                    color: Theme.of(context).colorScheme.errorContainer,
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(o.status.toUpperCase(),
-                      style: const TextStyle(
-                          fontSize: 11, color: Color(0xFFdc2626), fontWeight: FontWeight.w700)),
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: Theme.of(context).colorScheme.onErrorContainer,
+                          fontWeight: FontWeight.w700)),
                 ),
               ),
             const SizedBox(height: 16),

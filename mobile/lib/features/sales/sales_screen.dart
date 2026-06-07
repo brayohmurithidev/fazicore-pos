@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api_client.dart';
 import '../../core/format.dart';
+import '../../core/widgets/mpesa_logo.dart';
 import 'sales_repository.dart';
 
 class SalesScreen extends ConsumerWidget {
@@ -99,20 +100,23 @@ class PaymentChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (label, color) = switch (method) {
-      'cash' => ('Cash', const Color(0xFF059669)),
-      'mpesa' => ('M-Pesa', const Color(0xFF16a34a)),
-      'credit' => ('Credit', const Color(0xFFb45309)),
-      'split' => ('Split', const Color(0xFF7c3aed)),
-      _ => (method.isEmpty ? 'Other' : method, Colors.grey),
+    if (method == 'mpesa') return const MpesaLogo(height: 16);
+
+    final label = switch (method) {
+      'cash' => 'Cash',
+      'credit' => 'Credit',
+      'split' => 'Split',
+      _ => method.isEmpty ? 'Other' : method,
     };
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: scheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+      child: Text(label,
+          style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
     );
   }
 }

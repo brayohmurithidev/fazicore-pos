@@ -6,8 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_client.dart';
 import '../../core/format.dart';
 import 'cart_controller.dart';
+import 'cart_sheet.dart';
 import 'catalog_providers.dart';
 import 'checkout_sheet.dart';
+import 'scan_screen.dart';
 
 class SellScreen extends ConsumerStatefulWidget {
   const SellScreen({super.key});
@@ -43,6 +45,13 @@ class _SellScreenState extends ConsumerState<SellScreen> {
       appBar: AppBar(
         title: const Text('New Sale'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.qr_code_scanner),
+            tooltip: 'Scan barcode',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ScanScreen()),
+            ),
+          ),
           if (!cart.isEmpty)
             IconButton(
               icon: const Icon(Icons.remove_shopping_cart_outlined),
@@ -99,11 +108,11 @@ class _SellScreenState extends ConsumerState<SellScreen> {
                         trailing: qty > 0
                             ? CircleAvatar(
                                 radius: 14,
-                                backgroundColor: const Color(0xFFf5a020),
+                                backgroundColor: Theme.of(context).colorScheme.primary,
                                 child: Text('$qty',
                                     style: const TextStyle(fontSize: 13, color: Colors.white)),
                               )
-                            : const Icon(Icons.add_circle_outline, color: Color(0xFFf5a020)),
+                            : Icon(Icons.add_circle_outline, color: Theme.of(context).colorScheme.primary),
                       ),
                     );
                   },
@@ -133,15 +142,28 @@ class _CartBar extends ConsumerWidget {
           child: Row(
             children: [
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('${cart.itemCount} item${cart.itemCount == 1 ? '' : 's'}',
-                        style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                    Text(kes(cart.subtotal),
-                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                  ],
+                child: InkWell(
+                  onTap: () => showCartSheet(context),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('${cart.itemCount} item${cart.itemCount == 1 ? '' : 's'} · view',
+                                style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                            Text(kes(cart.subtotal),
+                                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                        const Icon(Icons.keyboard_arrow_up, color: Colors.grey),
+                      ],
+                    ),
+                  ),
                 ),
               ),
               FilledButton.icon(

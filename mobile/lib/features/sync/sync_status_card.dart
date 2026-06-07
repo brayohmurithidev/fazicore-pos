@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
+import '../../core/theme.dart';
 import 'connectivity.dart';
 import 'sync_engine.dart';
 
@@ -24,7 +25,7 @@ class SyncStatusCard extends ConsumerWidget {
             Row(
               children: [
                 Icon(online ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
-                    size: 20, color: online ? const Color(0xFF059669) : Colors.grey),
+                    size: 20, color: online ? Colors.grey.shade600 : AppColors.warning),
                 const SizedBox(width: 8),
                 Text(online ? 'Online' : 'Offline',
                     style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -47,7 +48,8 @@ class SyncStatusCard extends ConsumerWidget {
             _line('Last synced', lastSync != null ? dateTimeShort(lastSync) : 'Never'),
             if (sync.lastError != null) ...[
               const SizedBox(height: 8),
-              Text(sync.lastError!, style: const TextStyle(color: Color(0xFFdc2626), fontSize: 12)),
+              Text(sync.lastError!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 12)),
             ],
           ],
         ),
@@ -64,7 +66,7 @@ class SyncStatusCard extends ConsumerWidget {
             Text(value,
                 style: TextStyle(
                   fontWeight: highlight ? FontWeight.w700 : FontWeight.w500,
-                  color: highlight ? const Color(0xFFb45309) : null,
+                  color: highlight ? AppColors.warning : null,
                 )),
           ],
         ),

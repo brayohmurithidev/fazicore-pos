@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/theme.dart';
 import 'features/auth/auth_controller.dart';
 import 'router.dart';
 
@@ -16,8 +17,8 @@ class FaziPosApp extends ConsumerWidget {
       return const MaterialApp(
         debugShowCheckedModeBanner: false,
         home: Scaffold(
-          backgroundColor: Color(0xFF1e293b),
-          body: Center(child: CircularProgressIndicator(color: Color(0xFFf5a020))),
+          backgroundColor: AppColors.ink,
+          body: Center(child: CircularProgressIndicator(color: AppColors.brand)),
         ),
       );
     }
@@ -26,14 +27,7 @@ class FaziPosApp extends ConsumerWidget {
     return MaterialApp.router(
       title: 'FaziPOS',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFf5a020),
-          primary: const Color(0xFFf5a020),
-        ),
-        scaffoldBackgroundColor: const Color(0xFFf6f7f8),
-      ),
+      theme: appTheme,
       routerConfig: router,
     );
   }

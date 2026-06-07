@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api_client.dart';
+import '../../core/theme.dart';
 import 'inventory_repository.dart';
 
 class InventoryScreen extends ConsumerWidget {
@@ -76,7 +77,7 @@ class InventoryScreen extends ConsumerWidget {
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: it.isLow ? const Color(0xFFb45309) : null,
+                        color: it.isLow ? AppColors.warning : null,
                       ),
                     ),
                   ),

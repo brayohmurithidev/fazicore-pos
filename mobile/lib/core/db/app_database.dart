@@ -85,6 +85,9 @@ class AppDatabase extends _$AppDatabase {
         .get();
   }
 
+  Future<LocalProduct?> productByBarcode(String barcode) =>
+      (select(localProducts)..where((t) => t.barcode.equals(barcode))).getSingleOrNull();
+
   Future<void> replaceProducts(List<LocalProductsCompanion> rows) async {
     await batch((b) {
       b.deleteAll(localProducts);

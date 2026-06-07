@@ -29,8 +29,8 @@ class MoreScreen extends ConsumerWidget {
           ),
           const Divider(),
           ListTile(
-            leading: const Icon(Icons.logout, color: Color(0xFFdc2626)),
-            title: const Text('Sign out', style: TextStyle(color: Color(0xFFdc2626))),
+            leading: Icon(Icons.logout, color: Theme.of(context).colorScheme.error),
+            title: Text('Sign out', style: TextStyle(color: Theme.of(context).colorScheme.error)),
             onTap: () => ref.read(authControllerProvider.notifier).logout(),
           ),
         ],

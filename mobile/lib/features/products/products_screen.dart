@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api_client.dart';
 import '../../core/format.dart';
+import '../../core/theme.dart';
 import 'products_repository.dart';
 
 class ProductsScreen extends ConsumerStatefulWidget {
@@ -131,7 +132,7 @@ class _ProductTile extends StatelessWidget {
                 '${p.stockQuantity} ${p.unit}',
                 style: TextStyle(
                   fontSize: 12,
-                  color: p.isLowStock ? const Color(0xFFb45309) : Colors.grey,
+                  color: p.isLowStock ? AppColors.warning : Colors.grey,
                   fontWeight: p.isLowStock ? FontWeight.w600 : FontWeight.normal,
                 ),
               )

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_client.dart';
 import '../../core/db/app_database.dart';
 import '../../core/format.dart';
+import '../../core/widgets/mpesa_logo.dart';
 import '../sync/connectivity.dart';
 import '../sync/sync_engine.dart';
 import 'cart_controller.dart';
@@ -173,8 +174,8 @@ class _CheckoutSheetState extends ConsumerState<_CheckoutSheet> {
             const SizedBox(height: 16),
             SegmentedButton<PayMethod>(
               segments: const [
-                ButtonSegment(value: PayMethod.cash, label: Text('Cash'), icon: Icon(Icons.payments_outlined)),
-                ButtonSegment(value: PayMethod.mpesa, label: Text('M-Pesa')),
+                ButtonSegment(value: PayMethod.cash, label: Text('Cash')),
+                ButtonSegment(value: PayMethod.mpesa, label: MpesaLogo(height: 16)),
                 ButtonSegment(value: PayMethod.credit, label: Text('Credit')),
                 ButtonSegment(value: PayMethod.split, label: Text('Split')),
               ],
@@ -188,7 +189,7 @@ class _CheckoutSheetState extends ConsumerState<_CheckoutSheet> {
             ..._methodFields(),
             if (_error != null) ...[
               const SizedBox(height: 12),
-              Text(_error!, style: const TextStyle(color: Color(0xFFdc2626))),
+              Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
             ],
             const SizedBox(height: 16),
             SizedBox(
@@ -216,7 +217,7 @@ class _CheckoutSheetState extends ConsumerState<_CheckoutSheet> {
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text('Change: ${kes(_change)}',
-                  style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF059669))),
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
             ),
           _customerPicker(optional: true),
         ];

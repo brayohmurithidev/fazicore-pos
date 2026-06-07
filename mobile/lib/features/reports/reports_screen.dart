@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/api_client.dart';
 import '../../core/format.dart';
+import '../../core/theme.dart';
 import 'reports_repository.dart';
 
 class ReportsScreen extends ConsumerWidget {
@@ -61,7 +62,7 @@ class ReportsScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(16),
             children: [
               Row(children: [
-                _Stat(label: 'Revenue', value: kes(d.totalRevenue), color: const Color(0xFF059669)),
+                _Stat(label: 'Revenue', value: kes(d.totalRevenue)),
                 const SizedBox(width: 12),
                 _Stat(label: 'Orders', value: '${d.totalOrders}'),
               ]),
@@ -72,7 +73,7 @@ class ReportsScreen extends ConsumerWidget {
                 _Stat(
                   label: 'Voids',
                   value: '${d.totalVoids}',
-                  color: d.totalVoids > 0 ? const Color(0xFFdc2626) : null,
+                  color: d.totalVoids > 0 ? Theme.of(context).colorScheme.error : null,
                 ),
               ]),
               const SizedBox(height: 24),
@@ -155,10 +156,10 @@ class _TrendChart extends ConsumerWidget {
                   for (var i = 0; i < points.length; i++) FlSpot(i.toDouble(), points[i].revenue.toDouble()),
                 ],
                 isCurved: true,
-                color: const Color(0xFF059669),
+                color: AppColors.brand,
                 barWidth: 3,
                 dotData: const FlDotData(show: true),
-                belowBarData: BarAreaData(show: true, color: const Color(0xFF059669).withValues(alpha: 0.12)),
+                belowBarData: BarAreaData(show: true, color: AppColors.brand.withValues(alpha: 0.12)),
               ),
             ],
           ),
@@ -203,7 +204,7 @@ class _PaymentChart extends StatelessWidget {
             BarChartGroupData(x: i, barRods: [
               BarChartRodData(
                 toY: data[i].$2.toDouble(),
-                color: const Color(0xFF059669),
+                color: AppColors.brand,
                 width: 22,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
               ),

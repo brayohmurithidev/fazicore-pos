@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api_client.dart';
 import '../../core/format.dart';
+import '../../core/theme.dart';
 import 'customers_repository.dart';
 
 class CustomerDetailScreen extends ConsumerWidget {
@@ -55,7 +56,7 @@ class CustomerDetailScreen extends ConsumerWidget {
                 _Stat(
                   label: 'Credit Balance',
                   value: kes(c.creditBalance),
-                  color: c.creditBalance > 0 ? const Color(0xFFb45309) : null,
+                  color: c.creditBalance > 0 ? AppColors.warning : null,
                 ),
               ],
             ),
