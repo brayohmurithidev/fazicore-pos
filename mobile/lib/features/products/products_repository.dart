@@ -70,3 +70,32 @@ final productsProvider = FutureProvider.autoDispose<List<Product>>((ref) async {
       .map((e) => Product.fromJson(e as Map<String, dynamic>))
       .toList();
 });
+
+class Category {
+  final int id;
+  final String name;
+  final int productCount;
+  Category(this.id, this.name, [this.productCount = 0]);
+  factory Category.fromJson(Map<String, dynamic> j) =>
+      Category(j['id'] as int, (j['name'] ?? '').toString(), (j['product_count'] ?? 0) as int);
+}
+
+/// GET /categories/ — for the product form's category picker.
+final categoriesProvider = FutureProvider.autoDispose<List<Category>>((ref) async {
+  final api = ref.read(apiClientProvider);
+  final res = await api.dio.get('/categories/');
+  return (res.data as List).map((e) => Category.fromJson(e as Map<String, dynamic>)).toList();
+});
+
+/// Create (POST) or update (PATCH) a product. Returns the saved product id.
+Future<int> saveProduct(WidgetRef ref, {int? id, required Map<String, dynamic> data}) async {
+  final api = ref.read(apiClientProvider);
+  final res = id == null
+      ? await api.dio.post('/products/', data: data)
+      : await api.dio.patch('/products/$id', data: data);
+  return res.data['id'] as int;
+}
+
+Future<void> deleteProduct(WidgetRef ref, int id) async {
+  await ref.read(apiClientProvider).dio.delete('/products/$id');
+}

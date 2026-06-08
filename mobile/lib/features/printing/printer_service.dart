@@ -10,6 +10,8 @@ const _kName = 'printer_name';
 const _kPaper = 'printer_paper';
 const _kAddress = 'printer_address';
 const _kFooter = 'printer_footer';
+const _kKraPin = 'biz_kra_pin';
+const _kVat = 'biz_vat_number';
 
 class PrinterSettings {
   final String? mac;
@@ -21,6 +23,8 @@ class PrinterSettings {
   // Manual extras.
   final String address;
   final String footer;
+  final String kraPin;
+  final String vatNumber;
   final int paper; // 58 or 80
 
   const PrinterSettings({
@@ -31,6 +35,8 @@ class PrinterSettings {
     this.email = '',
     this.address = '',
     this.footer = 'Thank you!',
+    this.kraPin = '',
+    this.vatNumber = '',
     this.paper = 80,
   });
 
@@ -44,6 +50,8 @@ class PrinterSettings {
     String? email,
     String? address,
     String? footer,
+    String? kraPin,
+    String? vatNumber,
     int? paper,
   }) =>
       PrinterSettings(
@@ -54,6 +62,8 @@ class PrinterSettings {
         email: email ?? this.email,
         address: address ?? this.address,
         footer: footer ?? this.footer,
+        kraPin: kraPin ?? this.kraPin,
+        vatNumber: vatNumber ?? this.vatNumber,
         paper: paper ?? this.paper,
       );
 }
@@ -87,8 +97,17 @@ class PrinterController extends StateNotifier<PrinterSettings> {
       email: await db.getMeta('org_email') ?? '',
       address: await db.getMeta(_kAddress) ?? '',
       footer: (footer == null || footer.isEmpty) ? 'Thank you!' : footer,
+      kraPin: await db.getMeta(_kKraPin) ?? '',
+      vatNumber: await db.getMeta(_kVat) ?? '',
       paper: int.tryParse(paper ?? '') ?? 80,
     );
+  }
+
+  Future<void> setTaxInfo({String? kraPin, String? vatNumber}) async {
+    final db = ref.read(appDatabaseProvider);
+    if (kraPin != null) await db.setMeta(_kKraPin, kraPin);
+    if (vatNumber != null) await db.setMeta(_kVat, vatNumber);
+    state = state.copyWith(kraPin: kraPin, vatNumber: vatNumber);
   }
 
   Future<void> selectPrinter({required String mac, required String name}) async {
@@ -157,6 +176,8 @@ class PrinterController extends StateNotifier<PrinterSettings> {
         address: state.address,
         phone: state.phone,
         email: state.email,
+        kraPin: state.kraPin,
+        vatNumber: state.vatNumber,
         footer: state.footer,
         ref: 'TEST',
         dateTime: DateTime.now(),

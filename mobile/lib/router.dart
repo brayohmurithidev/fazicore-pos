@@ -7,10 +7,18 @@ import 'features/auth/login_screen.dart';
 import 'features/customers/customer_detail_screen.dart';
 import 'features/customers/customers_screen.dart';
 import 'features/inventory/inventory_screen.dart';
+import 'features/manage/branches_screen.dart';
+import 'features/manage/business_info_screen.dart';
+import 'features/manage/categories_screen.dart';
+import 'features/manage/subscription_screen.dart';
+import 'features/manage/users_screen.dart';
 import 'features/printing/printer_settings_screen.dart';
 import 'features/products/products_screen.dart';
 import 'features/sales/sale_detail_screen.dart';
+import 'features/shell/account_settings_screen.dart';
+import 'features/shell/help_screen.dart';
 import 'features/shell/home_shell.dart';
+import 'features/shell/manage_store_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -33,7 +41,15 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, state) =>
             SaleDetailScreen(orderId: int.parse(state.pathParameters['id']!)),
       ),
+      GoRoute(path: '/manage', builder: (_, __) => const ManageStoreScreen()),
+      GoRoute(path: '/account-settings', builder: (_, __) => const AccountSettingsScreen()),
+      GoRoute(path: '/help', builder: (_, __) => const HelpScreen()),
       GoRoute(path: '/products', builder: (_, __) => const ProductsScreen()),
+      GoRoute(path: '/categories', builder: (_, __) => const CategoriesScreen()),
+      GoRoute(path: '/users', builder: (_, __) => const UsersScreen()),
+      GoRoute(path: '/branches', builder: (_, __) => const BranchesScreen()),
+      GoRoute(path: '/business', builder: (_, __) => const BusinessInfoScreen()),
+      GoRoute(path: '/subscription', builder: (_, __) => const SubscriptionScreen()),
       GoRoute(path: '/inventory', builder: (_, __) => const InventoryScreen()),
       GoRoute(path: '/printer', builder: (_, __) => const PrinterSettingsScreen()),
       GoRoute(path: '/customers', builder: (_, __) => const CustomersScreen()),

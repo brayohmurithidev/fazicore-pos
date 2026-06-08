@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_client.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
+import '../manage/plan_provider.dart';
+import 'product_form_screen.dart';
 import 'products_repository.dart';
 
 class ProductsScreen extends ConsumerStatefulWidget {
@@ -36,8 +38,22 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
   @override
   Widget build(BuildContext context) {
     final async = ref.watch(productsProvider);
+    final canAdd = ref.watch(planProvider).valueOrNull?.canAddProduct ?? true;
     return Scaffold(
       appBar: AppBar(title: const Text('Products')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          if (!canAdd) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text('Product limit reached for your plan. Upgrade on the web admin.')));
+            return;
+          }
+          Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProductFormScreen()));
+        },
+        icon: const Icon(Icons.add),
+        label: const Text('Add product'),
+        backgroundColor: canAdd ? null : Colors.grey,
+      ),
       body: Column(
         children: [
           Padding(
@@ -119,6 +135,9 @@ class _ProductTile extends StatelessWidget {
     return Card(
       margin: EdgeInsets.zero,
       child: ListTile(
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => ProductFormScreen(product: p)),
+        ),
         title: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis),
         subtitle: subtitleParts.isEmpty ? null : Text(subtitleParts.join(' · ')),
         trailing: Column(

@@ -333,7 +333,7 @@ class _CartBar extends StatelessWidget {
                 Text('${cart.itemCount} item${cart.itemCount == 1 ? '' : 's'}',
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16)),
                 const Spacer(),
-                Text('Total: ${kes(cart.subtotal)}',
+                Text('Total: ${kes(cart.total)}',
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
               ],
             ),

@@ -5,10 +5,12 @@ import '../../core/api_client.dart';
 import '../../core/db/app_database.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/features.dart';
 import '../../core/theme.dart';
 import '../../core/widgets/app_select.dart';
 import '../../core/widgets/mpesa_logo.dart';
 import '../auth/auth_controller.dart';
+import '../manage/plan_provider.dart';
 import '../printing/printer_service.dart';
 import '../printing/receipt.dart';
 import '../sync/connectivity.dart';
@@ -28,7 +30,7 @@ class CheckoutScreen extends ConsumerStatefulWidget {
 }
 
 class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
-  late final num _total = ref.read(cartProvider).subtotal;
+  late final num _total = ref.read(cartProvider).total;
   int _tab = 0; // 0 = cash, 1 = non-cash
 
   // Cash entry.
@@ -206,8 +208,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               Row(
                 children: [
                   _methodCard(PayMethod.mpesa, const MpesaLogo(height: 20)),
-                  const SizedBox(width: 12),
-                  _methodCard(PayMethod.credit, const Text('Credit', style: TextStyle(fontWeight: FontWeight.w600))),
+                  if (planAllows(ref, Feat.creditSystem)) ...[
+                    const SizedBox(width: 12),
+                    _methodCard(PayMethod.credit, const Text('Credit', style: TextStyle(fontWeight: FontWeight.w600))),
+                  ],
                 ],
               ),
               const SizedBox(height: 20),
@@ -264,22 +268,24 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               child: Text('M-Pesa portion: ${kes(mpesaPortion)}',
                   style: const TextStyle(color: AppColors.brand, fontWeight: FontWeight.w600)),
             ),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              icon: _stkBusy
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.smartphone),
-              label: Text(_stkBusy ? 'Waiting for payment…' : 'Push STK to phone'),
-              onPressed: (online && !_stkBusy && !_saving) ? _pushStk : null,
+          if (planAllows(ref, Feat.mpesaStk)) ...[
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                icon: _stkBusy
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.smartphone),
+                label: Text(_stkBusy ? 'Waiting for payment…' : 'Push STK to phone'),
+                onPressed: (online && !_stkBusy && !_saving) ? _pushStk : null,
+              ),
             ),
-          ),
-          if (!online)
-            const Padding(
-              padding: EdgeInsets.only(top: 6),
-              child: Text('STK needs internet. Record the M-Pesa code manually below while offline.',
-                  style: TextStyle(color: Colors.grey, fontSize: 12)),
-            ),
+            if (!online)
+              const Padding(
+                padding: EdgeInsets.only(top: 6),
+                child: Text('STK needs internet. Record the M-Pesa code manually below while offline.',
+                    style: TextStyle(color: Colors.grey, fontSize: 12)),
+              ),
+          ],
           if (_stkMsg != null)
             Padding(
               padding: const EdgeInsets.only(top: 6),
@@ -461,9 +467,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 'product_sku': l.product.sku,
                 'quantity': l.qty,
                 'unit_price': l.product.price,
+                'discount_amount': l.lineDiscount,
               })
           .toList(),
-      'discount_amount': 0,
+      'discount_amount': cart.cartDiscountAmt,
       'payment_method': method,
       'amount_paid': amountPaid,
       if (cashAmount > 0) 'cash_amount': cashAmount,
@@ -482,13 +489,16 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       address: s.address,
       phone: s.phone,
       email: s.email,
+      kraPin: s.kraPin,
+      vatNumber: s.vatNumber,
       footer: s.footer,
       ref: ref,
       cashier: cashier,
       dateTime: DateTime.now(),
       items: cart.items.map((l) => ReceiptLine(l.product.name, l.qty, l.product.price, l.lineTotal)).toList(),
       subtotal: cart.subtotal,
-      total: cart.subtotal,
+      discount: cart.cartDiscountAmt,
+      total: cart.total,
       paymentMethod: method,
       amountPaid: amountPaid,
       change: change,

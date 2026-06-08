@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/api_client.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
+import '../manage/customer_form_screen.dart';
 import 'customers_repository.dart';
 
 class CustomersScreen extends ConsumerStatefulWidget {
@@ -39,6 +40,13 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
     final async = ref.watch(customersProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Customers')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const CustomerFormScreen()),
+        ),
+        icon: const Icon(Icons.add),
+        label: const Text('Add customer'),
+      ),
       body: Column(
         children: [
           Padding(

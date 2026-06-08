@@ -16,10 +16,7 @@ class FaziPosApp extends ConsumerWidget {
     if (auth.status == AuthStatus.unknown) {
       return const MaterialApp(
         debugShowCheckedModeBanner: false,
-        home: Scaffold(
-          backgroundColor: AppColors.ink,
-          body: Center(child: CircularProgressIndicator(color: AppColors.brand)),
-        ),
+        home: _SplashScreen(),
       );
     }
 
@@ -39,6 +36,50 @@ class FaziPosApp extends ConsumerWidget {
           child: child!,
         );
       },
+    );
+  }
+}
+
+class _SplashScreen extends StatelessWidget {
+  const _SplashScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.ink,
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                color: AppColors.brand,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(color: AppColors.brand.withValues(alpha: 0.4), blurRadius: 24, spreadRadius: 2),
+                ],
+              ),
+              child: const Icon(Icons.point_of_sale, color: Colors.white, size: 52),
+            ),
+            const SizedBox(height: 24),
+            const Text.rich(
+              TextSpan(children: [
+                TextSpan(text: 'FAZI', style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                TextSpan(text: 'LABS', style: TextStyle(color: AppColors.brand, fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: 1)),
+              ]),
+            ),
+            const SizedBox(height: 4),
+            const Text('POS', style: TextStyle(color: Color(0xFF94a3b8), fontSize: 12, letterSpacing: 6)),
+            const SizedBox(height: 40),
+            const SizedBox(
+              width: 24, height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.brand),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

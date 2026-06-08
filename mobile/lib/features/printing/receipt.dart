@@ -18,6 +18,8 @@ class Receipt {
   final String address;
   final String phone;
   final String email;
+  final String kraPin;
+  final String vatNumber;
   final String footer;
   final String? ref;
   final String? cashier;
@@ -36,6 +38,8 @@ class Receipt {
     this.address = '',
     this.phone = '',
     this.email = '',
+    this.kraPin = '',
+    this.vatNumber = '',
     this.footer = 'Thank you!',
     this.ref,
     this.cashier,
@@ -68,6 +72,12 @@ Future<List<int>> buildReceiptBytes(Receipt r, {int paperMm = 80}) async {
   }
   if (r.email.isNotEmpty) {
     bytes += g.text(r.email, styles: const PosStyles(align: PosAlign.center));
+  }
+  if (r.kraPin.isNotEmpty) {
+    bytes += g.text('PIN: ${r.kraPin}', styles: const PosStyles(align: PosAlign.center));
+  }
+  if (r.vatNumber.isNotEmpty) {
+    bytes += g.text('VAT: ${r.vatNumber}', styles: const PosStyles(align: PosAlign.center));
   }
   bytes += g.hr();
   bytes += g.text(_dt.format(r.dateTime));
@@ -133,6 +143,8 @@ String receiptToText(Receipt r) {
   if (r.address.isNotEmpty) b.writeln(r.address);
   if (r.phone.isNotEmpty) b.writeln('Tel: ${r.phone}');
   if (r.email.isNotEmpty) b.writeln(r.email);
+  if (r.kraPin.isNotEmpty) b.writeln('PIN: ${r.kraPin}');
+  if (r.vatNumber.isNotEmpty) b.writeln('VAT: ${r.vatNumber}');
   b.writeln('—————————————');
   b.writeln(_dt.format(r.dateTime));
   if (r.ref != null && r.ref!.isNotEmpty) b.writeln('Receipt: ${r.ref}');

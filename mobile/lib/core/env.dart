@@ -6,4 +6,7 @@ class Env {
   );
 
   static String get apiV1 => '$apiBaseUrl/api/v1';
+
+  /// Keep in step with pubspec.yaml `version:`.
+  static const appVersion = '0.1.0';
 }
