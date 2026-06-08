@@ -10,11 +10,13 @@ from app.core.database import get_session
 from app.core.deps import get_current_active_user
 from app.core.features import FEATURE_CATALOG, resolve_flags
 from app.models.branch import Branch
+from app.models.invoice import SubscriptionInvoice
 from app.models.mpesa import MpesaTransaction, MpesaTransactionStatus, MpesaTransactionType
 from app.models.organization import Organization, OrgStatus, SubscriptionPlan
 from app.models.product import Product
 from app.models.subscription import BillingInterval, Plan, Subscription, SubscriptionStatus
 from app.models.user import User
+from app.schemas.admin import InvoiceOut
 from app.services.mpesa import DarajaClient
 
 router = APIRouter(prefix="/org", tags=["org"])
@@ -290,6 +292,43 @@ async def get_subscription(
         feature_flags=feature_flags,
         available_plans=plans,
     )
+
+
+@router.get("/invoices", response_model=list[InvoiceOut])
+async def list_my_invoices(
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_active_user),
+) -> list[InvoiceOut]:
+    """The calling org's own subscription invoices (read-only billing history)."""
+    rows = (await session.scalars(
+        select(SubscriptionInvoice)
+        .where(SubscriptionInvoice.organization_id == current_user.org_id)
+        .order_by(SubscriptionInvoice.created_at.desc())
+        .limit(50)
+    )).all()
+    return [
+        InvoiceOut(
+            id=inv.id,
+            invoice_number=inv.invoice_number,
+            organization_id=inv.organization_id,
+            subscription_id=inv.subscription_id,
+            plan_name=inv.plan_name,
+            amount=str(inv.amount),
+            currency=inv.currency,
+            billing_interval=inv.billing_interval,
+            period_start=inv.period_start,
+            period_end=inv.period_end,
+            due_date=inv.due_date,
+            status=inv.status.value,
+            paid_at=inv.paid_at,
+            payment_method=inv.payment_method,
+            mpesa_receipt=inv.mpesa_receipt,
+            mpesa_phone=inv.mpesa_phone,
+            notes=inv.notes,
+            created_at=inv.created_at,
+        )
+        for inv in rows
+    ]
 
 
 @router.get("/features")
