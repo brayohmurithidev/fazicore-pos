@@ -3006,8 +3006,8 @@ function CategoriesTab({ isAdmin }: { isAdmin: boolean }) {
 
   const exportCSV = () => downloadCSV(
     `categories-${new Date().toISOString().slice(0, 10)}.csv`,
-    ['Name', 'Products', 'Created'],
-    categories.map((c) => [c.name, countFor(c.id), new Date(c.created_at).toLocaleDateString()]),
+    ['Name', 'Products'],
+    categories.map((c) => [c.name, countFor(c.id)]),
   )
 
   const isPending = createCat.isPending || updateCat.isPending
@@ -3027,16 +3027,15 @@ function CategoriesTab({ isAdmin }: { isAdmin: boolean }) {
             <TableRow className="bg-gray-50 hover:bg-gray-50">
               <TableHead>Category</TableHead>
               <TableHead className="text-right">Products</TableHead>
-              <TableHead>Created</TableHead>
               {isAdmin && <TableHead className="text-right">Actions</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              Array.from({ length: 4 }).map((_, i) => <TableRow key={i}><TableCell colSpan={4}><div className="h-4 bg-gray-100 rounded animate-pulse" /></TableCell></TableRow>)
+              Array.from({ length: 4 }).map((_, i) => <TableRow key={i}><TableCell colSpan={3}><div className="h-4 bg-gray-100 rounded animate-pulse" /></TableCell></TableRow>)
             ) : categories.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="text-center py-16">
+                <TableCell colSpan={3} className="text-center py-16">
                   <Tag size={36} className="mx-auto mb-2.5 text-gray-200" />
                   <div className="text-sm text-gray-400">No categories yet</div>
                   {isAdmin && <Button size="sm" className="mt-4" onClick={openAdd}><Plus size={13} className="mr-1.5" />Add Category</Button>}
@@ -3051,7 +3050,6 @@ function CategoriesTab({ isAdmin }: { isAdmin: boolean }) {
                   </div>
                 </TableCell>
                 <TableCell className="text-right text-sm font-medium">{countFor(c.id)}</TableCell>
-                <TableCell className="text-sm text-gray-600">{new Date(c.created_at).toLocaleDateString()}</TableCell>
                 {isAdmin && (
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1.5">

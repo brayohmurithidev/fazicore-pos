@@ -28,11 +28,11 @@ export interface ApiUser {
 
 export interface ApiCategory {
   id: number
-  org_id: number
+  org_id?: number
   name: string
   color: string | null
   is_active: boolean
-  created_at: string
+  created_at?: string
   product_count?: number
 }
 
