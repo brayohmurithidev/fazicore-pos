@@ -35,4 +35,5 @@ class Feat {
   static const advancedReports = 'advanced_reports';
   static const multiBranch = 'multi_branch';
   static const barcodeMode = 'barcode_mode';
+  static const productImages = 'product_images';
 }

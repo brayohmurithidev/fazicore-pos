@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/providers.dart';
 
@@ -84,10 +85,49 @@ class Order {
       );
 }
 
-/// GET /orders/?limit=100
+class SalesFilter {
+  final String search;
+  final String? paymentMethod; // null = all
+  final DateTime? from;
+  final DateTime? to;
+
+  const SalesFilter({this.search = '', this.paymentMethod, this.from, this.to});
+
+  bool get isActive => search.isNotEmpty || paymentMethod != null || from != null || to != null;
+  int get activeCount =>
+      (paymentMethod != null ? 1 : 0) + ((from != null || to != null) ? 1 : 0);
+
+  SalesFilter copyWith({
+    String? search,
+    String? paymentMethod,
+    DateTime? from,
+    DateTime? to,
+    bool clearPayment = false,
+    bool clearDates = false,
+  }) =>
+      SalesFilter(
+        search: search ?? this.search,
+        paymentMethod: clearPayment ? null : (paymentMethod ?? this.paymentMethod),
+        from: clearDates ? null : (from ?? this.from),
+        to: clearDates ? null : (to ?? this.to),
+      );
+}
+
+final salesFilterProvider = StateProvider.autoDispose<SalesFilter>((_) => const SalesFilter());
+
+final _ymd = DateFormat('yyyy-MM-dd');
+
+/// GET /orders/ with the active filters applied.
 final salesProvider = FutureProvider.autoDispose<List<Order>>((ref) async {
   final api = ref.read(apiClientProvider);
-  final res = await api.dio.get('/orders/', queryParameters: {'limit': 100});
+  final f = ref.watch(salesFilterProvider);
+  final res = await api.dio.get('/orders/', queryParameters: {
+    'limit': 200,
+    if (f.search.trim().isNotEmpty) 'search': f.search.trim(),
+    if (f.paymentMethod != null) 'payment_method': f.paymentMethod,
+    if (f.from != null) 'date_from': _ymd.format(f.from!),
+    if (f.to != null) 'date_to': _ymd.format(f.to!),
+  });
   return (res.data as List)
       .map((e) => Order.fromJson(e as Map<String, dynamic>))
       .toList();

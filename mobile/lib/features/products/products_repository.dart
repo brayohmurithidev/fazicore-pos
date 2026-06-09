@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
@@ -98,4 +99,13 @@ Future<int> saveProduct(WidgetRef ref, {int? id, required Map<String, dynamic> d
 
 Future<void> deleteProduct(WidgetRef ref, int id) async {
   await ref.read(apiClientProvider).dio.delete('/products/$id');
+}
+
+/// Upload a product photo (multipart) → POST /uploads/product-image/{id}.
+Future<void> uploadProductImage(WidgetRef ref, int productId, String filePath) async {
+  final api = ref.read(apiClientProvider);
+  final form = FormData.fromMap({
+    'file': await MultipartFile.fromFile(filePath, filename: filePath.split('/').last),
+  });
+  await api.dio.post('/uploads/product-image/$productId', data: form);
 }

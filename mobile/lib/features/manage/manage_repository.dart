@@ -44,11 +44,13 @@ final branchesProvider = FutureProvider.autoDispose<List<Branch>>((ref) async {
 
 // ── Create helpers ────────────────────────────────────────────────────────────
 
-Future<void> createCategory(WidgetRef ref, {required String name, String? description}) async {
-  await ref.read(apiClientProvider).dio.post('/categories/', data: {
+/// Create a category; returns the new category's id.
+Future<int> createCategory(WidgetRef ref, {required String name, String? description}) async {
+  final res = await ref.read(apiClientProvider).dio.post('/categories/', data: {
     'name': name,
     if (description != null && description.isNotEmpty) 'description': description,
   });
+  return res.data['id'] as int;
 }
 
 Future<void> createCustomer(WidgetRef ref,
