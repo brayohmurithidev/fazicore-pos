@@ -23,7 +23,8 @@ import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { LimitReachedDialog, parseLimitError, type LimitError } from '@/components/shared/LimitReachedDialog'
 import {
-  useProducts, useCategories, useCreateCategory, useCreateProduct, useUpdateProductById,
+  useProducts, useCategories, useCreateCategory, useUpdateCategory, useDeleteCategory,
+  useCreateProduct, useUpdateProductById,
   useDeleteProduct, useOrgInfo, useAdjustInventory, useBranches,
   usePurchaseOrders, useCreatePurchaseOrder, useUpdatePOStatus, useDeletePurchaseOrder,
   useInventoryTransactions, useProductInventory,
@@ -2963,6 +2964,142 @@ function SuppliersTab() {
   )
 }
 
+// ── Categories Tab ────────────────────────────────────────────────────────
+
+const CAT_COLORS = ['#3B82F6', '#8B5CF6', '#EF4444', '#F59E0B', '#10B981', '#EC4899', '#6366F1', '#14B8A6', '#64748B']
+
+function CategoriesTab({ isAdmin }: { isAdmin: boolean }) {
+  const { data: categories = [], isLoading } = useCategories()
+  const { data: products = [] } = useProducts()
+  const createCat = useCreateCategory()
+  const updateCat = useUpdateCategory()
+  const deleteCat = useDeleteCategory()
+
+  const [addOpen, setAddOpen] = useState(false)
+  const [editCat, setEditCat] = useState<ApiCategory | null>(null)
+  const [form, setForm] = useState<{ name: string; color: string }>({ name: '', color: CAT_COLORS[0] })
+
+  // Live product counts (the API may also provide product_count).
+  const countFor = (id: number) => categories.find((c) => c.id === id)?.product_count
+    ?? products.filter((p) => p.category_id === id && p.is_active).length
+
+  const openAdd = () => { setForm({ name: '', color: CAT_COLORS[0] }); setEditCat(null); setAddOpen(true) }
+  const openEdit = (c: ApiCategory) => { setForm({ name: c.name, color: c.color ?? CAT_COLORS[0] }); setEditCat(c); setAddOpen(true) }
+
+  const handleSave = async () => {
+    const data = { name: form.name.trim(), color: form.color }
+    if (editCat) { await updateCat.mutateAsync({ id: editCat.id, data }); toast.success('Category updated') }
+    else { await createCat.mutateAsync(data); toast.success('Category created') }
+    setAddOpen(false)
+  }
+
+  const handleDelete = (c: ApiCategory) => {
+    const n = countFor(c.id)
+    if (n > 0) {
+      toast.error(`"${c.name}" has ${n} product${n === 1 ? '' : 's'}. Reassign them before deleting.`)
+      return
+    }
+    if (window.confirm(`Delete category "${c.name}"?`)) {
+      deleteCat.mutate(c.id, { onSuccess: () => toast.success('Category deleted'), onError: () => toast.error('Could not delete category') })
+    }
+  }
+
+  const exportCSV = () => downloadCSV(
+    `categories-${new Date().toISOString().slice(0, 10)}.csv`,
+    ['Name', 'Products', 'Created'],
+    categories.map((c) => [c.name, countFor(c.id), new Date(c.created_at).toLocaleDateString()]),
+  )
+
+  const isPending = createCat.isPending || updateCat.isPending
+
+  return (
+    <>
+      <div className="flex items-center gap-2.5 mb-4">
+        <p className="text-sm text-gray-400">Organise products into categories for faster selling and reporting.</p>
+        <div className="ml-auto flex gap-1.5">
+          <Button variant="outline" size="sm" onClick={exportCSV} disabled={categories.length === 0}><Download size={13} className="mr-1.5" />CSV</Button>
+          {isAdmin && <Button size="sm" onClick={openAdd}><Plus size={13} className="mr-1.5" />Add Category</Button>}
+        </div>
+      </div>
+      <Card className="p-0 overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-gray-50 hover:bg-gray-50">
+              <TableHead>Category</TableHead>
+              <TableHead className="text-right">Products</TableHead>
+              <TableHead>Created</TableHead>
+              {isAdmin && <TableHead className="text-right">Actions</TableHead>}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              Array.from({ length: 4 }).map((_, i) => <TableRow key={i}><TableCell colSpan={4}><div className="h-4 bg-gray-100 rounded animate-pulse" /></TableCell></TableRow>)
+            ) : categories.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center py-16">
+                  <Tag size={36} className="mx-auto mb-2.5 text-gray-200" />
+                  <div className="text-sm text-gray-400">No categories yet</div>
+                  {isAdmin && <Button size="sm" className="mt-4" onClick={openAdd}><Plus size={13} className="mr-1.5" />Add Category</Button>}
+                </TableCell>
+              </TableRow>
+            ) : categories.map((c) => (
+              <TableRow key={c.id}>
+                <TableCell>
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: c.color ?? '#94A3B8' }} />
+                    <span className="font-semibold text-sm text-gray-900">{c.name}</span>
+                  </div>
+                </TableCell>
+                <TableCell className="text-right text-sm font-medium">{countFor(c.id)}</TableCell>
+                <TableCell className="text-sm text-gray-600">{new Date(c.created_at).toLocaleDateString()}</TableCell>
+                {isAdmin && (
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1.5">
+                      <Button size="sm" variant="outline" className="h-7 w-7 p-0" onClick={() => openEdit(c)}><Pencil size={12} /></Button>
+                      <Button size="sm" variant="outline" className="h-7 w-7 p-0 text-red-600 hover:text-red-700 border-red-200" onClick={() => handleDelete(c)}><Trash2 size={12} /></Button>
+                    </div>
+                  </TableCell>
+                )}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
+
+      <Dialog open={addOpen} onOpenChange={(v) => !v && setAddOpen(false)}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader><DialogTitle>{editCat ? 'Edit Category' : 'Add Category'}</DialogTitle></DialogHeader>
+          <div className="mt-1 space-y-3">
+            <div>
+              <Label className="mb-1.5 block text-xs text-gray-500">Category Name *</Label>
+              <Input value={form.name} autoFocus onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                onKeyDown={(e) => { if (e.key === 'Enter' && form.name.trim()) handleSave() }}
+                placeholder="e.g. Beverages" />
+            </div>
+            <div>
+              <Label className="mb-1.5 block text-xs text-gray-500">Colour</Label>
+              <div className="flex flex-wrap gap-2">
+                {CAT_COLORS.map((col) => (
+                  <button key={col} type="button" onClick={() => setForm((f) => ({ ...f, color: col }))}
+                    className={`w-7 h-7 rounded-full transition-transform ${form.color === col ? 'ring-2 ring-offset-2 ring-gray-400 scale-110' : ''}`}
+                    style={{ backgroundColor: col }} />
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2 mt-4">
+            <Button variant="outline" className="flex-1" onClick={() => setAddOpen(false)} disabled={isPending}>Cancel</Button>
+            <Button className="flex-1" onClick={handleSave} disabled={isPending || !form.name.trim()}>
+              {isPending && <Loader2 size={13} className="animate-spin mr-1.5" />}
+              {editCat ? 'Save Changes' : 'Add Category'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
 // ── Reports Tab ───────────────────────────────────────────────────────────
 
 const URGENCY_META: Record<ReorderUrgency, { label: string; textCls: string; bgCls: string; dotCls: string }> = {
@@ -3321,7 +3458,7 @@ function ReportsTab({ products, branchId, isMultiBranch }: { products: ApiProduc
 
 // ── Main Page ─────────────────────────────────────────────────────────────
 
-type Tab = 'products' | 'orders' | 'transfers' | 'suppliers' | 'reports'
+type Tab = 'products' | 'categories' | 'orders' | 'transfers' | 'suppliers' | 'reports'
 
 export function InventoryPage() {
   const { user } = useAuthStore()
@@ -3337,6 +3474,7 @@ export function InventoryPage() {
   const { data: orders = [] } = usePurchaseOrders()
   const { data: rawBranches = [] } = useBranches()
   const { data: orgInfo } = useOrgInfo()
+  const { data: categories = [] } = useCategories()
 
   const branches = rawBranches.map((b) => ({ id: b.id, name: b.name }))
   const isMultiBranch = rawBranches.length > 1
@@ -3349,6 +3487,7 @@ export function InventoryPage() {
 
   const TABS: { id: Tab; label: string; count?: number }[] = [
     { id: 'products', label: 'Products', count: activeProducts.length },
+    { id: 'categories', label: 'Categories', count: categories.length || undefined },
     ...(hasSupplierMgmt ? [{ id: 'orders' as Tab, label: 'Purchase Orders', count: pendingPOs || undefined }] : []),
     ...(isMultiBranch ? [{ id: 'transfers' as Tab, label: 'Transfers' }] : []),
     ...(hasSupplierMgmt ? [{ id: 'suppliers' as Tab, label: 'Suppliers' }] : []),
@@ -3438,6 +3577,7 @@ export function InventoryPage() {
       </div>
 
       {tab === 'products' && <ProductsTab branchId={effectiveBranchId} />}
+      {tab === 'categories' && <CategoriesTab isAdmin={isAdmin} />}
       {tab === 'orders' && <PurchaseOrdersTab products={products} branches={branches} />}
       {tab === 'transfers' && <TransfersTab products={products} branches={branches} />}
       {tab === 'suppliers' && <SuppliersTab />}

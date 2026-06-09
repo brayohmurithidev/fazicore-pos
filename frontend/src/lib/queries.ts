@@ -350,6 +350,26 @@ export function useCreateCategory() {
   })
 }
 
+export function useUpdateCategory() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: { name?: string; color?: string } }) =>
+      api.patch(`/categories/${id}`, data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['categories'] }),
+  })
+}
+
+export function useDeleteCategory() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.delete(`/categories/${id}`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['categories'] })
+      qc.invalidateQueries({ queryKey: ['products'] })
+    },
+  })
+}
+
 // ── Branches ──────────────────────────────────────────────────────────────
 
 export function useBranches() {

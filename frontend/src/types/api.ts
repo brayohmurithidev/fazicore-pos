@@ -33,6 +33,7 @@ export interface ApiCategory {
   color: string | null
   is_active: boolean
   created_at: string
+  product_count?: number
 }
 
 export interface ApiProduct {
