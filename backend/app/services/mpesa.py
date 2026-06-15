@@ -70,6 +70,9 @@ class DarajaClient:
         phone = phone.replace(" ", "").replace("+", "").replace("-", "")
         if phone.startswith("0"):
             phone = "254" + phone[1:]
+        elif len(phone) == 9 and (phone.startswith("7") or phone.startswith("1")):
+            # User typed bare 9-digit number (no leading 0), e.g. 712345678
+            phone = "254" + phone
         return phone
 
     async def stk_push(

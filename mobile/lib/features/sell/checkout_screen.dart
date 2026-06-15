@@ -306,17 +306,21 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   }
 
   Future<void> _pushStk() async {
-    final phone = _phone.text.trim();
-    if (phone.length < 9) {
-      setState(() => _error = 'Enter the customer phone number');
+    final normalized = normalizeKEPhone(_phone.text.trim());
+    if (!normalized.startsWith('254') || normalized.length != 12) {
+      setState(() => _error = 'Enter a valid Kenyan number, e.g. 0712 345 678');
       return;
     }
     final split = _mpesaSplit();
-    setState(() { _stkBusy = true; _stkMsg = 'Sent to $phone — ask the customer to enter their PIN'; _error = null; });
+    if (split.mpesa < 1) {
+      setState(() => _error = 'Amount must be at least KES 1');
+      return;
+    }
+    setState(() { _stkBusy = true; _stkMsg = 'Prompt sent — ask the customer to enter their M-Pesa PIN'; _error = null; });
     try {
       final result = await pushStkAndWait(
         ref.read(apiClientProvider),
-        phone: phone,
+        phone: normalized,
         amount: split.mpesa.toInt(),
         orderRef: 'POS${DateTime.now().millisecondsSinceEpoch % 100000000}',
       );

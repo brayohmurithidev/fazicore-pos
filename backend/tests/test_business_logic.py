@@ -74,6 +74,15 @@ def test_normalize_plus_254(mpesa):
     assert mpesa._normalize_phone("+254712345678") == "254712345678"
 
 
+def test_normalize_9digit_7xx(mpesa):
+    # User types bare 9-digit number (UI shows +254 as decorative prefix)
+    assert mpesa._normalize_phone("712345678") == "254712345678"
+
+
+def test_normalize_9digit_1xx(mpesa):
+    assert mpesa._normalize_phone("100000000") == "254100000000"
+
+
 # ── eTIMS tax category mapping ───────────────────────────────────────────────
 
 def test_tax_cat_16_is_B():

@@ -7,6 +7,15 @@ class StkResult {
   const StkResult(this.success, this.receipt, this.message);
 }
 
+/// Normalise a Kenyan phone number to 254XXXXXXXXX format.
+/// Accepts: 0712345678 | 712345678 | +254712345678 | 254712345678
+String normalizeKEPhone(String raw) {
+  var p = raw.replaceAll(RegExp(r'[\s\-\+]'), '');
+  if (p.startsWith('0') && p.length == 10) return '254${p.substring(1)}';
+  if ((p.startsWith('7') || p.startsWith('1')) && p.length == 9) return '254$p';
+  return p; // already 254... or unknown — let the backend validate
+}
+
 /// Initiate an STK push and poll until the customer pays, fails, or it times
 /// out (~60s). Online-only — throws/returns failure if the API is unreachable.
 Future<StkResult> pushStkAndWait(
@@ -16,7 +25,7 @@ Future<StkResult> pushStkAndWait(
   required String orderRef,
 }) async {
   final res = await api.dio.post('/mpesa/stk-push', data: {
-    'phone': phone,
+    'phone': normalizeKEPhone(phone),
     'amount': amount,
     'order_ref': orderRef,
   });
