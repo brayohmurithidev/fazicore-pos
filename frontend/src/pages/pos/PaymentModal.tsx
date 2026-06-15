@@ -42,9 +42,9 @@ interface PaymentInfo {
   externalRef?: string
 }
 
-// ── Method tile ───────────────────────────────────────────────────────────────
+// ── Method chip (horizontal bar) ─────────────────────────────────────────────
 
-function MethodTile({
+function MethodChip({
   selected, onClick, children, label,
 }: {
   selected: boolean
@@ -55,16 +55,14 @@ function MethodTile({
   return (
     <button
       onClick={onClick}
-      className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 p-3 transition-all text-center
+      className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-full border-2 whitespace-nowrap transition-all shrink-0
         ${selected
-          ? 'border-gray-900 bg-gray-900/5 shadow-sm'
-          : 'border-gray-200 bg-white hover:border-gray-400'
+          ? 'border-gray-900 bg-gray-900 text-white shadow-sm'
+          : 'border-gray-200 bg-white text-gray-600 hover:border-gray-400'
         }`}
     >
-      <div className="h-8 flex items-center justify-center">{children}</div>
-      <span className={`text-[11px] font-semibold leading-tight ${selected ? 'text-gray-900' : 'text-gray-600'}`}>
-        {label}
-      </span>
+      <span className="flex items-center">{children}</span>
+      <span className="text-[12px] font-semibold">{label}</span>
     </button>
   )
 }
@@ -539,35 +537,35 @@ export function PaymentModal({ open, onClose, total, onComplete, settings }: Pro
   const methodTiles: { id: PaymentMethod; label: string; tile: React.ReactNode }[] = [
     {
       id: 'cash', label: 'Cash',
-      tile: <Banknote size={24} className="text-emerald-600" />,
+      tile: <Banknote size={16} className={method === 'cash' ? 'text-white' : 'text-emerald-600'} />,
     },
     ...(hasMpesa ? [{
       id: 'mpesa' as PaymentMethod, label: 'M-Pesa',
-      tile: <img src="/assets/safaricom/M-PESA-logo.png" alt="M-Pesa" className="h-7 w-auto" />,
+      tile: <img src="/assets/safaricom/M-PESA-logo.png" alt="M-Pesa" className="h-4 w-auto" style={method === 'mpesa' ? { filter: 'brightness(0) invert(1)' } : undefined} />,
     }] : []),
     {
       id: 'card', label: 'Card',
-      tile: <CreditCard size={24} className="text-blue-600" />,
+      tile: <CreditCard size={16} className={method === 'card' ? 'text-white' : 'text-blue-600'} />,
     },
     {
       id: 'airtel', label: 'Airtel Money',
       tile: (
-        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-red-600">
-          <span className="text-white font-black text-[10px] leading-none">AIR</span>
+        <div className={`flex items-center justify-center w-5 h-5 rounded-full ${method === 'airtel' ? 'bg-white/20' : 'bg-red-600'}`}>
+          <span className="text-white font-black text-[8px] leading-none">AIR</span>
         </div>
       ),
     },
     {
       id: 'bank_transfer', label: 'Bank Transfer',
-      tile: <Landmark size={24} className="text-indigo-600" />,
+      tile: <Landmark size={16} className={method === 'bank_transfer' ? 'text-white' : 'text-indigo-600'} />,
     },
     {
       id: 'cheque', label: 'Cheque',
-      tile: <FileText size={24} className="text-amber-600" />,
+      tile: <FileText size={16} className={method === 'cheque' ? 'text-white' : 'text-amber-600'} />,
     },
     ...(settings.credit && flags.credit_system !== false ? [{
       id: 'credit' as PaymentMethod, label: 'Credit',
-      tile: <Phone size={24} className="text-slate-500" />,
+      tile: <Phone size={16} className={method === 'credit' ? 'text-white' : 'text-slate-500'} />,
     }] : []),
   ]
 
@@ -626,47 +624,88 @@ export function PaymentModal({ open, onClose, total, onComplete, settings }: Pro
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-[480px] flex flex-col max-h-[92vh] overflow-hidden">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Charge Customer</DialogTitle>
         </DialogHeader>
 
         {stkOpen ? (
-          <StkFlow amount={mpesaAmount} orderRef={`POS-${Date.now()}`} onConfirm={handleStkConfirm} onCancel={() => setStkOpen(false)} hasDaraja={hasDaraja} />
+          <div className="overflow-y-auto flex-1 px-0.5">
+            <StkFlow amount={mpesaAmount} orderRef={`POS-${Date.now()}`} onConfirm={handleStkConfirm} onCancel={() => setStkOpen(false)} hasDaraja={hasDaraja} />
+          </div>
         ) : paystackStkOpen ? (
-          <PaystackStkFlow
-            amount={mpesaAmount}
-            onConfirm={(ref) => { setPaystackStkOpen(false); onComplete({ method: isSplit ? 'split' : 'mpesa', cashTendered: mpesaCash, cashAmount: mpesaCash, mpesaAmount, mpesaRef: ref }) }}
-            onCancel={() => setPaystackStkOpen(false)}
-          />
+          <div className="overflow-y-auto flex-1 px-0.5">
+            <PaystackStkFlow
+              amount={mpesaAmount}
+              onConfirm={(ref) => { setPaystackStkOpen(false); onComplete({ method: isSplit ? 'split' : 'mpesa', cashTendered: mpesaCash, cashAmount: mpesaCash, mpesaAmount, mpesaRef: ref }) }}
+              onCancel={() => setPaystackStkOpen(false)}
+            />
+          </div>
         ) : (
           <>
-            <div className="mb-4">
-              <div className="text-xs text-gray-500 mb-0.5">Total Due</div>
-              <div className="text-4xl font-extrabold text-gray-900">{fmtKES(total)}</div>
+            {/* Total + method chips — always visible, never scrolls */}
+            <div className="shrink-0">
+              <div className="flex items-baseline justify-between mb-3">
+                <div>
+                  <div className="text-xs text-gray-500 mb-0.5">Total Due</div>
+                  <div className="text-4xl font-extrabold text-gray-900">{fmtKES(total)}</div>
+                </div>
+              </div>
+
+              {/* ── Method chips ── */}
+              <div className="flex gap-2 overflow-x-auto pb-1 mb-4 scrollbar-none -mx-1 px-1">
+                {methodTiles.map((m) => (
+                  <MethodChip key={m.id} selected={method === m.id} onClick={() => setMethod(m.id)} label={m.label}>
+                    {m.tile}
+                  </MethodChip>
+                ))}
+              </div>
             </div>
 
-            {/* ── Method tiles ── */}
-            <div className="grid grid-cols-4 gap-2 mb-5">
-              {methodTiles.map((m) => (
-                <MethodTile key={m.id} selected={method === m.id} onClick={() => setMethod(m.id)} label={m.label}>
-                  {m.tile}
-                </MethodTile>
-              ))}
-            </div>
+            {/* Scrollable method-specific body */}
+            <div className="overflow-y-auto flex-1 -mx-1 px-1">
 
             {/* ── Cash ── */}
             {method === 'cash' && (
               <div>
+                {/* Quick amounts */}
+                <div className="flex gap-1.5 mb-3 flex-wrap">
+                  {[
+                    { label: 'Exact', value: total },
+                    ...([
+                      Math.ceil(total / 100) * 100,
+                      Math.ceil(total / 500) * 500,
+                      Math.ceil(total / 1000) * 1000,
+                      Math.ceil(total / 5000) * 5000,
+                    ]
+                      .filter((v, i, arr) => v > total && arr.indexOf(v) === i)
+                      .slice(0, 3)
+                      .map((v) => ({ label: fmtKES(v), value: v }))
+                    ),
+                  ].map(({ label, value: v }) => (
+                    <button
+                      key={label}
+                      onClick={() => setCashStr(String(v))}
+                      className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+                        cash === v
+                          ? 'bg-gray-900 text-white border-gray-900'
+                          : 'bg-white text-gray-700 border-gray-200 hover:border-gray-400'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
                 <Numpad value={cashStr} onChange={setCashStr} />
-                <div className="mt-3.5 p-3 bg-gray-50 rounded-lg">
-                  <div className="flex justify-between text-sm mb-1.5">
-                    <span className="text-gray-500">Tendered</span>
-                    <span className="font-bold">{fmtKES(cash)}</span>
+                {/* Tendered / Change summary */}
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div className="bg-gray-50 rounded-lg px-3 py-2.5">
+                    <div className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Tendered</div>
+                    <div className="text-base font-bold text-gray-900">{fmtKES(cash)}</div>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Change</span>
-                    <span className={`font-bold ${change > 0 ? 'text-green-600' : ''}`}>{fmtKES(change)}</span>
+                  <div className={`rounded-lg px-3 py-2.5 ${change > 0 ? 'bg-green-50' : 'bg-gray-50'}`}>
+                    <div className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Change</div>
+                    <div className={`text-base font-bold ${change > 0 ? 'text-green-700' : 'text-gray-900'}`}>{fmtKES(change)}</div>
                   </div>
                 </div>
               </div>
@@ -878,8 +917,11 @@ export function PaymentModal({ open, onClose, total, onComplete, settings }: Pro
               </div>
             )}
 
+            </div>{/* end scrollable body */}
+
+            {/* Pinned action buttons */}
             {!showPicker && !(method === 'card' && hasPaystack && !externalRef) && (
-              <div className="flex gap-2 mt-5">
+              <div className="flex gap-2 pt-3 shrink-0 border-t border-gray-100 mt-2">
                 <Button variant="outline" className="flex-1 h-11" onClick={onClose}>Cancel</Button>
                 <Button className="flex-1 h-11" disabled={!canProceed()} onClick={handleCharge}>
                   {method === 'mpesa' && (mpesaMode === 'stk' || (!hasManual && hasStk))

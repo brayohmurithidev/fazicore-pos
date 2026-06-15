@@ -9,6 +9,9 @@ export interface ApiAttendance {
   clock_out: string | null
   date: string
   user_name: string | null
+  opening_float: number | null
+  closing_cash: number | null
+  shift_notes: string | null
 }
 export type ApiPaymentMethod = 'cash' | 'mpesa' | 'credit' | 'split' | 'other'
 
