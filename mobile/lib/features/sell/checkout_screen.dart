@@ -9,7 +9,6 @@ import '../../core/providers.dart';
 import '../../core/features.dart';
 import '../../core/theme.dart';
 import '../../core/widgets/app_select.dart';
-import '../../core/widgets/mpesa_logo.dart';
 import '../auth/auth_controller.dart';
 import '../manage/plan_provider.dart';
 import '../printing/printer_service.dart';
@@ -212,16 +211,15 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   Widget _nonCashTab() {
     return Column(
       children: [
+        _methodChipBar(),
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             children: [
-              _methodGrid(),
-              const SizedBox(height: 20),
               ..._nonCashFields(),
               if (_error != null)
                 Padding(
-                  padding: const EdgeInsets.only(top: 12),
+                  padding: const EdgeInsets.only(top: 8),
                   child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
                 ),
             ],
@@ -232,60 +230,64 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     );
   }
 
-  Widget _methodGrid() {
+  // Horizontal scrolling chip row — no overflow possible, labels never clip.
+  Widget _methodChipBar() {
     final methods = <_MethodDef>[
-      _MethodDef(PayMethod.mpesa,       'M-Pesa',       _mpesaTile()),
-      _MethodDef(PayMethod.card,        'Card',         const Icon(Icons.credit_card, color: Color(0xFF2563EB), size: 26)),
-      _MethodDef(PayMethod.airtel,      'Airtel',       _airtelTile()),
-      _MethodDef(PayMethod.bankTransfer,'Bank Transfer', const Icon(Icons.account_balance, color: Color(0xFF4338CA), size: 26)),
-      _MethodDef(PayMethod.cheque,      'Cheque',       const Icon(Icons.description_outlined, color: Color(0xFFD97706), size: 26)),
+      _MethodDef(PayMethod.mpesa,        'M-Pesa',        const Icon(Icons.mobile_friendly, size: 18, color: Color(0xFF00A550))),
+      _MethodDef(PayMethod.card,         'Card',          const Icon(Icons.credit_card, size: 18, color: Color(0xFF2563EB))),
+      _MethodDef(PayMethod.airtel,       'Airtel Money',  const Icon(Icons.signal_cellular_alt, size: 18, color: Color(0xFFDC2626))),
+      _MethodDef(PayMethod.bankTransfer, 'Bank Transfer', const Icon(Icons.account_balance, size: 18, color: Color(0xFF4338CA))),
+      _MethodDef(PayMethod.cheque,       'Cheque',        const Icon(Icons.description_outlined, size: 18, color: Color(0xFFD97706))),
       if (planAllows(ref, Feat.creditSystem))
-        _MethodDef(PayMethod.credit,    'Credit',       const Icon(Icons.receipt_long, color: Colors.grey, size: 26)),
+        _MethodDef(PayMethod.credit,     'Credit',        const Icon(Icons.receipt_long, size: 18, color: Colors.grey)),
     ];
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: methods.map((m) => _methodTile(m)).toList(),
+    return Container(
+      color: Colors.white,
+      child: Column(
+        children: [
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            child: Row(
+              children: methods
+                  .map((m) => Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: _methodChip(m),
+                      ))
+                  .toList(),
+            ),
+          ),
+          const Divider(height: 1),
+        ],
+      ),
     );
   }
 
-  Widget _mpesaTile() => MpesaLogo(height: 18);
-
-  Widget _airtelTile() => Container(
-    width: 28, height: 28,
-    decoration: const BoxDecoration(color: Color(0xFFDC2626), shape: BoxShape.circle),
-    alignment: Alignment.center,
-    child: const Text('AIR', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900)),
-  );
-
-  Widget _methodTile(_MethodDef m) {
+  Widget _methodChip(_MethodDef m) {
     final sel = _nonCash == m.method;
-    final width = (MediaQuery.of(context).size.width - 32 - 24) / 4; // 4-per-row
     return GestureDetector(
       onTap: () => setState(() { _nonCash = m.method; _error = null; }),
-      child: Container(
-        width: width,
-        height: 72,
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: sel ? AppColors.brand : Colors.black.withValues(alpha: 0.1),
-            width: sel ? 2 : 1,
-          ),
-          color: sel ? AppColors.brand.withValues(alpha: 0.06) : Colors.white,
+          color: sel ? AppColors.brand : const Color(0xFFF3F4F6),
+          borderRadius: BorderRadius.circular(24),
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            m.icon,
-            const SizedBox(height: 5),
-            Text(m.label,
-              textAlign: TextAlign.center,
+            IconTheme(
+              data: IconThemeData(color: sel ? Colors.white : null, size: 18),
+              child: m.icon,
+            ),
+            const SizedBox(width: 7),
+            Text(
+              m.label,
               style: TextStyle(
-                fontSize: 10,
+                fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: sel ? AppColors.brand : const Color(0xFF374151),
+                color: sel ? Colors.white : const Color(0xFF374151),
               ),
             ),
           ],
@@ -293,6 +295,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       ),
     );
   }
+
 
   List<Widget> _nonCashFields() {
     switch (_nonCash) {
