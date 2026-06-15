@@ -30,7 +30,13 @@ def upgrade() -> None:
     """)
     op.execute("CREATE INDEX IF NOT EXISTS ix_loyalty_settings_org_id ON loyalty_settings (org_id)")
 
-    op.execute("CREATE TYPE IF NOT EXISTS pointstransactiontype AS ENUM ('earn', 'redeem', 'adjust')")
+    op.execute("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'pointstransactiontype') THEN
+                CREATE TYPE pointstransactiontype AS ENUM ('earn', 'redeem', 'adjust');
+            END IF;
+        END $$
+    """)
     op.execute("""
         CREATE TABLE IF NOT EXISTS points_transactions (
             id SERIAL PRIMARY KEY,
