@@ -46,7 +46,7 @@ void main() {
   });
 
   group('Cart totals', () {
-    Cart _cartWith(List<CartLine> lines, {num cartPct = 0}) {
+    Cart makeCart(List<CartLine> lines, {num cartPct = 0}) {
       final map = {for (final l in lines) l.product.id: l};
       return Cart(map, cartPct);
     }
@@ -62,7 +62,7 @@ void main() {
     });
 
     test('grossSubtotal sums line grosses ignoring discounts', () {
-      final cart = _cartWith([
+      final cart = makeCart([
         CartLine(_product(id: 1, price: 100), 2, 10), // gross 200
         CartLine(_product(id: 2, price: 50), 1),       // gross 50
       ]);
@@ -70,7 +70,7 @@ void main() {
     });
 
     test('subtotal sums lineTotals (after item discounts)', () {
-      final cart = _cartWith([
+      final cart = makeCart([
         CartLine(_product(id: 1, price: 100), 2, 10), // 200 - 20 = 180
         CartLine(_product(id: 2, price: 50), 1),       // 50
       ]);
@@ -78,7 +78,7 @@ void main() {
     });
 
     test('cart-level discount applies to subtotal', () {
-      final cart = _cartWith([
+      final cart = makeCart([
         CartLine(_product(id: 1, price: 100), 1),
         CartLine(_product(id: 2, price: 100), 1),
       ], cartPct: 10); // subtotal 200, 10% off = 20
@@ -87,14 +87,14 @@ void main() {
     });
 
     test('discountTotal = item discounts + cart discount', () {
-      final cart = _cartWith([
+      final cart = makeCart([
         CartLine(_product(id: 1, price: 100), 1, 5), // item discount 5
       ], cartPct: 10); // cart discount on 95 = 9 (rounded)
       expect(cart.discountTotal, cart.itemDiscountTotal + cart.cartDiscountAmt);
     });
 
     test('itemCount sums quantities across all lines', () {
-      final cart = _cartWith([
+      final cart = makeCart([
         CartLine(_product(id: 1, price: 10), 3),
         CartLine(_product(id: 2, price: 20), 2),
       ]);
