@@ -39,4 +39,21 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
   end
+
+  # connectivity_plus 7.1.1 references NWPath.isUltraConstrained (iOS 26 SDK only).
+  # Stable Xcode (16.x) doesn't have that symbol, so the compiler rejects it even
+  # behind an #available guard.  Strip the block so CI builds on Xcode 16.
+  provider = installer.sandbox.root +
+    'connectivity_plus/Sources/connectivity_plus/PathMonitorConnectivityProvider.swift'
+  if provider.exist?
+    src = provider.read
+    if src.include?('isUltraConstrained')
+      patched = src.gsub(
+        /[ \t]*if #available\(iOS 26\.0,\s*\*\),\s*path\.isUltraConstrained\s*\{[^}]*\}\n?/m,
+        ''
+      )
+      provider.write(patched)
+      puts 'Podfile patch: removed isUltraConstrained block from connectivity_plus'
+    end
+  end
 end
