@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"
-import type { Organization, OrgUser, Subscription, SubscriptionPlan, Invoice } from "@/types"
+import type { Organization, OrgUser, Subscription, SubscriptionPlan, Invoice, PlatformAuditEntry } from "@/types"
 
 // ── Add user ───────────────────────────────────────────────────────────────────
 
@@ -446,7 +446,7 @@ export default function OrgDetailPage() {
   const [promptPhone,    setPromptPhone]    = useState("")
   const [promptMsg,      setPromptMsg]      = useState<string | null>(null)
   const [resendMsg,      setResendMsg]      = useState<string | null>(null)
-  const [tab,            setTab]            = useState<"overview" | "users" | "billing">("overview")
+  const [tab,            setTab]            = useState<"overview" | "users" | "billing" | "activity">("overview")
 
   const { data: org, isLoading: orgLoading } = useQuery<Organization>({
     queryKey: ["admin", "org", id],
@@ -471,6 +471,11 @@ export default function OrgDetailPage() {
     queryKey: ["admin", "org-invoices", id],
     queryFn: () => api.get(`/admin/organizations/${id}/invoices`).then((r) => r.data),
     enabled: !!id,
+  })
+  const { data: auditLog = [], isLoading: auditLoading } = useQuery<PlatformAuditEntry[]>({
+    queryKey: ["admin", "org-audit", id],
+    queryFn: () => api.get(`/admin/organizations/${id}/audit-log`).then((r) => r.data),
+    enabled: !!id && tab === "activity",
   })
 
   const promptMutation = useMutation({
@@ -630,8 +635,8 @@ export default function OrgDetailPage() {
         {/* Tabs */}
         <div>
           <div className="flex border-b border-zinc-200">
-            {(["overview", "users", "billing"] as const).map((t) => {
-              const label = t === "overview" ? "Overview" : t === "users" ? `Users (${users.length})` : `Billing (${invoices.length})`
+            {(["overview", "users", "billing", "activity"] as const).map((t) => {
+              const label = t === "overview" ? "Overview" : t === "users" ? `Users (${users.length})` : t === "billing" ? `Billing (${invoices.length})` : "Activity"
               return (
                 <button
                   key={t}
@@ -932,6 +937,42 @@ export default function OrgDetailPage() {
                     </tbody>
                   </table>
                 </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Activity ── */}
+          {tab === "activity" && (
+            <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden mt-4">
+              <div className="flex items-center gap-2 px-5 py-4 border-b border-zinc-100">
+                <Receipt className="h-4 w-4 text-zinc-400" />
+                <h2 className="text-sm font-semibold text-zinc-900">Admin Activity Log</h2>
+              </div>
+              {auditLoading ? (
+                <div className="px-5 py-8 text-center text-sm text-zinc-400 flex items-center justify-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+                </div>
+              ) : auditLog.length === 0 ? (
+                <p className="text-sm text-zinc-400 text-center py-10">No activity recorded yet.</p>
+              ) : (
+                <ul className="divide-y divide-zinc-100">
+                  {auditLog.map((entry) => (
+                    <li key={entry.id} className="px-5 py-3 flex items-start justify-between gap-4 text-sm hover:bg-zinc-50">
+                      <div className="space-y-0.5">
+                        <span className="font-mono text-xs bg-zinc-100 text-zinc-700 px-1.5 py-0.5 rounded">
+                          {entry.action}
+                        </span>
+                        {entry.detail && (
+                          <p className="text-xs text-zinc-500">{entry.detail}</p>
+                        )}
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-xs text-zinc-500">{entry.admin_name ?? "system"}</p>
+                        <p className="text-xs text-zinc-400">{fmtDate(entry.created_at)}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
           )}

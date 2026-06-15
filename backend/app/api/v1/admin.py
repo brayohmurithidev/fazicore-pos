@@ -39,12 +39,17 @@ from app.schemas.admin import (
     SubscriptionOut,
     SubscriptionUpdate,
 )
+from app.models.platform_audit_log import PlatformAuditLog
 from app.services.email import send_user_welcome_email, send_welcome_email
 from app.services.mpesa import DarajaClient
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 _scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/admin/auth/login", auto_error=False)
+
+
+async def _log(session: AsyncSession, admin: PlatformAdmin, org_id: int | None, action: str, detail: str | None = None) -> None:
+    session.add(PlatformAuditLog(admin_id=admin.id, admin_name=admin.name, org_id=org_id, action=action, detail=detail))
 
 
 async def require_admin(
@@ -242,11 +247,12 @@ async def update_organization(
 async def delete_organization(
     org_id: int,
     session: AsyncSession = Depends(get_session),
-    _: PlatformAdmin = Depends(require_admin),
+    admin: PlatformAdmin = Depends(require_admin),
 ) -> None:
     org = await session.get(Organization, org_id)
     if not org:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+    await _log(session, admin, org_id, "org.delete", org.name)
     await session.delete(org)
     await session.flush()
 
@@ -255,13 +261,14 @@ async def delete_organization(
 async def suspend_organization(
     org_id: int,
     session: AsyncSession = Depends(get_session),
-    _: PlatformAdmin = Depends(require_admin),
+    admin: PlatformAdmin = Depends(require_admin),
 ) -> AdminOrgOut:
     org = await session.get(Organization, org_id)
     if not org:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
     org.status = OrgStatus.SUSPENDED
     session.add(org)
+    await _log(session, admin, org_id, "org.suspend")
     await session.flush()
     await session.refresh(org)
     return await _org_out(org, session)
@@ -271,7 +278,7 @@ async def suspend_organization(
 async def activate_organization(
     org_id: int,
     session: AsyncSession = Depends(get_session),
-    _: PlatformAdmin = Depends(require_admin),
+    admin: PlatformAdmin = Depends(require_admin),
 ) -> AdminOrgOut:
     org = await session.get(Organization, org_id)
     if not org:
@@ -279,6 +286,7 @@ async def activate_organization(
     org.status = OrgStatus.ACTIVE
     org.is_active = True
     session.add(org)
+    await _log(session, admin, org_id, "org.activate")
     await session.flush()
     await session.refresh(org)
     return await _org_out(org, session)
@@ -512,7 +520,7 @@ async def set_org_subscription(
     org_id: int,
     data: SubscriptionUpdate,
     session: AsyncSession = Depends(get_session),
-    _: PlatformAdmin = Depends(require_admin),
+    admin: PlatformAdmin = Depends(require_admin),
 ) -> SubscriptionOut:
     org = await session.get(Organization, org_id)
     if not org:
@@ -563,6 +571,7 @@ async def set_org_subscription(
         )
         session.add(sub)
     session.add(org)
+    await _log(session, admin, org_id, "subscription.set", f"{plan.name} / {data.billing_interval}")
     await session.flush()
 
     # Create an open invoice for paid plans; skip for trial
@@ -751,6 +760,36 @@ async def prompt_payment(
         "amount": amount,
         "phone": phone,
     }
+
+
+# ── Admin audit log ────────────────────────────────────────────────────────────
+
+from datetime import datetime as _dt
+from pydantic import BaseModel as _BM
+
+class PlatformAuditLogOut(_BM):
+    id: int
+    admin_name: str | None
+    action: str
+    detail: str | None
+    created_at: _dt
+    model_config = {"from_attributes": True}
+
+
+@router.get("/organizations/{org_id}/audit-log", response_model=list[PlatformAuditLogOut])
+async def get_org_audit_log(
+    org_id: int,
+    limit: int = 100,
+    session: AsyncSession = Depends(get_session),
+    _: PlatformAdmin = Depends(require_admin),
+) -> list[PlatformAuditLogOut]:
+    rows = await session.execute(
+        select(PlatformAuditLog)
+        .where(PlatformAuditLog.org_id == org_id)
+        .order_by(PlatformAuditLog.created_at.desc())
+        .limit(limit)
+    )
+    return [PlatformAuditLogOut.model_validate(r) for r in rows.scalars().all()]
 
 
 # ── Plans ──────────────────────────────────────────────────────────────────────

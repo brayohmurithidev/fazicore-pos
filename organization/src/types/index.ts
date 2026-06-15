@@ -85,6 +85,14 @@ export interface Invoice {
   created_at: string;
 }
 
+export interface PlatformAuditEntry {
+  id: number;
+  admin_name: string | null;
+  action: string;
+  detail: string | null;
+  created_at: string;
+}
+
 export interface OrgUser {
   id: string;
   email: string;
