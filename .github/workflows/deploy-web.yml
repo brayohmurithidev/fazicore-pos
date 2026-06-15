@@ -1,0 +1,126 @@
+name: Deploy Web
+
+# Deploys two Vercel projects on push to main:
+#   frontend/      → POS web app   (admin.fazistore.fazilabs.com)
+#   organization/  → Super admin   (separate Vercel project)
+#
+# Required secrets (Settings → Secrets → Actions):
+#   VERCEL_TOKEN                — vercel.com/account/tokens
+#   VERCEL_ORG_ID               — Settings → General → Team ID (or Personal Account ID)
+#   VERCEL_FRONTEND_PROJECT_ID  — Vercel project ID for frontend/
+#   VERCEL_ADMIN_PROJECT_ID     — Vercel project ID for organization/
+#
+# Required variables (Settings → Variables → Actions):
+#   VITE_API_URL           — e.g. https://fazistore-api.fazilabs.com
+#   VITE_MINIO_PUBLIC_URL  — e.g. https://fazistore-api.fazilabs.com/
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - frontend/src/**
+      - frontend/public/**
+      - frontend/index.html
+      - frontend/vite.config.ts
+      - frontend/package.json
+      - frontend/pnpm-lock.yaml
+      - organization/src/**
+      - organization/public/**
+      - organization/index.html
+      - organization/vite.config.ts
+      - organization/package.json
+      - organization/pnpm-lock.yaml
+      - .github/workflows/deploy-web.yml
+  workflow_dispatch:
+
+jobs:
+  # ── POS web app (frontend/) ─────────────────────────────────────────────────
+  deploy-frontend:
+    name: Deploy POS web
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      contains(join(github.event.commits.*.modified, ' '), 'frontend/') ||
+      contains(join(github.event.commits.*.added,    ' '), 'frontend/')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '10'
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        working-directory: frontend
+        run: pnpm exec tsc -b --noEmit
+
+      - name: Deploy to Vercel
+        working-directory: frontend
+        env:
+          VERCEL_TOKEN:      ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID:     ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_FRONTEND_PROJECT_ID }}
+        run: |
+          npx vercel pull --yes --environment=production --token=$VERCEL_TOKEN
+          npx vercel build --prod --token=$VERCEL_TOKEN \
+            --build-env VITE_API_URL=${{ vars.VITE_API_URL || 'https://fazistore-api.fazilabs.com' }} \
+            --build-env VITE_MINIO_PUBLIC_URL=${{ vars.VITE_MINIO_PUBLIC_URL || 'https://fazistore-api.fazilabs.com/' }}
+          npx vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN
+
+  # ── Super admin (organization/) ─────────────────────────────────────────────
+  deploy-admin:
+    name: Deploy super admin
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      contains(join(github.event.commits.*.modified, ' '), 'organization/') ||
+      contains(join(github.event.commits.*.added,    ' '), 'organization/')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '10'
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: organization/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: organization
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        working-directory: organization
+        run: pnpm exec tsc -b --noEmit
+
+      - name: Deploy to Vercel
+        working-directory: organization
+        env:
+          VERCEL_TOKEN:      ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID:     ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_ADMIN_PROJECT_ID }}
+        run: |
+          npx vercel pull --yes --environment=production --token=$VERCEL_TOKEN
+          npx vercel build --prod --token=$VERCEL_TOKEN \
+            --build-env VITE_API_URL=${{ vars.VITE_API_URL || 'https://fazistore-api.fazilabs.com' }}
+          npx vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN
