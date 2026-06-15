@@ -17,9 +17,37 @@ permissions:
   contents: write
 
 jobs:
+  # ── Tests (runs first; blocks both build jobs on failure) ──────────────────
+  test:
+    name: Flutter tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: stable
+          cache: true
+
+      - name: Flutter pub get
+        working-directory: mobile
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: mobile
+        run: flutter analyze
+
+      - name: Test
+        working-directory: mobile
+        run: flutter test
+
   # ── Android APK + AAB ───────────────────────────────────────────────────────
   android:
     name: Android (APK + AAB)
+    needs: test
     runs-on: ubuntu-latest
 
     steps:
@@ -102,6 +130,7 @@ jobs:
   # ── iOS IPA (unsigned — sideload / TestFlight via manual upload) ────────────
   ios:
     name: iOS (IPA)
+    needs: test
     runs-on: macos-latest
 
     steps:
