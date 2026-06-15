@@ -7,10 +7,9 @@ build/
 # Note: pubspec.lock IS committed — this is an application, so we want
 # reproducible dependency resolution across machines and CI.
 
-# android/ IS committed — it carries permanent native config (camera + Bluetooth
-# permissions, etc.). Build artifacts inside it are excluded by android/.gitignore.
-# Other platform folders stay generated-locally (this is an Android-only app).
-/ios/
+# android/ and ios/ ARE committed — they carry permanent native config (permissions,
+# icons, splash screens, etc.). Build artifacts inside are excluded by their own .gitignores.
+# Other platform folders stay generated-locally.
 /linux/
 /macos/
 /windows/
