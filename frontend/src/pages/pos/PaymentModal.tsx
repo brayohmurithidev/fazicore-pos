@@ -1,4 +1,17 @@
 import { useState, useEffect, useRef } from 'react'
+
+declare global {
+  interface Window {
+    PaystackPop: {
+      setup(opts: {
+        key: string; email: string; amount: number; currency: string
+        ref?: string; access_code?: string
+        onSuccess: (tx: { reference: string }) => void
+        onCancel: () => void
+      }): { openIframe(): void }
+    }
+  }
+}
 import {
   Phone, CheckCircle2, XCircle, Wifi, Search,
   RefreshCw, Banknote, CreditCard, Landmark, FileText,
@@ -13,6 +26,8 @@ import { fmtKES } from '@/lib/data'
 import {
   useInitiateStkPush, useStkStatus, useMpesaCredentials,
   useMpesaTransactions, useCustomers, type MpesaTransactionItem,
+  usePaystackPublicKey, useInitializePaystackTransaction,
+  useVerifyPaystackTransaction, usePaystackMobileMoney, usePaystackMobileMoneyStatus,
 } from '@/lib/queries'
 import type { PaymentMethod, Settings } from '@/types'
 
@@ -249,6 +264,200 @@ function IncomingPaymentPicker({ amount, onSelect, onClose }: {
   )
 }
 
+// ── Paystack card checkout (Popup) ────────────────────────────────────────────
+
+function PaystackCardFlow({
+  amount, publicKey, onSuccess, onCancel,
+}: {
+  amount: number
+  publicKey: string
+  onSuccess: (reference: string) => void
+  onCancel: () => void
+}) {
+  const [email, setEmail]   = useState('')
+  const [busy, setBusy]     = useState(false)
+  const [error, setError]   = useState('')
+  const initialize          = useInitializePaystackTransaction()
+  const verify              = useVerifyPaystackTransaction()
+
+  const launch = async () => {
+    if (!email.trim().includes('@')) { setError('Enter a valid email'); return }
+    setBusy(true); setError('')
+    try {
+      const { access_code, reference } = await initialize.mutateAsync({ amount, email: email.trim() })
+
+      // Dynamically load Paystack inline.js if not already loaded
+      await new Promise<void>((resolve, reject) => {
+        if (window.PaystackPop) { resolve(); return }
+        const s = document.createElement('script')
+        s.src = 'https://js.paystack.co/v1/inline.js'
+        s.onload = () => resolve()
+        s.onerror = reject
+        document.head.appendChild(s)
+      })
+
+      window.PaystackPop.setup({
+        key: publicKey,
+        email: email.trim(),
+        amount: amount * 100,
+        currency: 'KES',
+        ref: reference,
+        access_code,
+        onSuccess: async (tx: { reference: string }) => {
+          try {
+            const result = await verify.mutateAsync(tx.reference)
+            if (result.status === 'success') onSuccess(tx.reference)
+            else setError(`Payment status: ${result.status}. Please retry.`)
+          } catch {
+            onSuccess(tx.reference) // accept even if verify fails — Paystack webhook will reconcile
+          }
+        },
+        onCancel: () => { setBusy(false); onCancel() },
+      }).openIframe()
+    } catch {
+      setBusy(false)
+      setError('Could not launch Paystack. Check your Paystack credentials in Settings.')
+    }
+  }
+
+  return (
+    <div>
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 flex items-center gap-3.5">
+        <CreditCard size={32} className="text-blue-600 flex-shrink-0" />
+        <div>
+          <div className="font-bold text-blue-900">Pay by Card via Paystack</div>
+          <div className="text-xl font-extrabold text-blue-900">{fmtKES(amount)}</div>
+          <div className="text-xs text-blue-700">Visa · Mastercard · Verve</div>
+        </div>
+      </div>
+      <Label className="mb-1.5 block">Customer Email *</Label>
+      <Input
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="customer@email.com"
+        className="mb-1"
+        disabled={busy}
+      />
+      {error && <p className="text-xs text-red-500 mt-1 mb-3">{error}</p>}
+      <p className="text-xs text-gray-400 mb-4">Required by Paystack — used for the payment receipt</p>
+      <div className="flex gap-2">
+        <Button variant="outline" className="flex-1" onClick={onCancel} disabled={busy}>Cancel</Button>
+        <Button className="flex-1 bg-[#00C3F7] hover:bg-[#00aad8] text-white" onClick={launch} disabled={busy || initialize.isPending}>
+          {busy ? 'Opening...' : 'Open Paystack'}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+// ── Paystack M-Pesa STK flow ──────────────────────────────────────────────────
+
+function PaystackStkFlow({
+  amount, onConfirm, onCancel,
+}: {
+  amount: number
+  onConfirm: (reference: string) => void
+  onCancel: () => void
+}) {
+  const [phone, setPhone]     = useState('')
+  const [email, setEmail]     = useState('')
+  const [ref, setRef]         = useState<string | null>(null)
+  const [stage, setStage]     = useState<'input' | 'waiting' | 'success' | 'failed'>('input')
+  const [errMsg, setErrMsg]   = useState('')
+
+  const charge = usePaystackMobileMoney()
+  const { data: statusData } = usePaystackMobileMoneyStatus(ref, stage === 'waiting')
+
+  useEffect(() => {
+    if (!statusData || stage !== 'waiting') return
+    if (statusData.status === 'success') {
+      setStage('success')
+      onConfirm(statusData.reference)
+    } else if (['failed', 'abandoned'].includes(statusData.status)) {
+      setStage('failed')
+      setErrMsg('Payment failed or was cancelled by the customer')
+    }
+  }, [statusData, stage]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSend = async () => {
+    if (!phone.replace(/\s/g, '').match(/^(07|01|2547|2541)\d{8}$/)) {
+      setErrMsg('Enter a valid Safaricom number'); return
+    }
+    if (!email.trim().includes('@')) {
+      setErrMsg('Enter a valid email'); return
+    }
+    setErrMsg('')
+    try {
+      const data = await charge.mutateAsync({ phone, amount, email: email.trim() })
+      setRef(data.reference)
+      setStage('waiting')
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      setErrMsg(err?.response?.data?.detail ?? 'Could not initiate payment. Check Paystack credentials.')
+    }
+  }
+
+  if (stage === 'input') return (
+    <div>
+      <div className="bg-green-50 border border-green-200 rounded-xl p-3.5 mb-4 flex gap-2.5 items-center">
+        <img src="/assets/safaricom/M-PESA-logo.png" alt="M-Pesa" className="h-10 w-auto flex-shrink-0" />
+        <div>
+          <div className="font-bold text-green-900">M-Pesa via Paystack</div>
+          <div className="text-xs text-green-700">Paystack triggers a payment prompt on the customer's phone</div>
+        </div>
+      </div>
+      <div className="text-3xl font-extrabold text-center mb-4">{fmtKES(amount)}</div>
+      <Label className="mb-1.5 block">Customer Phone *</Label>
+      <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="e.g. 0712 345 678" className="mb-3" />
+      <Label className="mb-1.5 block">Customer Email *</Label>
+      <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="customer@email.com" className="mb-1" />
+      <p className="text-xs text-gray-400 mb-4">Required by Paystack for the payment record</p>
+      {errMsg && <p className="text-xs text-red-500 mb-3">{errMsg}</p>}
+      <Button className="w-full bg-[#00A550] hover:bg-[#008f45] text-white h-11" onClick={handleSend} disabled={charge.isPending}>
+        {charge.isPending ? 'Sending...' : 'Send STK Push via Paystack'}
+      </Button>
+    </div>
+  )
+
+  if (stage === 'waiting') return (
+    <div className="text-center py-8">
+      <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+        <Wifi size={28} className="text-green-600 animate-pulse" />
+      </div>
+      <div className="font-bold text-base mb-1.5">Waiting for customer...</div>
+      <div className="text-sm text-gray-500 mb-2">Prompt sent to <strong>{phone}</strong></div>
+      <div className="text-xs text-gray-400 mb-5">This page updates automatically when payment is received</div>
+      <Button variant="outline" onClick={onCancel}>Cancel</Button>
+    </div>
+  )
+
+  if (stage === 'success') return (
+    <div className="text-center py-6">
+      <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+        <CheckCircle2 size={30} className="text-green-600" />
+      </div>
+      <div className="font-bold text-lg text-green-900 mb-1.5">Payment Confirmed!</div>
+      <div className="text-base mb-1">{fmtKES(amount)} received via M-Pesa</div>
+      {ref && <div className="text-xs text-gray-400">Ref: {ref}</div>}
+    </div>
+  )
+
+  return (
+    <div className="text-center py-6">
+      <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+        <XCircle size={30} className="text-red-600" />
+      </div>
+      <div className="font-bold text-lg text-red-900 mb-2">Payment Failed</div>
+      <div className="text-sm text-gray-500 mb-5">{errMsg}</div>
+      <div className="flex gap-2">
+        <Button variant="outline" className="flex-1" onClick={() => { setStage('input'); setErrMsg('') }}>Try Again</Button>
+        <Button variant="destructive" className="flex-1" onClick={onCancel}>Cancel</Button>
+      </div>
+    </div>
+  )
+}
+
 // ── Main modal ────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -275,12 +484,17 @@ export function PaymentModal({ open, onClose, total, onComplete, settings }: Pro
   const [stkOpen, setStkOpen]           = useState(false)
   const [showPicker, setShowPicker]     = useState(false)
 
+  const [paystackStkOpen, setPaystackStkOpen]     = useState(false)
+  const [mpesaProvider, setMpesaProvider]         = useState<'daraja' | 'paystack'>('daraja')
+
   const flags = useFeatureFlags()
   const { data: custMatches = [] } = useCustomers(
     method === 'credit' && creditName.trim().length > 0 ? creditName.trim() : undefined
   )
   const { data: darajaConfigs = [] } = useMpesaCredentials()
   const hasDaraja = !!(darajaConfigs.find((c) => c.is_live && c.is_active))
+  const { data: paystackKey } = usePaystackPublicKey()
+  const hasPaystack = !!paystackKey?.public_key
 
   const hasManual = settings.mpesaManual && flags.mpesa_manual !== false
   const hasStk    = settings.mpesaStk    && flags.mpesa_stk    !== false
@@ -292,8 +506,10 @@ export function PaymentModal({ open, onClose, total, onComplete, settings }: Pro
       setCreditName(''); setCreditPhone(''); setExternalRef('')
       setAirtelPhone(''); setBankName(''); setChequeNo('')
       setCustOpen(false); setStkOpen(false); setShowPicker(false)
+      setPaystackStkOpen(false)
       setMethod('cash')
       setMpesaMode(hasStk ? 'stk' : 'manual')
+      setMpesaProvider('daraja')
     }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -313,7 +529,7 @@ export function PaymentModal({ open, onClose, total, onComplete, settings }: Pro
     }
     if (method === 'credit')        return creditName.trim().length > 0 && creditPhone.trim().length > 0
     if (method === 'airtel')        return airtelPhone.trim().length >= 9
-    if (method === 'card')          return true   // approval code optional
+    if (method === 'card')          return hasPaystack ? !!externalRef.trim() : true   // Paystack sets ref on success; manual terminal code is optional
     if (method === 'bank_transfer') return externalRef.trim().length > 0
     if (method === 'cheque')        return chequeNo.trim().length > 0
     return true
@@ -357,7 +573,9 @@ export function PaymentModal({ open, onClose, total, onComplete, settings }: Pro
 
   const handleCharge = () => {
     if (method === 'mpesa') {
-      if (mpesaMode === 'stk' || (!hasManual && hasStk)) { setStkOpen(true); return }
+      const stkMode = mpesaMode === 'stk' || (!hasManual && hasStk)
+      if (stkMode && mpesaProvider === 'paystack' && hasPaystack) { setPaystackStkOpen(true); return }
+      if (stkMode) { setStkOpen(true); return }
       onComplete({ method: mpesaCash > 0 ? 'split' : 'mpesa', cashTendered: mpesaCash, cashAmount: mpesaCash, mpesaAmount, mpesaRef: mpesaRef.trim() })
       return
     }
@@ -415,6 +633,12 @@ export function PaymentModal({ open, onClose, total, onComplete, settings }: Pro
 
         {stkOpen ? (
           <StkFlow amount={mpesaAmount} orderRef={`POS-${Date.now()}`} onConfirm={handleStkConfirm} onCancel={() => setStkOpen(false)} hasDaraja={hasDaraja} />
+        ) : paystackStkOpen ? (
+          <PaystackStkFlow
+            amount={mpesaAmount}
+            onConfirm={(ref) => { setPaystackStkOpen(false); onComplete({ method: isSplit ? 'split' : 'mpesa', cashTendered: mpesaCash, cashAmount: mpesaCash, mpesaAmount, mpesaRef: ref }) }}
+            onCancel={() => setPaystackStkOpen(false)}
+          />
         ) : (
           <>
             <div className="mb-4">
@@ -484,12 +708,20 @@ export function PaymentModal({ open, onClose, total, onComplete, settings }: Pro
 
                 {(mpesaMode === 'stk' || (!hasManual && hasStk)) && (
                   <div>
+                    {/* Provider selector — show only if both Daraja and Paystack configured */}
+                    {hasDaraja && hasPaystack && (
+                      <div className="flex gap-1 p-1 bg-gray-100 rounded-lg mb-3">
+                        <button onClick={() => setMpesaProvider('daraja')} className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-colors ${mpesaProvider === 'daraja' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Via Daraja</button>
+                        <button onClick={() => setMpesaProvider('paystack')} className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-colors ${mpesaProvider === 'paystack' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Via Paystack</button>
+                      </div>
+                    )}
                     <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-3.5 flex items-center gap-3.5">
                       <img src="/assets/safaricom/M-PESA-logo.png" alt="M-Pesa" className="h-10 w-auto flex-shrink-0" />
                       <div>
-                        <div className="font-bold text-green-900">M-Pesa STK Push</div>
+                        <div className="font-bold text-green-900">M-Pesa STK Push {hasPaystack && !hasDaraja ? '(Paystack)' : hasDaraja && hasPaystack && mpesaProvider === 'paystack' ? '(Paystack)' : ''}</div>
                         <div className="text-xl font-extrabold text-green-900">{fmtKES(mpesaAmount)}</div>
-                        {!hasDaraja && <div className="text-xs text-amber-700 mt-1">Simulation — configure Daraja in Settings to go live</div>}
+                        {!hasDaraja && !hasPaystack && <div className="text-xs text-amber-700 mt-1">Simulation — configure Daraja or Paystack in Settings to go live</div>}
+                        {!hasDaraja && hasPaystack && <div className="text-xs text-green-700 mt-1">Powered by Paystack</div>}
                       </div>
                     </div>
                     <Label className="mb-1.5 block">Cash from customer <span className="text-gray-400 font-normal">(optional)</span></Label>
@@ -501,7 +733,7 @@ export function PaymentModal({ open, onClose, total, onComplete, settings }: Pro
             )}
 
             {/* ── Card ── */}
-            {method === 'card' && (
+            {method === 'card' && !hasPaystack && (
               <div>
                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 flex items-center gap-3.5">
                   <CreditCard size={32} className="text-blue-600 flex-shrink-0" />
@@ -514,6 +746,27 @@ export function PaymentModal({ open, onClose, total, onComplete, settings }: Pro
                 <Label className="mb-1.5 block">Approval Code <span className="text-gray-400 font-normal">(optional)</span></Label>
                 <Input value={externalRef} onChange={(e) => setExternalRef(e.target.value.toUpperCase())} placeholder="e.g. 123456" className="font-mono" />
                 <p className="text-xs text-gray-400 mt-1">From the card terminal receipt</p>
+              </div>
+            )}
+            {method === 'card' && hasPaystack && !externalRef && (
+              <PaystackCardFlow
+                amount={total}
+                publicKey={paystackKey!.public_key}
+                onSuccess={(ref) => setExternalRef(ref)}
+                onCancel={() => {}}
+              />
+            )}
+            {method === 'card' && hasPaystack && externalRef && (
+              <div>
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center gap-3.5">
+                  <CheckCircle2 size={32} className="text-blue-600 flex-shrink-0" />
+                  <div>
+                    <div className="font-bold text-blue-900">Card Authorised</div>
+                    <div className="text-xl font-extrabold text-blue-900">{fmtKES(total)}</div>
+                    <div className="text-xs text-blue-700 font-mono mt-0.5">Ref: {externalRef}</div>
+                  </div>
+                </div>
+                <button onClick={() => setExternalRef('')} className="text-xs text-gray-400 hover:text-gray-600 mt-2">Try a different card</button>
               </div>
             )}
 
@@ -625,11 +878,13 @@ export function PaymentModal({ open, onClose, total, onComplete, settings }: Pro
               </div>
             )}
 
-            {!showPicker && (
+            {!showPicker && !(method === 'card' && hasPaystack && !externalRef) && (
               <div className="flex gap-2 mt-5">
                 <Button variant="outline" className="flex-1 h-11" onClick={onClose}>Cancel</Button>
                 <Button className="flex-1 h-11" disabled={!canProceed()} onClick={handleCharge}>
-                  {method === 'mpesa' && (mpesaMode === 'stk' || (!hasManual && hasStk)) ? 'Send STK Push' : 'Complete Sale'}
+                  {method === 'mpesa' && (mpesaMode === 'stk' || (!hasManual && hasStk))
+                    ? (mpesaProvider === 'paystack' && hasPaystack ? 'Send STK via Paystack' : 'Send STK Push')
+                    : 'Complete Sale'}
                 </Button>
               </div>
             )}

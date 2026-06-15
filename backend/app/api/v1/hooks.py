@@ -6,6 +6,7 @@ Registered paths (use these in Daraja portal):
   POST /api/v1/hooks/{org_slug}/stk          — STK Push result
   POST /api/v1/hooks/{org_slug}/c2b/validate — C2B validation (accept/reject)
   POST /api/v1/hooks/{org_slug}/c2b/confirm  — C2B confirmation (store tx)
+  POST /api/v1/hooks/gateway                 — Paystack event webhook (HMAC signed)
 """
 
 import json
@@ -325,3 +326,46 @@ async def _infer_plan_from_amount(
         if float(getattr(plan, price_field)) > 0:
             return plan
     return None
+
+
+# ── Paystack event webhook ────────────────────────────────────────────────────
+# Register: https://dashboard.paystack.com → Settings → Webhooks
+# URL: https://fazistore-api.fazilabs.com/api/v1/hooks/gateway
+# Paystack signs each request with X-Paystack-Signature (sha512 HMAC of raw body).
+
+@router.post("/gateway", include_in_schema=False)
+async def paystack_webhook(
+    request: Request,
+    x_paystack_signature: str | None = Header(None),
+    session: AsyncSession = Depends(get_session),
+):
+    import hmac as _hmac
+    import hashlib as _hashlib
+
+    raw = await request.body()
+
+    paystack_secret = getattr(settings, "PAYSTACK_WEBHOOK_SECRET", None)
+    if paystack_secret and x_paystack_signature:
+        expected = _hmac.new(
+            paystack_secret.encode(), raw, _hashlib.sha512
+        ).hexdigest()
+        if not _hmac.compare_digest(expected, x_paystack_signature):
+            logger.warning("Paystack webhook: invalid signature")
+            return {"status": "ignored"}
+
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return {"status": "ignored"}
+
+    event = payload.get("event", "")
+    data = payload.get("data", {})
+    logger.info("Paystack webhook: %s ref=%s", event, data.get("reference"))
+
+    if event == "charge.success":
+        # Future: mark order as paid, update transaction record, etc.
+        reference = data.get("reference", "")
+        amount_cents = data.get("amount", 0)
+        logger.info("Paystack charge.success ref=%s amount=%s", reference, amount_cents)
+
+    return {"status": "ok"}

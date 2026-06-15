@@ -1390,3 +1390,89 @@ export function useVoidLog(params: { date_from?: string; date_to?: string; branc
     staleTime: 30_000,
   })
 }
+
+// ── Paystack ──────────────────────────────────────────────────────────────────
+
+export interface PaystackPublicKeyOut {
+  public_key: string
+  is_live: boolean
+}
+
+export interface PaystackCredentialsOut {
+  public_key: string
+  secret_key_masked: string
+  is_live: boolean
+  is_active: boolean
+}
+
+export interface PaystackCredentialsIn {
+  public_key: string
+  secret_key: string
+  is_live: boolean
+}
+
+const PAYSTACK_CREDS_KEY = ['paystack-credentials']
+
+export function usePaystackPublicKey() {
+  return useQuery<PaystackPublicKeyOut | null>({
+    queryKey: ['paystack-public-key'],
+    queryFn: () => api.get('/paystack/public-key').then((r) => r.data ?? null),
+    staleTime: 5 * 60_000,
+  })
+}
+
+export function usePaystackCredentials() {
+  return useQuery<PaystackCredentialsOut | null>({
+    queryKey: PAYSTACK_CREDS_KEY,
+    queryFn: () => api.get('/paystack/credentials').then((r) => r.data ?? null),
+    staleTime: 60_000,
+  })
+}
+
+export function useSavePaystackCredentials() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: PaystackCredentialsIn) =>
+      api.put('/paystack/credentials', data).then((r) => r.data as PaystackCredentialsOut),
+    onSuccess: () => qc.invalidateQueries({ queryKey: PAYSTACK_CREDS_KEY }),
+  })
+}
+
+export function useDeletePaystackCredentials() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.delete('/paystack/credentials'),
+    onSuccess: () => qc.invalidateQueries({ queryKey: PAYSTACK_CREDS_KEY }),
+  })
+}
+
+export function useInitializePaystackTransaction() {
+  return useMutation({
+    mutationFn: (data: { amount: number; email: string; reference?: string }) =>
+      api.post('/paystack/initialize', data).then((r) => r.data as { access_code: string; authorization_url: string; reference: string }),
+  })
+}
+
+export function useVerifyPaystackTransaction() {
+  return useMutation({
+    mutationFn: (reference: string) =>
+      api.get(`/paystack/verify/${reference}`).then((r) => r.data as { status: string; amount: number; reference: string }),
+  })
+}
+
+export function usePaystackMobileMoney() {
+  return useMutation({
+    mutationFn: (data: { phone: string; amount: number; email: string; reference?: string }) =>
+      api.post('/paystack/mobile-money', data).then((r) => r.data as { reference: string; status: string }),
+  })
+}
+
+export function usePaystackMobileMoneyStatus(reference: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ['paystack-mm-status', reference],
+    queryFn: () =>
+      api.get(`/paystack/status/${reference}`).then((r) => r.data as { status: string; reference: string; data: Record<string, unknown> }),
+    enabled: !!reference && enabled,
+    refetchInterval: enabled ? 3000 : false,
+  })
+}

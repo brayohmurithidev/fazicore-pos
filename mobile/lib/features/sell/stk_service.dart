@@ -1,5 +1,47 @@
 import '../../core/api_client.dart';
 
+// ── Paystack M-Pesa (mobile money via Paystack) ───────────────────────────────
+
+class PaystackStkResult {
+  final bool success;
+  final String? reference;
+  final String message;
+  const PaystackStkResult(this.success, this.reference, this.message);
+}
+
+/// Initiate an M-Pesa STK push via Paystack and poll until paid, failed, or
+/// timed out (~60s). Requires Paystack credentials configured in org settings.
+Future<PaystackStkResult> pushPaystackMobileMoneyAndWait(
+  ApiClient api, {
+  required String phone,
+  required int amount,
+  required String email,
+}) async {
+  final res = await api.dio.post('/paystack/mobile-money', data: {
+    'phone': normalizeKEPhone(phone),
+    'amount': amount,
+    'email': email,
+  });
+  final reference = res.data['reference'] as String? ?? '';
+  if (reference.isEmpty) {
+    return const PaystackStkResult(false, null, 'No reference returned from Paystack');
+  }
+
+  for (var i = 0; i < 20; i++) {
+    await Future.delayed(const Duration(seconds: 3));
+    final st = await api.dio.get('/paystack/status/$reference');
+    final status = (st.data['status'] ?? '').toString().toLowerCase();
+    if (status == 'success') {
+      return PaystackStkResult(true, reference, 'Payment received');
+    }
+    if (status == 'failed' || status == 'abandoned') {
+      return PaystackStkResult(false, null, 'Payment ${status}');
+    }
+    // ongoing / pending → keep polling
+  }
+  return PaystackStkResult(false, null, 'Timed out waiting for payment');
+}
+
 class StkResult {
   final bool success;
   final String? receipt; // M-Pesa receipt number

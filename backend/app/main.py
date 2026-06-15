@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
-from app.api.v1 import admin, analytics, attendance, audit, auth, branches, categories, customers, dashboard, download, etims, expenditures, hooks, inventory, loyalty, mpesa, orders, org, platform, products, purchase_orders, reports, seed, stock_transfers, suppliers, uploads, users
+from app.api.v1 import admin, analytics, attendance, audit, auth, branches, categories, customers, dashboard, download, etims, expenditures, hooks, inventory, loyalty, mpesa, orders, org, paystack, platform, products, purchase_orders, reports, seed, stock_transfers, suppliers, uploads, users
 from app.api.v1.analytics import sales_router
 from app.core.config import settings
 from app.middleware.tenant import TenantMiddleware
@@ -64,6 +64,7 @@ app.include_router(attendance.router, prefix=API_PREFIX)
 app.include_router(sales_router, prefix=API_PREFIX)
 app.include_router(download.router, prefix=API_PREFIX)
 app.include_router(mpesa.router, prefix=API_PREFIX)
+app.include_router(paystack.router, prefix=API_PREFIX)
 app.include_router(hooks.router, prefix=API_PREFIX)
 app.include_router(loyalty.router, prefix=API_PREFIX)
 app.include_router(etims.router, prefix=API_PREFIX)

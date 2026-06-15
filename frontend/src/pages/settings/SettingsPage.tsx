@@ -28,6 +28,7 @@ import {
   useLoyaltySettings, useUpdateLoyaltySettings,
   useEtimsConfig, useUpdateEtimsConfig, useTestEtimsConnection,
   useEtimsSubmissions, useRetryEtimsSubmission,
+  usePaystackCredentials, useSavePaystackCredentials, useDeletePaystackCredentials,
   type MpesaCredentialsOut, type UpgradeInitiated,
 } from '@/lib/queries'
 import { useFeatureFlags } from '@/hooks/useFeature'
@@ -1056,6 +1057,99 @@ function MpesaCredentialsSection() {
   )
 }
 
+// ── Paystack credentials section ──────────────────────────────────────────────
+
+function PaystackCredentialsSection() {
+  const { data: creds, isLoading } = usePaystackCredentials()
+  const save   = useSavePaystackCredentials()
+  const remove = useDeletePaystackCredentials()
+
+  const [publicKey,  setPublicKey]  = useState(creds?.public_key ?? '')
+  const [secretKey,  setSecretKey]  = useState('')
+  const [isLive,     setIsLive]     = useState(creds?.is_live ?? false)
+  const [editing,    setEditing]    = useState(!creds)
+  const [msg,        setMsg]        = useState<{ ok: boolean; text: string } | null>(null)
+
+  useEffect(() => {
+    if (creds && !editing) {
+      setPublicKey(creds.public_key)
+      setIsLive(creds.is_live)
+      setSecretKey('')
+    }
+  }, [creds, editing])
+
+  if (isLoading) return null
+
+  const handleSave = async () => {
+    if (!publicKey.trim().startsWith('pk_')) { setMsg({ ok: false, text: 'Public key must start with pk_test_ or pk_live_' }); return }
+    if (!creds && !secretKey.trim().startsWith('sk_')) { setMsg({ ok: false, text: 'Secret key must start with sk_test_ or sk_live_' }); return }
+    try {
+      await save.mutateAsync({ public_key: publicKey.trim(), secret_key: secretKey.trim() || '(unchanged)', is_live: isLive })
+      setMsg({ ok: true, text: 'Paystack credentials saved.' })
+      setEditing(false)
+    } catch { setMsg({ ok: false, text: 'Failed to save credentials.' }) }
+  }
+
+  return (
+    <Section title="Paystack API">
+      <p className="text-xs text-gray-400 -mt-1 mb-3">
+        Powers card payments and M-Pesa STK Push via Paystack. Get your keys from{' '}
+        <span className="font-mono text-[11px]">dashboard.paystack.com</span>.
+      </p>
+      <div className={`rounded-lg border p-4 space-y-3 ${creds?.is_active ? 'border-green-300 ring-1 ring-green-200' : 'border-gray-200'}`}>
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-semibold text-gray-900">
+              {creds ? (creds.is_live ? 'Live Mode' : 'Test Mode') : 'Not configured'}
+            </div>
+            {creds && <div className="text-xs text-gray-400">pk: {creds.public_key}</div>}
+          </div>
+          <div className="flex gap-2">
+            {creds && !editing && (
+              <>
+                <Button size="sm" variant="outline" onClick={() => { setEditing(true); setMsg(null) }}>Edit</Button>
+                <Button size="sm" variant="destructive" onClick={async () => { if (!confirm('Remove Paystack credentials?')) return; await remove.mutateAsync(); setEditing(true); setMsg(null) }} disabled={remove.isPending}>Remove</Button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {editing && (
+          <div className="space-y-3 pt-2 border-t border-gray-100">
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-medium text-gray-700">Mode</span>
+              <div className="flex gap-1 p-0.5 bg-gray-100 rounded-md">
+                <button onClick={() => setIsLive(false)} className={`px-3 py-1 text-xs rounded transition-colors ${!isLive ? 'bg-white shadow-sm font-semibold' : 'text-gray-500'}`}>Test</button>
+                <button onClick={() => setIsLive(true)} className={`px-3 py-1 text-xs rounded transition-colors ${isLive ? 'bg-white shadow-sm font-semibold text-amber-700' : 'text-gray-500'}`}>Live</button>
+              </div>
+            </div>
+            <div>
+              <Label className="mb-1 block text-xs">Public Key</Label>
+              <Input value={publicKey} onChange={(e) => setPublicKey(e.target.value)} placeholder="pk_test_..." className="font-mono text-xs" />
+            </div>
+            <div>
+              <Label className="mb-1 block text-xs">Secret Key {creds && <span className="text-gray-400">(leave blank to keep existing)</span>}</Label>
+              <Input type="password" value={secretKey} onChange={(e) => setSecretKey(e.target.value)} placeholder={creds ? '(unchanged)' : 'sk_test_...'} className="font-mono text-xs" />
+            </div>
+            {msg && <p className={`text-xs ${msg.ok ? 'text-green-600' : 'text-red-500'}`}>{msg.text}</p>}
+            <div className="flex gap-2">
+              {creds && <Button size="sm" variant="outline" onClick={() => { setEditing(false); setMsg(null) }}>Cancel</Button>}
+              <Button size="sm" onClick={handleSave} disabled={save.isPending}>Save</Button>
+            </div>
+            {isLive && <p className="text-xs text-amber-700">Live mode — real card charges will be processed.</p>}
+          </div>
+        )}
+
+        {creds && !editing && (
+          <p className="text-xs text-gray-400">
+            {creds.is_live ? 'Live payments — real money. Verify webhook is configured at dashboard.paystack.com.' : 'Test only — no real money charged.'}
+          </p>
+        )}
+      </div>
+    </Section>
+  )
+}
+
 // ── Payments tab ──────────────────────────────────────────────────────────────
 
 function PaymentsTab() {
@@ -1075,6 +1169,7 @@ function PaymentsTab() {
         <Toggle label="Split Payments" sub="Allow part-cash, part-M-Pesa" value={(settings.mpesaManual || settings.mpesaStk) && settings.cash} onChange={() => {}} />
       </Section>
       {user?.role === 'admin' && (settings.mpesaManual || settings.mpesaStk) && <MpesaCredentialsSection />}
+      {user?.role === 'admin' && <PaystackCredentialsSection />}
     </div>
   )
 }

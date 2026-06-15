@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     BILLING_ONBOARD_URL: str = ""
     BILLING_WEBHOOK_SECRET: str = ""
 
+    # Paystack webhook secret (from Paystack dashboard → Webhooks)
+    PAYSTACK_WEBHOOK_SECRET: str = ""
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def parse_cors(cls, v: str | list) -> list:

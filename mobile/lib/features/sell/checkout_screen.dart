@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../core/api_client.dart';
 import '../../core/db/app_database.dart';
@@ -48,12 +49,20 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   String? _stkMsg;
   String? _error;
 
+  // Paystack card
+  final _paystackEmail = TextEditingController();
+  bool _paystackCardDone = false;
+  String? _paystackRef;
+  // Paystack M-Pesa provider toggle (Daraja vs Paystack)
+  bool _usePsSdk = false; // false = Daraja STK, true = Paystack STK
+
   @override
   void dispose() {
     _refController.dispose();
     _phone.dispose();
     _mpesaCash.dispose();
     _bankName.dispose();
+    _paystackEmail.dispose();
     super.dispose();
   }
 
@@ -320,14 +329,37 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               style: const TextStyle(color: AppColors.brand, fontWeight: FontWeight.w600)),
         ),
       if (planAllows(ref, Feat.mpesaStk)) ...[
+        // Provider toggle (show Paystack option when it's configured)
+        FutureBuilder(
+          future: ref.read(apiClientProvider).dio.get('/paystack/public-key').then((r) => r.data as Map<String, dynamic>?).catchError((_) => null),
+          builder: (_, snap) {
+            final hasPs = snap.hasData && snap.data != null;
+            if (!hasPs) return const SizedBox.shrink();
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                children: [
+                  const Text('Send via:', style: TextStyle(fontSize: 13, color: Colors.grey)),
+                  const SizedBox(width: 8),
+                  ChoiceChip(label: const Text('Daraja'), selected: !_usePsSdk, onSelected: (_) => setState(() { _usePsSdk = false; _stkMsg = null; })),
+                  const SizedBox(width: 6),
+                  ChoiceChip(label: const Text('Paystack'), selected: _usePsSdk, onSelected: (_) => setState(() { _usePsSdk = true; _stkMsg = null; })),
+                ],
+              ),
+            );
+          },
+        ),
+        if (_usePsSdk) ...[
+          _textField(_paystackEmail, 'Customer email (required by Paystack)', number: false),
+        ],
         SizedBox(
           width: double.infinity,
           child: OutlinedButton.icon(
             icon: _stkBusy
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.smartphone),
-            label: Text(_stkBusy ? 'Waiting for payment…' : 'Push STK to phone'),
-            onPressed: (online && !_stkBusy && !_saving) ? _pushStk : null,
+            label: Text(_stkBusy ? 'Waiting for payment…' : (_usePsSdk ? 'Push STK via Paystack' : 'Push STK to phone')),
+            onPressed: (online && !_stkBusy && !_saving) ? (_usePsSdk ? _pushPaystackStk : _pushStk) : null,
           ),
         ),
         if (!online)
@@ -347,15 +379,66 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     ];
   }
 
-  List<Widget> _cardFields() => [
-    _infoPanel(
-      color: const Color(0xFF2563EB),
-      icon: Icons.credit_card,
-      title: 'Card Payment',
-      subtitle: 'Process on your POS terminal, then confirm here',
-    ),
-    _textField(_refController, 'Approval code (optional)'),
-  ];
+  List<Widget> _cardFields() {
+    if (_paystackCardDone) {
+      return [
+        Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF2563EB).withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFF2563EB).withValues(alpha: 0.25)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Color(0xFF2563EB), size: 28),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Card Authorised', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF2563EB))),
+                    Text(kes(_total), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF2563EB))),
+                    if (_paystackRef != null)
+                      Text('Ref: $_paystackRef', style: const TextStyle(fontSize: 11, color: Colors.grey, fontFamily: 'monospace')),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        TextButton(
+          onPressed: () => setState(() { _paystackCardDone = false; _paystackRef = null; }),
+          child: const Text('Try a different card'),
+        ),
+      ];
+    }
+    return [
+      _infoPanel(
+        color: const Color(0xFF2563EB),
+        icon: Icons.credit_card,
+        title: 'Card Payment',
+        subtitle: 'Pay via Paystack (Visa · Mastercard · Verve)',
+      ),
+      _textField(_paystackEmail, 'Customer email *'),
+      SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          icon: const Icon(Icons.open_in_new, size: 18),
+          label: const Text('Pay with Paystack'),
+          style: FilledButton.styleFrom(backgroundColor: const Color(0xFF00C3F7)),
+          onPressed: _saving ? null : _launchPaystackCard,
+        ),
+      ),
+      const SizedBox(height: 12),
+      const Divider(),
+      const SizedBox(height: 8),
+      const Text('Or enter approval code from a terminal:', style: TextStyle(fontSize: 12, color: Colors.grey)),
+      const SizedBox(height: 8),
+      _textField(_refController, 'Approval code (optional)'),
+    ];
+  }
 
   List<Widget> _airtelFields() => [
     _infoPanel(
@@ -465,6 +548,80 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     }
   }
 
+  Future<void> _pushPaystackStk() async {
+    final phone = _phone.text.trim();
+    final email = _paystackEmail.text.trim();
+    final normalized = normalizeKEPhone(phone);
+    if (!normalized.startsWith('254') || normalized.length != 12) {
+      setState(() => _error = 'Enter a valid Kenyan number, e.g. 0712 345 678');
+      return;
+    }
+    if (!email.contains('@')) {
+      setState(() => _error = 'Enter a valid customer email (required by Paystack)');
+      return;
+    }
+    final split = _mpesaSplit();
+    setState(() { _stkBusy = true; _stkMsg = 'Prompt sent — ask customer to enter M-Pesa PIN'; _error = null; });
+    try {
+      final result = await pushPaystackMobileMoneyAndWait(
+        ref.read(apiClientProvider),
+        phone: normalized,
+        amount: split.mpesa.toInt(),
+        email: email,
+      );
+      if (!mounted) return;
+      if (result.success) {
+        if (result.reference != null) _refController.text = result.reference!;
+        await _complete(
+          method: split.method, amountPaid: _total, change: 0,
+          cashAmount: split.cash, mpesaAmount: split.mpesa,
+        );
+      } else {
+        setState(() { _stkBusy = false; _stkMsg = null; _error = result.message; });
+      }
+    } catch (e) {
+      if (mounted) setState(() { _stkBusy = false; _stkMsg = null; _error = apiError(e); });
+    }
+  }
+
+  Future<void> _launchPaystackCard() async {
+    final email = _paystackEmail.text.trim();
+    if (!email.contains('@')) {
+      setState(() => _error = 'Enter a valid customer email to use Paystack');
+      return;
+    }
+    setState(() { _saving = true; _error = null; });
+    try {
+      final api = ref.read(apiClientProvider);
+      final res = await api.dio.post('/paystack/initialize', data: {
+        'amount': _total.toInt(),
+        'email': email,
+      });
+      final authUrl   = res.data['authorization_url'] as String? ?? '';
+      final reference = res.data['reference'] as String? ?? '';
+      if (authUrl.isEmpty || !mounted) {
+        setState(() { _saving = false; _error = 'Paystack not configured. Add credentials in Settings.'; });
+        return;
+      }
+      setState(() => _saving = false);
+      // Open Paystack hosted checkout in a WebView and wait for result.
+      final result = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) => _PaystackWebView(authorizationUrl: authUrl, reference: reference),
+        ),
+      );
+      if (!mounted) return;
+      if (result == true) {
+        setState(() { _paystackRef = reference; _paystackCardDone = true; _error = null; });
+      } else {
+        setState(() => _error = 'Card payment was cancelled or failed');
+      }
+    } catch (e) {
+      if (mounted) setState(() { _saving = false; _error = 'Paystack error: $e'; });
+    }
+  }
+
   void _completeNonCash() {
     switch (_nonCash) {
       case PayMethod.credit:
@@ -474,8 +631,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         }
         _complete(method: 'credit', amountPaid: 0, change: 0);
       case PayMethod.card:
-        _complete(method: 'card', amountPaid: _total, change: 0,
-            mpesaRef: _refController.text.trim().isEmpty ? null : _refController.text.trim());
+        final cardRef = _paystackRef ?? (_refController.text.trim().isEmpty ? null : _refController.text.trim());
+        _complete(method: 'card', amountPaid: _total, change: 0, mpesaRef: cardRef);
       case PayMethod.airtel:
         if (_phone.text.trim().length < 9) {
           setState(() => _error = 'Enter the customer Airtel number');
@@ -733,6 +890,57 @@ class _Keypad extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+// ── Paystack WebView card checkout ────────────────────────────────────────────
+
+class _PaystackWebView extends StatefulWidget {
+  final String authorizationUrl;
+  final String reference;
+  const _PaystackWebView({required this.authorizationUrl, required this.reference});
+
+  @override
+  State<_PaystackWebView> createState() => _PaystackWebViewState();
+}
+
+class _PaystackWebViewState extends State<_PaystackWebView> {
+  late final WebViewController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(NavigationDelegate(
+        onNavigationRequest: (req) {
+          // Paystack redirects to the callback URL or standard.paystack.co/close on success
+          final url = req.url.toLowerCase();
+          if (url.contains('paystack.co/close') ||
+              url.contains('/payment/callback') ||
+              url.contains('fazipos') ||
+              (url.contains(widget.reference.toLowerCase()) && url.contains('success'))) {
+            Navigator.of(context).pop(true);
+            return NavigationDecision.prevent;
+          }
+          return NavigationDecision.navigate;
+        },
+      ))
+      ..loadRequest(Uri.parse(widget.authorizationUrl));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Card Payment'),
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.of(context).pop(false),
+        ),
+      ),
+      body: WebViewWidget(controller: _controller),
     );
   }
 }
