@@ -9,6 +9,29 @@ on:
   workflow_dispatch:
 
 jobs:
+  # ── Unit tests (no DB required) ────────────────────────────────────────────
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements-test.txt
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements-test.txt
+
+      - name: Run tests
+        working-directory: backend
+        run: pytest
+
   # ── Build & push image to GHCR ─────────────────────────────────────────────
   build:
     name: Build & push
@@ -55,7 +78,7 @@ jobs:
   # ── Deploy to production server ────────────────────────────────────────────
   deploy:
     name: Deploy
-    needs: build
+    needs: [test, build]
     runs-on: ubuntu-latest
 
     steps:
