@@ -260,7 +260,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     return [
           _customerPicker(optional: true),
           const SizedBox(height: 12),
-          _textField(_phone, 'Customer phone (for STK)', number: true),
+          _phoneField(),
           _textField(_mpesaCash, 'Cash received (optional — makes it a split)', number: true),
           if (cash > 0 && cash < _total)
             Padding(
@@ -363,6 +363,30 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             border: const OutlineInputBorder(),
             isDense: true,
             prefixText: number ? 'KES ' : null,
+          ),
+        ),
+      );
+
+  Widget _phoneField() => Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: TextField(
+          controller: _phone,
+          keyboardType: TextInputType.phone,
+          onChanged: (_) => setState(() => _error = null),
+          decoration: const InputDecoration(
+            labelText: 'Customer phone (for STK)',
+            border: OutlineInputBorder(),
+            isDense: true,
+            prefix: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('🇰🇪', style: TextStyle(fontSize: 15)),
+                SizedBox(width: 4),
+                Text('+254', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                Icon(Icons.arrow_drop_down, size: 18),
+                SizedBox(width: 2),
+              ],
+            ),
           ),
         ),
       );
