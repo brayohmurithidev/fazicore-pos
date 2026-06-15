@@ -20,7 +20,7 @@ import 'catalog_providers.dart';
 import 'stk_service.dart';
 import 'success_screen.dart';
 
-enum PayMethod { cash, mpesa, credit, split }
+enum PayMethod { cash, mpesa, card, airtel, bankTransfer, cheque, credit, split }
 
 class CheckoutScreen extends ConsumerStatefulWidget {
   const CheckoutScreen({super.key});
@@ -37,9 +37,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   String _cash = '';
   // Non-cash.
   PayMethod _nonCash = PayMethod.mpesa;
-  final _refController = TextEditingController();
-  final _phone = TextEditingController();
-  final _mpesaCash = TextEditingController(); // optional cash portion → split
+  final _refController  = TextEditingController(); // mpesa ref / card approval / bank ref / cheque no
+  final _phone          = TextEditingController(); // mpesa / airtel phone
+  final _mpesaCash      = TextEditingController(); // optional cash split
+  final _bankName       = TextEditingController(); // bank transfer / cheque bank
   LocalCustomer? _customer;
 
   bool _saving = false;
@@ -52,6 +53,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     _refController.dispose();
     _phone.dispose();
     _mpesaCash.dispose();
+    _bankName.dispose();
     super.dispose();
   }
 
@@ -205,15 +207,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Row(
-                children: [
-                  _methodCard(PayMethod.mpesa, const MpesaLogo(height: 20)),
-                  if (planAllows(ref, Feat.creditSystem)) ...[
-                    const SizedBox(width: 12),
-                    _methodCard(PayMethod.credit, const Text('Credit', style: TextStyle(fontWeight: FontWeight.w600))),
-                  ],
-                ],
-              ),
+              _methodGrid(),
               const SizedBox(height: 20),
               ..._nonCashFields(),
               if (_error != null)
@@ -229,71 +223,200 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     );
   }
 
-  Widget _methodCard(PayMethod m, Widget label) {
-    final sel = _nonCash == m;
-    return Expanded(
-      child: InkWell(
-        onTap: () => setState(() { _nonCash = m; _error = null; }),
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          height: 64,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: sel ? AppColors.brand : Colors.black.withValues(alpha: 0.1), width: sel ? 2 : 1),
-            color: sel ? AppColors.brand.withValues(alpha: 0.06) : Colors.white,
+  Widget _methodGrid() {
+    final methods = <_MethodDef>[
+      _MethodDef(PayMethod.mpesa,       'M-Pesa',       _mpesaTile()),
+      _MethodDef(PayMethod.card,        'Card',         const Icon(Icons.credit_card, color: Color(0xFF2563EB), size: 26)),
+      _MethodDef(PayMethod.airtel,      'Airtel',       _airtelTile()),
+      _MethodDef(PayMethod.bankTransfer,'Bank Transfer', const Icon(Icons.account_balance, color: Color(0xFF4338CA), size: 26)),
+      _MethodDef(PayMethod.cheque,      'Cheque',       const Icon(Icons.description_outlined, color: Color(0xFFD97706), size: 26)),
+      if (planAllows(ref, Feat.creditSystem))
+        _MethodDef(PayMethod.credit,    'Credit',       const Icon(Icons.receipt_long, color: Colors.grey, size: 26)),
+    ];
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: methods.map((m) => _methodTile(m)).toList(),
+    );
+  }
+
+  Widget _mpesaTile() => MpesaLogo(height: 18);
+
+  Widget _airtelTile() => Container(
+    width: 28, height: 28,
+    decoration: const BoxDecoration(color: Color(0xFFDC2626), shape: BoxShape.circle),
+    alignment: Alignment.center,
+    child: const Text('AIR', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900)),
+  );
+
+  Widget _methodTile(_MethodDef m) {
+    final sel = _nonCash == m.method;
+    final width = (MediaQuery.of(context).size.width - 32 - 24) / 4; // 4-per-row
+    return GestureDetector(
+      onTap: () => setState(() { _nonCash = m.method; _error = null; }),
+      child: Container(
+        width: width,
+        height: 72,
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: sel ? AppColors.brand : Colors.black.withValues(alpha: 0.1),
+            width: sel ? 2 : 1,
           ),
-          child: label,
+          color: sel ? AppColors.brand.withValues(alpha: 0.06) : Colors.white,
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            m.icon,
+            const SizedBox(height: 5),
+            Text(m.label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: sel ? AppColors.brand : const Color(0xFF374151),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
   List<Widget> _nonCashFields() {
-    if (_nonCash == PayMethod.credit) {
-      return [_customerPicker(optional: false)];
+    switch (_nonCash) {
+      case PayMethod.mpesa:
+        return _mpesaFields();
+      case PayMethod.card:
+        return _cardFields();
+      case PayMethod.airtel:
+        return _airtelFields();
+      case PayMethod.bankTransfer:
+        return _bankTransferFields();
+      case PayMethod.cheque:
+        return _chequeFields();
+      case PayMethod.credit:
+        return [_customerPicker(optional: false)];
+      default:
+        return [];
     }
-    // M-Pesa (with an optional cash portion → split).
+  }
+
+  List<Widget> _mpesaFields() {
     final cash = _mpesaCashNum;
     final mpesaPortion = (cash > 0 && cash < _total) ? _total - cash : _total;
     final online = ref.watch(isOnlineProvider);
     return [
-          _customerPicker(optional: true),
-          const SizedBox(height: 12),
-          _phoneField(),
-          _textField(_mpesaCash, 'Cash received (optional — makes it a split)', number: true),
-          if (cash > 0 && cash < _total)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text('M-Pesa portion: ${kes(mpesaPortion)}',
-                  style: const TextStyle(color: AppColors.brand, fontWeight: FontWeight.w600)),
+      _customerPicker(optional: true),
+      const SizedBox(height: 12),
+      _phoneField(),
+      _textField(_mpesaCash, 'Cash received (optional — makes it a split)', number: true),
+      if (cash > 0 && cash < _total)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Text('M-Pesa portion: ${kes(mpesaPortion)}',
+              style: const TextStyle(color: AppColors.brand, fontWeight: FontWeight.w600)),
+        ),
+      if (planAllows(ref, Feat.mpesaStk)) ...[
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            icon: _stkBusy
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.smartphone),
+            label: Text(_stkBusy ? 'Waiting for payment…' : 'Push STK to phone'),
+            onPressed: (online && !_stkBusy && !_saving) ? _pushStk : null,
+          ),
+        ),
+        if (!online)
+          const Padding(
+            padding: EdgeInsets.only(top: 6),
+            child: Text('STK needs internet. Record the M-Pesa code manually below while offline.',
+                style: TextStyle(color: Colors.grey, fontSize: 12)),
+          ),
+      ],
+      if (_stkMsg != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(_stkMsg!, style: const TextStyle(color: AppColors.brand, fontSize: 13)),
+        ),
+      const SizedBox(height: 8),
+      _textField(_refController, 'M-Pesa reference (optional)'),
+    ];
+  }
+
+  List<Widget> _cardFields() => [
+    _infoPanel(
+      color: const Color(0xFF2563EB),
+      icon: Icons.credit_card,
+      title: 'Card Payment',
+      subtitle: 'Process on your POS terminal, then confirm here',
+    ),
+    _textField(_refController, 'Approval code (optional)'),
+  ];
+
+  List<Widget> _airtelFields() => [
+    _infoPanel(
+      color: const Color(0xFFDC2626),
+      icon: Icons.phone_android,
+      title: 'Airtel Money',
+      subtitle: 'Customer pays via Airtel Money',
+    ),
+    _phoneField(label: 'Customer Airtel number'),
+    _textField(_refController, 'Confirmation code (optional)'),
+  ];
+
+  List<Widget> _bankTransferFields() => [
+    _infoPanel(
+      color: const Color(0xFF4338CA),
+      icon: Icons.account_balance,
+      title: 'Bank Transfer / EFT',
+      subtitle: 'Confirm when transfer is received in your account',
+    ),
+    _textField(_bankName, 'Bank name (optional)'),
+    _textField(_refController, 'Transaction reference *'),
+  ];
+
+  List<Widget> _chequeFields() => [
+    _infoPanel(
+      color: const Color(0xFFD97706),
+      icon: Icons.description_outlined,
+      title: 'Cheque Payment',
+      subtitle: 'Verify cheque before completing the sale',
+    ),
+    _textField(_refController, 'Cheque number *'),
+    _textField(_bankName, 'Bank name (optional)'),
+  ];
+
+  Widget _infoPanel({required Color color, required IconData icon, required String title, required String subtitle}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 28),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: color)),
+                const SizedBox(height: 2),
+                Text(kes(_total), style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: color)),
+                Text(subtitle, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+              ],
             ),
-          if (planAllows(ref, Feat.mpesaStk)) ...[
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                icon: _stkBusy
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.smartphone),
-                label: Text(_stkBusy ? 'Waiting for payment…' : 'Push STK to phone'),
-                onPressed: (online && !_stkBusy && !_saving) ? _pushStk : null,
-              ),
-            ),
-            if (!online)
-              const Padding(
-                padding: EdgeInsets.only(top: 6),
-                child: Text('STK needs internet. Record the M-Pesa code manually below while offline.',
-                    style: TextStyle(color: Colors.grey, fontSize: 12)),
-              ),
-          ],
-          if (_stkMsg != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(_stkMsg!, style: const TextStyle(color: AppColors.brand, fontSize: 13)),
-            ),
-          const SizedBox(height: 8),
-          _textField(_refController, 'M-Pesa reference (optional)'),
-        ];
+          ),
+        ],
+      ),
+    );
   }
 
   /// Resolve the M-Pesa method + amounts, honouring the optional cash portion.
@@ -343,17 +466,42 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   }
 
   void _completeNonCash() {
-    if (_nonCash == PayMethod.credit) {
-      if (_customer == null) {
-        setState(() => _error = 'Select a customer for credit sales');
-        return;
-      }
-      _complete(method: 'credit', amountPaid: 0, change: 0);
-      return;
+    switch (_nonCash) {
+      case PayMethod.credit:
+        if (_customer == null) {
+          setState(() => _error = 'Select a customer for credit sales');
+          return;
+        }
+        _complete(method: 'credit', amountPaid: 0, change: 0);
+      case PayMethod.card:
+        _complete(method: 'card', amountPaid: _total, change: 0,
+            mpesaRef: _refController.text.trim().isEmpty ? null : _refController.text.trim());
+      case PayMethod.airtel:
+        if (_phone.text.trim().length < 9) {
+          setState(() => _error = 'Enter the customer Airtel number');
+          return;
+        }
+        _complete(method: 'airtel', amountPaid: _total, change: 0,
+            mpesaRef: '${_phone.text.trim()}${_refController.text.trim().isEmpty ? '' : '·${_refController.text.trim()}'}');
+      case PayMethod.bankTransfer:
+        if (_refController.text.trim().isEmpty) {
+          setState(() => _error = 'Enter the transaction reference');
+          return;
+        }
+        _complete(method: 'bank_transfer', amountPaid: _total, change: 0,
+            mpesaRef: '${_bankName.text.trim().isEmpty ? '' : '${_bankName.text.trim()} · '}${_refController.text.trim()}');
+      case PayMethod.cheque:
+        if (_refController.text.trim().isEmpty) {
+          setState(() => _error = 'Enter the cheque number');
+          return;
+        }
+        _complete(method: 'cheque', amountPaid: _total, change: 0,
+            mpesaRef: _refController.text.trim());
+      default:
+        // M-Pesa recorded manually (no STK) — optionally split with cash.
+        final split = _mpesaSplit();
+        _complete(method: split.method, amountPaid: _total, change: 0, cashAmount: split.cash, mpesaAmount: split.mpesa);
     }
-    // M-Pesa recorded manually (no STK) — optionally split with cash.
-    final split = _mpesaSplit();
-    _complete(method: split.method, amountPaid: _total, change: 0, cashAmount: split.cash, mpesaAmount: split.mpesa);
   }
 
   Widget _textField(TextEditingController c, String label, {bool number = false}) => Padding(
@@ -371,17 +519,17 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         ),
       );
 
-  Widget _phoneField() => Padding(
+  Widget _phoneField({String label = 'Customer phone (for STK)'}) => Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: TextField(
           controller: _phone,
           keyboardType: TextInputType.phone,
           onChanged: (_) => setState(() => _error = null),
-          decoration: const InputDecoration(
-            labelText: 'Customer phone (for STK)',
-            border: OutlineInputBorder(),
+          decoration: InputDecoration(
+            labelText: label,
+            border: const OutlineInputBorder(),
             isDense: true,
-            prefix: Row(
+            prefix: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text('🇰🇪', style: TextStyle(fontSize: 15)),
@@ -454,6 +602,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     required num change,
     num cashAmount = 0,
     num mpesaAmount = 0,
+    String? mpesaRef,
   }) async {
     final cart = ref.read(cartProvider);
     if (cart.isEmpty) return;
@@ -462,7 +611,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final navigator = Navigator.of(context);
     final cashier = ref.read(authControllerProvider).user?.name ??
         await ref.read(appDatabaseProvider).getMeta('cashier_name');
-    final payload = _buildPayload(cart, method, amountPaid, cashAmount, mpesaAmount);
+    final payload = _buildPayload(cart, method, amountPaid, cashAmount, mpesaAmount, mpesaRef: mpesaRef);
 
     try {
       final controller = ref.read(syncControllerProvider.notifier);
@@ -486,7 +635,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     }
   }
 
-  Map<String, dynamic> _buildPayload(Cart cart, String method, num amountPaid, num cashAmount, num mpesaAmount) {
+  Map<String, dynamic> _buildPayload(Cart cart, String method, num amountPaid, num cashAmount, num mpesaAmount, {String? mpesaRef}) {
+    final ref_ = mpesaRef ?? (_refController.text.trim().isNotEmpty ? _refController.text.trim() : null);
     return {
       'items': cart.items
           .map((l) => {
@@ -503,7 +653,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       'amount_paid': amountPaid,
       if (cashAmount > 0) 'cash_amount': cashAmount,
       if (mpesaAmount > 0) 'mpesa_amount': mpesaAmount,
-      if (_refController.text.trim().isNotEmpty) 'mpesa_ref': _refController.text.trim(),
+      if (ref_ != null) 'mpesa_ref': ref_,
       if (_customer != null) 'customer_id': _customer!.id,
       if (method == 'credit') 'credit_customer_name': _customer?.name,
       if (method == 'credit') 'credit_customer_phone': _customer?.phone,
@@ -533,6 +683,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       customerName: _customer?.name,
     );
   }
+}
+
+class _MethodDef {
+  final PayMethod method;
+  final String label;
+  final Widget icon;
+  const _MethodDef(this.method, this.label, this.icon);
 }
 
 class _Keypad extends StatelessWidget {

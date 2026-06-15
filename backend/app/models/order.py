@@ -21,6 +21,10 @@ class PaymentMethod(str, enum.Enum):
     MPESA = "mpesa"
     CREDIT = "credit"
     SPLIT = "split"
+    CARD = "card"
+    AIRTEL = "airtel"
+    BANK_TRANSFER = "bank_transfer"
+    CHEQUE = "cheque"
     OTHER = "other"
 
 

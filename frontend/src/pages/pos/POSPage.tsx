@@ -781,7 +781,7 @@ export function POSPage() {
       })),
       discount_amount: cartDiscountAmt + redeemDiscount,
       amount_paid: (payInfo.cashTendered as number) ?? total,
-      mpesa_ref: (payInfo.mpesaRef as string) ?? undefined,
+      mpesa_ref: (payInfo.mpesaRef as string) ?? (payInfo.externalRef as string) ?? undefined,
       mpesa_amount: (payInfo.mpesaAmount as number) ?? 0,
       cash_amount: (payInfo.cashAmount as number) ?? 0,
       credit_customer_name: (payInfo.creditName as string) ?? undefined,

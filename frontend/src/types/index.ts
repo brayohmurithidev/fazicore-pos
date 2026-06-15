@@ -1,5 +1,5 @@
 export type Role = 'admin' | 'manager' | 'cashier' | 'stock'
-export type PaymentMethod = 'cash' | 'mpesa' | 'credit' | 'split' | 'other'
+export type PaymentMethod = 'cash' | 'mpesa' | 'credit' | 'split' | 'card' | 'airtel' | 'bank_transfer' | 'cheque' | 'other'
 export type BranchStatus = 'active' | 'inactive'
 export type OrderStatus = 'pending' | 'transit' | 'received'
 
