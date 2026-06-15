@@ -2,11 +2,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'features/attendance/attendance_screen.dart';
 import 'features/auth/auth_controller.dart';
 import 'features/auth/login_screen.dart';
 import 'features/customers/customer_detail_screen.dart';
 import 'features/customers/customers_screen.dart';
+import 'features/etims/etims_screen.dart';
 import 'features/inventory/inventory_screen.dart';
+import 'features/loyalty/loyalty_screen.dart';
 import 'features/manage/branches_screen.dart';
 import 'features/manage/business_info_screen.dart';
 import 'features/manage/categories_screen.dart';
@@ -14,11 +17,17 @@ import 'features/manage/subscription_screen.dart';
 import 'features/manage/users_screen.dart';
 import 'features/printing/printer_settings_screen.dart';
 import 'features/products/products_screen.dart';
+import 'features/purchase_orders/purchase_order_create_screen.dart';
+import 'features/purchase_orders/purchase_order_detail_screen.dart';
+import 'features/purchase_orders/purchase_orders_screen.dart';
 import 'features/sales/sale_detail_screen.dart';
 import 'features/shell/account_settings_screen.dart';
 import 'features/shell/help_screen.dart';
 import 'features/shell/home_shell.dart';
 import 'features/shell/manage_store_screen.dart';
+import 'features/stock_transfers/stock_transfer_detail_screen.dart';
+import 'features/stock_transfers/stock_transfers_screen.dart';
+import 'features/suppliers/suppliers_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -58,6 +67,23 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, state) =>
             CustomerDetailScreen(customerId: int.parse(state.pathParameters['id']!)),
       ),
+      GoRoute(path: '/suppliers', builder: (_, __) => const SuppliersScreen()),
+      GoRoute(path: '/purchase-orders', builder: (_, __) => const PurchaseOrdersScreen()),
+      GoRoute(path: '/purchase-orders/create', builder: (_, __) => const PurchaseOrderCreateScreen()),
+      GoRoute(
+        path: '/purchase-orders/:id',
+        builder: (_, state) =>
+            PurchaseOrderDetailScreen(orderId: int.parse(state.pathParameters['id']!)),
+      ),
+      GoRoute(path: '/stock-transfers', builder: (_, __) => const StockTransfersScreen()),
+      GoRoute(
+        path: '/stock-transfers/:id',
+        builder: (_, state) =>
+            StockTransferDetailScreen(transferId: int.parse(state.pathParameters['id']!)),
+      ),
+      GoRoute(path: '/etims', builder: (_, __) => const EtimsScreen()),
+      GoRoute(path: '/loyalty', builder: (_, __) => const LoyaltyScreen()),
+      GoRoute(path: '/attendance', builder: (_, __) => const AttendanceScreen()),
     ],
   );
 });

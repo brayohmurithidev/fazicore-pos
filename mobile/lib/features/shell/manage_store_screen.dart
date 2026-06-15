@@ -72,6 +72,45 @@ class ManageStoreScreen extends ConsumerWidget {
               onTap: () => context.push('/branches'),
             ),
           ]),
+          const SizedBox(height: 20),
+          _section('Operations'),
+          _group([
+            _Row(
+              icon: Icons.local_shipping_outlined,
+              title: 'Suppliers',
+              onTap: () => context.push('/suppliers'),
+            ),
+            _Row(
+              icon: Icons.receipt_long_outlined,
+              title: 'Purchase Orders',
+              onTap: () => context.push('/purchase-orders'),
+            ),
+            if ((branches?.length ?? 0) > 1)
+              _Row(
+                icon: Icons.swap_horiz,
+                title: 'Stock Transfers',
+                onTap: () => context.push('/stock-transfers'),
+              ),
+          ]),
+          const SizedBox(height: 20),
+          _section('Compliance & Programs'),
+          _group([
+            _Row(
+              icon: Icons.receipt_outlined,
+              title: 'eTIMS',
+              onTap: () => context.push('/etims'),
+            ),
+            _Row(
+              icon: Icons.card_giftcard_outlined,
+              title: 'Loyalty Program',
+              onTap: () => context.push('/loyalty'),
+            ),
+            _Row(
+              icon: Icons.schedule_outlined,
+              title: 'Attendance',
+              onTap: () => context.push('/attendance'),
+            ),
+          ]),
         ],
       ),
     );
