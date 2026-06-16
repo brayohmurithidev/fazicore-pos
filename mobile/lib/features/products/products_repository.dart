@@ -110,6 +110,7 @@ final productsProvider = FutureProvider.autoDispose<List<Product>>((ref) async {
   final res = await api.dio.get('/products/', queryParameters: {
     if (q.isNotEmpty) 'q': q,
     'limit': 200,
+    'parents_only': true,
   });
   return (res.data as List)
       .map((e) => Product.fromJson(e as Map<String, dynamic>))
