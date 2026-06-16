@@ -160,7 +160,7 @@ function CreateTransferDrawer({ open, onClose }: { open: boolean; onClose: () =>
           <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-end">
             <div>
               <Label className="text-xs text-gray-500 mb-1.5 block">From Branch *</Label>
-              <Select value={fromBranchId} onValueChange={(v) => { setFromBranchId(v); if (v === toBranchId) setToBranchId('') }}>
+              <Select value={fromBranchId} onValueChange={(v) => { if (v == null) return; setFromBranchId(v); if (v === toBranchId) setToBranchId('') }}>
                 <SelectTrigger><SelectValue placeholder="Source…" /></SelectTrigger>
                 <SelectContent>
                   {branches.map((b) => (
@@ -172,7 +172,7 @@ function CreateTransferDrawer({ open, onClose }: { open: boolean; onClose: () =>
             <div className="pb-2 text-gray-400"><ArrowRight size={16} /></div>
             <div>
               <Label className="text-xs text-gray-500 mb-1.5 block">To Branch *</Label>
-              <Select value={toBranchId} onValueChange={setToBranchId} disabled={!fromBranchId}>
+              <Select value={toBranchId} onValueChange={(v) => v != null && setToBranchId(v)} disabled={!fromBranchId}>
                 <SelectTrigger><SelectValue placeholder="Destination…" /></SelectTrigger>
                 <SelectContent>
                   {availableTo.map((b) => (

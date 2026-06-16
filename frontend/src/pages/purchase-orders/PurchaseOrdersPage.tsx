@@ -224,7 +224,7 @@ function CreatePODrawer({ open, onClose }: { open: boolean; onClose: () => void 
           <div>
             <Label className="text-xs text-gray-500 mb-1.5 block">Supplier *</Label>
             {suppliers.length > 0 ? (
-              <Select value={supplier} onValueChange={setSupplier}>
+              <Select value={supplier} onValueChange={(v) => v != null && setSupplier(v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select supplier…" />
                 </SelectTrigger>
@@ -247,7 +247,7 @@ function CreatePODrawer({ open, onClose }: { open: boolean; onClose: () => void 
           {branches.length > 1 && (
             <div>
               <Label className="text-xs text-gray-500 mb-1.5 block">Destination Branch</Label>
-              <Select value={branchId} onValueChange={setBranchId}>
+              <Select value={branchId} onValueChange={(v) => v != null && setBranchId(v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select branch…" />
                 </SelectTrigger>

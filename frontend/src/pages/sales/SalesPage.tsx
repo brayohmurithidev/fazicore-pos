@@ -46,6 +46,8 @@ function orderToSaleInfo(order: ApiOrder): SaleInfo {
       unit: i.unit_name ?? '',
       vatRate: 0,
       units: [],
+      variantCount: 0,
+      variants: [],
       qty: i.quantity,
       itemDiscount: i.discount_amount,
       selectedUnit: { id: i.unit_id ?? null, name: i.unit_name ?? '', abbreviation: null, conversion_factor: i.conversion_factor ?? 1, price: i.unit_price },
