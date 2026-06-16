@@ -31,8 +31,8 @@ function localToApi(p: LocalProduct): ApiProduct {
     parent_product_id: null,
     attributes: null,
     is_variant: false,
-    variant_count: 0,
-    variants: [],
+    variant_count: p.variant_count ?? 0,
+    variants: p.variants_json ? JSON.parse(p.variants_json) : [],
     units: [],
     created_at: '',
   }

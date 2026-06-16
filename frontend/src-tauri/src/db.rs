@@ -28,6 +28,8 @@ pub struct LocalProduct {
     pub is_active: bool,
     pub track_inventory: bool,
     pub is_local: bool,
+    pub variant_count: i64,
+    pub variants_json: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -237,6 +239,8 @@ pub fn init_db(conn: &Connection) -> SqlResult<()> {
     // Additive migrations — silently ignored if column already exists
     let _ = conn.execute_batch("ALTER TABLE products ADD COLUMN local_image_path TEXT");
     let _ = conn.execute_batch("ALTER TABLE products ADD COLUMN is_local INTEGER NOT NULL DEFAULT 0");
+    let _ = conn.execute_batch("ALTER TABLE products ADD COLUMN variant_count INTEGER NOT NULL DEFAULT 0");
+    let _ = conn.execute_batch("ALTER TABLE products ADD COLUMN variants_json TEXT");
     let _ = conn.execute_batch("ALTER TABLE customers ADD COLUMN is_local INTEGER NOT NULL DEFAULT 0");
 
     Ok(())
@@ -347,6 +351,8 @@ fn row_to_product(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalProduct> {
         is_active: row.get::<_, i64>(14)? != 0,
         track_inventory: row.get::<_, i64>(15)? != 0,
         is_local: row.get::<_, i64>(16)? != 0,
+        variant_count: row.get(17)?,
+        variants_json: row.get(18)?,
     })
 }
 
@@ -355,8 +361,9 @@ pub fn upsert_products(conn: &Connection, products: &[LocalProduct]) -> SqlResul
     let mut stmt = conn.prepare(
         "INSERT INTO products
             (id, name, price, cost, sku, barcode, unit, category_id, category_name,
-             stock_quantity, min_stock, image_url, vat_rate, is_active, track_inventory, last_updated)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)
+             stock_quantity, min_stock, image_url, vat_rate, is_active, track_inventory,
+             variant_count, variants_json, last_updated)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)
          ON CONFLICT(id) DO UPDATE SET
              name=excluded.name, price=excluded.price, cost=excluded.cost,
              sku=excluded.sku, barcode=excluded.barcode, unit=excluded.unit,
@@ -367,13 +374,15 @@ pub fn upsert_products(conn: &Connection, products: &[LocalProduct]) -> SqlResul
                                      THEN products.local_image_path ELSE NULL END,
              vat_rate=excluded.vat_rate,
              is_active=excluded.is_active, track_inventory=excluded.track_inventory,
+             variant_count=excluded.variant_count, variants_json=excluded.variants_json,
              last_updated=excluded.last_updated",
     )?;
     for p in products {
         stmt.execute(params![
             p.id, p.name, p.price, p.cost, p.sku, p.barcode, p.unit,
             p.category_id, p.category_name, p.stock_quantity, p.min_stock,
-            p.image_url, p.vat_rate, p.is_active as i64, p.track_inventory as i64, now
+            p.image_url, p.vat_rate, p.is_active as i64, p.track_inventory as i64,
+            p.variant_count, p.variants_json, now
         ])?;
     }
     Ok(())
@@ -383,7 +392,8 @@ pub fn get_products(conn: &Connection) -> SqlResult<Vec<LocalProduct>> {
     let mut stmt = conn.prepare(
         "SELECT id, name, price, cost, sku, barcode, unit, category_id, category_name,
                 stock_quantity, min_stock, image_url, local_image_path,
-                vat_rate, is_active, track_inventory, is_local
+                vat_rate, is_active, track_inventory, is_local,
+                COALESCE(variant_count, 0), variants_json
          FROM products WHERE is_active = 1 ORDER BY name",
     )?;
     let rows = stmt.query_map([], row_to_product)?;
@@ -445,6 +455,7 @@ pub fn local_create_product(
         category_id, category_name: category_name.map(str::to_string),
         stock_quantity, min_stock, image_url: None, local_image_path: None,
         vat_rate, is_active: true, track_inventory, is_local: true,
+        variant_count: 0, variants_json: None,
     })
 }
 

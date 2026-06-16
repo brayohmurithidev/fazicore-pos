@@ -19,6 +19,8 @@ export interface LocalProduct {
   vat_rate: number
   is_active: boolean
   track_inventory: boolean
+  variant_count: number
+  variants_json: string | null
 }
 
 export interface LocalCustomer {

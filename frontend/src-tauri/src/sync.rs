@@ -45,6 +45,12 @@ struct ApiProductRaw {
     is_active: bool,
     #[serde(default = "default_true")]
     track_inventory: bool,
+    #[serde(default)]
+    parent_product_id: Option<i64>,
+    #[serde(default)]
+    variant_count: i64,
+    #[serde(default)]
+    variants: Vec<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -61,6 +67,11 @@ fn default_true() -> bool { true }
 
 impl From<ApiProductRaw> for LocalProduct {
     fn from(r: ApiProductRaw) -> Self {
+        let variants_json = if r.variants.is_empty() {
+            None
+        } else {
+            serde_json::to_string(&r.variants).ok()
+        };
         LocalProduct {
             id: r.id,
             name: r.name,
@@ -79,6 +90,8 @@ impl From<ApiProductRaw> for LocalProduct {
             is_active: r.is_active,
             track_inventory: r.track_inventory,
             is_local: false,
+            variant_count: r.variant_count,
+            variants_json,
         }
     }
 }
@@ -162,7 +175,8 @@ pub async fn pull_products(
 
         let page: Vec<ApiProductRaw> = resp.json().await.map_err(|e| SyncApiError::Other(e.to_string()))?;
         let done = page.len() < limit;
-        all.extend(page.into_iter().map(Into::into));
+        // Skip child variants — they are reachable only through the parent's picker
+        all.extend(page.into_iter().filter(|p| p.parent_product_id.is_none()).map(Into::into));
         if done { break; }
         skip += limit;
     }
