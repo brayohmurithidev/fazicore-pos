@@ -20,8 +20,7 @@ _PMT = {
     PaymentMethod.CASH:   "01",
     PaymentMethod.CREDIT: "02",
     PaymentMethod.MPESA:  "06",
-    PaymentMethod.SPLIT:  "01",
-    PaymentMethod.OTHER:  "05",
+    PaymentMethod.MPESA_CASH: "01",
 }
 
 # VAT rate → KRA tax category

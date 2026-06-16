@@ -68,8 +68,7 @@ class DailySummary(BaseModel):
     cash_total: float
     mpesa_total: float
     credit_total: float
-    split_total: float
-    other_total: float
+    mpesa_cash_total: float
     by_payment: list[PaymentLine]
     by_cashier: list[CashierLine]
     top_products: list[dict]
@@ -164,8 +163,7 @@ async def daily_summary(
         cash_total=_pmt("cash"),
         mpesa_total=_pmt("mpesa"),
         credit_total=_pmt("credit"),
-        split_total=_pmt("split"),
-        other_total=_pmt("other"),
+        mpesa_cash_total=_pmt("mpesa_cash"),
         by_payment=[
             PaymentLine(method=m, count=v["count"], total=round(v["total"], 2))
             for m, v in sorted(by_method.items(), key=lambda x: -x[1]["total"])
