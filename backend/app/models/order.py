@@ -41,7 +41,7 @@ class Order(Base, TimestampMixin):
     cashier_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     cashier_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     status: Mapped[OrderStatus] = mapped_column(Enum(OrderStatus), default=OrderStatus.PENDING, nullable=False)
-    payment_method: Mapped[PaymentMethod] = mapped_column(Enum(PaymentMethod), nullable=False)
+    payment_method: Mapped[PaymentMethod] = mapped_column(Enum(PaymentMethod, native_enum=False), nullable=False)
     payment_status: Mapped[PaymentStatus] = mapped_column(Enum(PaymentStatus), default=PaymentStatus.PENDING, nullable=False)
     subtotal: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     tax_amount: Mapped[float] = mapped_column(Numeric(12, 2), default=0, nullable=False)
