@@ -1,8 +1,12 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import 'auth_models.dart';
 import 'auth_repository.dart';
+
+const _kCurrentUser = 'current_user';
 
 enum AuthStatus { unknown, loggedOut, loggedIn }
 
@@ -35,7 +39,20 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<void> _init() async {
     final token = await ref.read(secureStoreProvider).accessToken;
-    state = AuthState(token != null ? AuthStatus.loggedIn : AuthStatus.loggedOut);
+    if (token == null) {
+      state = const AuthState(AuthStatus.loggedOut);
+      return;
+    }
+    // Restore the persisted user profile so the app is fully functional on
+    // every resume — not just immediately after a fresh login.
+    AppUser? user;
+    try {
+      final raw = await ref.read(appDatabaseProvider).getMeta(_kCurrentUser);
+      if (raw != null && raw.isNotEmpty) {
+        user = AppUser.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+      }
+    } catch (_) {}
+    state = AuthState(AuthStatus.loggedIn, user);
   }
 
   /// Used by the login screen to list users for the entered slug.
@@ -49,13 +66,17 @@ class AuthController extends StateNotifier<AuthState> {
     final store = ref.read(secureStoreProvider);
     await store.saveSlug(slug.trim());
     await store.saveTokens(result.accessToken, result.refreshToken);
-    // Persist the cashier name so receipts can attribute the sale across restarts.
-    await ref.read(appDatabaseProvider).setMeta('cashier_name', result.user.name);
+    final db = ref.read(appDatabaseProvider);
+    await db.setMeta('cashier_name', result.user.name);
+    await db.setMeta(_kCurrentUser, jsonEncode(result.user.toJson()));
     state = AuthState(AuthStatus.loggedIn, result.user);
   }
 
   Future<void> logout() async {
     await ref.read(secureStoreProvider).clearTokens();
+    try {
+      await ref.read(appDatabaseProvider).setMeta(_kCurrentUser, '');
+    } catch (_) {}
     state = const AuthState(AuthStatus.loggedOut);
   }
 }

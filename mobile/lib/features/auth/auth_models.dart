@@ -30,6 +30,17 @@ class AppUser {
         avatar: j['avatar'] as String?,
       );
 
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'org_id': orgId,
+        'name': name,
+        'email': email,
+        'role': role,
+        'branch_id': branchId,
+        'branch_name': branchName,
+        'avatar': avatar,
+      };
+
   bool get isAdmin => role == 'admin';
   bool get isManager => role == 'manager';
   bool get isStock => role == 'stock';

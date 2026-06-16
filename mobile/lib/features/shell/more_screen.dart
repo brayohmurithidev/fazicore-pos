@@ -29,14 +29,16 @@ class MoreScreen extends ConsumerWidget {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                 children: [
-                  // Profile header.
+                  // Profile header — user account + business name.
                   Row(
                     children: [
                       CircleAvatar(
                         radius: 32,
                         backgroundColor: scheme.primary.withValues(alpha: 0.15),
                         child: Text(
-                          biz.shopName.isNotEmpty ? biz.shopName[0].toUpperCase() : '?',
+                          (user?.name.isNotEmpty == true)
+                              ? user!.name[0].toUpperCase()
+                              : (biz.shopName.isNotEmpty ? biz.shopName[0].toUpperCase() : '?'),
                           style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: scheme.primary),
                         ),
                       ),
@@ -45,14 +47,28 @@ class MoreScreen extends ConsumerWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(biz.shopName,
-                                maxLines: 1, overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                            if (biz.phone.isNotEmpty)
-                              Text(biz.phone, style: const TextStyle(color: Colors.grey)),
-                            if (biz.email.isNotEmpty)
-                              Text(biz.email, maxLines: 1, overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(color: Colors.grey)),
+                            if (user != null) ...[
+                              Text(user.name,
+                                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                              Text(
+                                '${user.role[0].toUpperCase()}${user.role.substring(1)}${user.branchName != null ? '  ·  ${user.branchName}' : ''}',
+                                style: const TextStyle(color: Colors.grey, fontSize: 13),
+                              ),
+                              if (biz.shopName.isNotEmpty && biz.shopName != 'FaziPOS')
+                                Text(biz.shopName,
+                                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w600, fontSize: 13)),
+                            ] else ...[
+                              Text(biz.shopName,
+                                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                              if (biz.phone.isNotEmpty)
+                                Text(biz.phone, style: const TextStyle(color: Colors.grey)),
+                              if (biz.email.isNotEmpty)
+                                Text(biz.email, maxLines: 1, overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(color: Colors.grey)),
+                            ],
                           ],
                         ),
                       ),
