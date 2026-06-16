@@ -337,7 +337,7 @@ export function DashboardPage() {
                     <div key={p.m}>
                       <div className="flex justify-between items-center mb-1.5">
                         <div className="flex items-center gap-2.5">
-                          <PayBadge method={p.m as 'cash' | 'mpesa' | 'credit' | 'split' | 'other'} />
+                          <PayBadge method={p.m as 'cash' | 'mpesa' | 'credit' | 'mpesa_cash' | 'other'} />
                           <span className="text-xs text-gray-400">{p.count} tx</span>
                         </div>
                         <span className="font-semibold text-sm">{fmtKES(p.total)}</span>

@@ -20,7 +20,7 @@ class PaymentMethod(str, enum.Enum):
     CASH = "cash"
     MPESA = "mpesa"
     CREDIT = "credit"
-    SPLIT = "split"
+    MPESA_CASH = "mpesa_cash"
 
 
 class PaymentStatus(str, enum.Enum):

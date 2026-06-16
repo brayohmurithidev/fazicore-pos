@@ -208,7 +208,7 @@ class _PaymentsCard extends StatelessWidget {
     final label = switch (m) {
       'cash' => 'Cash',
       'credit' => 'Credit',
-      'split' => 'Split',
+      'mpesa_cash' => 'M-Pesa + Cash',
       _ => m.isEmpty ? 'Other' : '${m[0].toUpperCase()}${m.substring(1)}',
     };
     return Text(label, style: const TextStyle(fontWeight: FontWeight.w500));

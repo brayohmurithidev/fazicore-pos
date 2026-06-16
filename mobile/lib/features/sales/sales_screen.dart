@@ -237,7 +237,7 @@ class _ActiveChips extends ConsumerWidget {
         'cash' => 'Cash',
         'mpesa' => 'M-Pesa',
         'credit' => 'Credit',
-        'split' => 'Split',
+        'mpesa_cash' => 'M-Pesa + Cash',
         _ => m,
       };
 }
@@ -275,7 +275,7 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
               SelectOption('Cash', 'cash'),
               SelectOption('M-Pesa', 'mpesa'),
               SelectOption('Credit', 'credit'),
-              SelectOption('Split', 'split'),
+              SelectOption('M-Pesa + Cash', 'mpesa_cash'),
             ],
             onChanged: (v) => setState(() => _draft = _draft.copyWith(paymentMethod: v, clearPayment: v == null)),
           ),
@@ -393,7 +393,7 @@ class PaymentChip extends StatelessWidget {
     final label = switch (method) {
       'cash' => 'Cash',
       'credit' => 'Credit',
-      'split' => 'Split',
+      'mpesa_cash' => 'M-Pesa + Cash',
       _ => method.isEmpty ? 'Other' : method,
     };
     final scheme = Theme.of(context).colorScheme;

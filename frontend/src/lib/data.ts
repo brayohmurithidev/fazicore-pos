@@ -50,7 +50,7 @@ export const USERS: User[] = [
 export const RECENT_TRANSACTIONS: Transaction[] = [
   { id: 'T10045', items: 4, total: 850,  payment: 'mpesa',  cashier: 'Carol Njoki',   time: '11:42 AM', branch: 'b001' },
   { id: 'T10044', items: 2, total: 130,  payment: 'cash',   cashier: 'Carol Njoki',   time: '11:30 AM', branch: 'b001' },
-  { id: 'T10043', items: 7, total: 3200, payment: 'split',  cashier: 'David Kazungu', time: '11:18 AM', branch: 'b001' },
+  { id: 'T10043', items: 7, total: 3200, payment: 'mpesa_cash',  cashier: 'David Kazungu', time: '11:18 AM', branch: 'b001' },
   { id: 'T10042', items: 1, total: 200,  payment: 'cash',   cashier: 'Carol Njoki',   time: '11:05 AM', branch: 'b001' },
   { id: 'T10041', items: 3, total: 680,  payment: 'credit', cashier: 'David Kazungu', time: '10:52 AM', branch: 'b001' },
   { id: 'T10040', items: 5, total: 1540, payment: 'mpesa',  cashier: 'Carol Njoki',   time: '10:35 AM', branch: 'b001' },

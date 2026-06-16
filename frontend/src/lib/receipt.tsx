@@ -102,7 +102,7 @@ export async function renderReceipt(sale: SaleInfo, settings: Settings): Promise
           {sale.mpesaRef && <Text>Ref: {sale.mpesaRef}</Text>}
         </React.Fragment>
       )}
-      {sale.payment === 'split' && (
+      {sale.payment === 'mpesa_cash' && (
         <React.Fragment>
           {sale.cashAmount  && <Row left="Cash"   right={f(sale.cashAmount)} />}
           {sale.mpesaAmount && <Row left="M-Pesa" right={f(sale.mpesaAmount)} />}

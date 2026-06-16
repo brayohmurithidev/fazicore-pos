@@ -29,7 +29,7 @@ async function _printReceipt(sale: SaleInfo, settings: Settings) {
   const discountAmt = Math.round(sale.subtotal - sale.total)
 
   const isCredit = sale.payment === 'credit'
-  const isSplit = sale.payment === 'split'
+  const isSplit = sale.payment === 'mpesa_cash'
   const isMpesa = sale.payment === 'mpesa'
   const isCash = sale.payment === 'cash'
 

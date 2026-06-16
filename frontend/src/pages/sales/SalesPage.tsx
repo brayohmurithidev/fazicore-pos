@@ -341,7 +341,7 @@ function OrderDetailDialog({ order, onClose, onVoid, onEdit, onReprint, canVoid,
 }) {
   if (!order) return null
   const isVoided = order.status === 'voided'
-  const isSplit = order.payment_method === 'split'
+  const isSplit = order.payment_method === 'mpesa_cash'
   const isMpesa = order.payment_method === 'mpesa'
 
   return (
@@ -649,7 +649,7 @@ export function SalesPage() {
             <SelectItem value="__all__">All methods</SelectItem>
             <SelectItem value="cash">Cash</SelectItem>
             <SelectItem value="mpesa">M-Pesa</SelectItem>
-            <SelectItem value="split">M-Pesa &amp; Cash</SelectItem>
+            <SelectItem value="mpesa_cash">M-Pesa &amp; Cash</SelectItem>
             <SelectItem value="credit">Credit</SelectItem>
             <SelectItem value="other">Other</SelectItem>
           </SelectContent>

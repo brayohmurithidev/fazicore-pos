@@ -156,7 +156,7 @@ class _SuccessScreenState extends ConsumerState<SuccessScreen> {
     final label = switch (widget.method) {
       'cash' => 'Cash',
       'credit' => 'Credit',
-      'split' => 'Split',
+      'mpesa_cash' => 'M-Pesa + Cash',
       _ => widget.method,
     };
     return Text(label, style: const TextStyle(fontWeight: FontWeight.bold));

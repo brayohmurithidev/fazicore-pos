@@ -362,7 +362,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   ({String method, num cash, num mpesa}) _mpesaSplit() {
     final cash = _mpesaCashNum;
     if (cash > 0 && cash < _total) {
-      return (method: 'split', cash: cash, mpesa: _total - cash);
+      return (method: 'mpesa_cash', cash: cash, mpesa: _total - cash);
     }
     return (method: 'mpesa', cash: 0, mpesa: _total);
   }

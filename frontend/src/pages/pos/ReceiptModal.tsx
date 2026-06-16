@@ -203,7 +203,7 @@ export function ReceiptModal({ open, onClose, sale }: Props) {
               <span>TOTAL</span><span>KES {sale.total.toLocaleString()}</span>
             </div>
             <div style={{ borderTop: '1px dashed #999', margin: '6px 0' }} />
-            {sale.payment === 'split' && (
+            {sale.payment === 'mpesa_cash' && (
               <>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}><span>Cash</span><span>KES {(sale.cashAmount || 0).toLocaleString()}</span></div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}><span>M-Pesa</span><span>KES {(sale.mpesaAmount || 0).toLocaleString()}</span></div>

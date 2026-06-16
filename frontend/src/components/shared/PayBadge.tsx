@@ -11,7 +11,7 @@ const MAP: Record<string, [string, string]> = {
 
 export function PayBadge({ method }: { method: PaymentMethod }) {
   const [cls, label] = MAP[method] ?? ['bg-gray-100 text-gray-700', method]
-  const isMpesa = method === 'mpesa' || method === 'split'
+  const isMpesa = method === 'mpesa' || method === 'mpesa_cash'
   return (
     <Badge className={`${cls} flex items-center gap-1`}>
       {isMpesa && (

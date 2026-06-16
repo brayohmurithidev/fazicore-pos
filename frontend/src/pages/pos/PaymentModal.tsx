@@ -320,7 +320,7 @@ export function PaymentModal({ open, onClose, total, onComplete, settings }: Pro
   const handleCharge = () => {
     if (method === 'mpesa') {
       if (mpesaMode === 'stk') { setStkOpen(true); return }
-      onComplete({ method: isSplit ? 'split' : 'mpesa', cashAmount: mpesaCash, mpesaAmount, mpesaRef: mpesaRef.trim() })
+      onComplete({ method: isSplit ? 'mpesa_cash' : 'mpesa', cashAmount: mpesaCash, mpesaAmount, mpesaRef: mpesaRef.trim() })
       return
     }
     onComplete({ method, cashTendered: cash, cashAmount: 0, mpesaAmount: 0, creditName, creditPhone })
@@ -328,7 +328,7 @@ export function PaymentModal({ open, onClose, total, onComplete, settings }: Pro
 
   const handleStkConfirm = (receiptNumber: string) => {
     setStkOpen(false)
-    onComplete({ method: isSplit ? 'split' : 'mpesa', cashAmount: mpesaCash, mpesaAmount, mpesaRef: receiptNumber })
+    onComplete({ method: isSplit ? 'mpesa_cash' : 'mpesa', cashAmount: mpesaCash, mpesaAmount, mpesaRef: receiptNumber })
   }
 
   const handlePickerSelect = (tx: MpesaTransactionItem) => {

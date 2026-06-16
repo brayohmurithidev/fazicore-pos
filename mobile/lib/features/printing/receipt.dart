@@ -132,7 +132,7 @@ String _method(String m) => switch (m) {
       'cash' => 'Cash',
       'mpesa' => 'M-Pesa',
       'credit' => 'Credit',
-      'split' => 'Split',
+      'mpesa_cash' => 'M-Pesa + Cash',
       _ => m,
     };
 

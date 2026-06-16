@@ -13,7 +13,7 @@ export interface ApiAttendance {
   closing_cash: number | null
   shift_notes: string | null
 }
-export type ApiPaymentMethod = 'cash' | 'mpesa' | 'credit' | 'split' | 'other'
+export type ApiPaymentMethod = 'cash' | 'mpesa' | 'credit' | 'mpesa_cash' | 'other'
 
 export interface ApiUser {
   id: number
