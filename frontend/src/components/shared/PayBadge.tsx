@@ -2,11 +2,11 @@ import { Badge } from '@/components/ui/badge'
 import type { PaymentMethod } from '@/types'
 
 const MAP: Record<string, [string, string]> = {
-  mpesa:  ['bg-emerald-50 text-emerald-700',  'M-Pesa'],
-  cash:   ['bg-gray-100 text-gray-700',       'Cash'],
-  split:  ['bg-amber-50 text-amber-700',      'M-Pesa & Cash'],
-  credit: ['bg-gray-100 text-gray-700',       'Credit'],
-  other:  ['bg-gray-100 text-gray-600',       'Other'],
+  mpesa:      ['bg-emerald-50 text-emerald-700',  'M-Pesa'],
+  cash:       ['bg-gray-100 text-gray-700',       'Cash'],
+  mpesa_cash: ['bg-amber-50 text-amber-700',      'M-Pesa & Cash'],
+  credit:     ['bg-gray-100 text-gray-700',       'Credit'],
+  other:      ['bg-gray-100 text-gray-600',       'Other'],
 }
 
 export function PayBadge({ method }: { method: PaymentMethod }) {
