@@ -156,8 +156,14 @@ class _FilterRow extends ConsumerWidget {
 }
 
 Future<void> _onProductTap(BuildContext context, WidgetRef ref, LocalProduct p) async {
-  final meta = ref.read(variantMetaProvider).valueOrNull;
-  if (meta != null && meta.hasVariants.contains(p.id)) {
+  // Use watch result already present in the widget tree; fall back to read for
+  // the rare case this is called before the provider has resolved.
+  final metaAsync = ref.read(variantMetaProvider);
+
+  if (metaAsync.isLoading) {
+    // Variant data is still loading from DB — wait for it before deciding.
+    final meta = await ref.read(variantMetaProvider.future);
+    if (!context.mounted) return;
     final variants = meta.variants[p.id] ?? [];
     if (variants.isNotEmpty) {
       await showModalBottomSheet(
@@ -169,6 +175,22 @@ Future<void> _onProductTap(BuildContext context, WidgetRef ref, LocalProduct p) 
         builder: (_) => _VariantPickerSheet(parent: p, variants: variants, ref: ref),
       );
       return;
+    }
+  } else {
+    final meta = metaAsync.valueOrNull;
+    if (meta != null && meta.hasVariants.contains(p.id)) {
+      final variants = meta.variants[p.id] ?? [];
+      if (variants.isNotEmpty) {
+        await showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          builder: (_) => _VariantPickerSheet(parent: p, variants: variants, ref: ref),
+        );
+        return;
+      }
     }
   }
   ref.read(cartProvider.notifier).add(p);

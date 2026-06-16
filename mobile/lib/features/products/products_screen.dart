@@ -8,6 +8,7 @@ import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../auth/auth_controller.dart';
 import '../manage/plan_provider.dart';
+import '../sync/sync_engine.dart';
 import 'product_form_screen.dart';
 import 'products_repository.dart';
 
@@ -367,6 +368,8 @@ class _ManageVariantsSheetState extends ConsumerState<_ManageVariantsSheet> {
           .toList();
       final count = await generateVariants(ref, productId: widget.product.id, attributes: attrs);
       ref.invalidate(productsProvider);
+      // Re-sync so variant_meta is updated and the sell screen shows the new variants.
+      ref.read(syncControllerProvider.notifier).syncNow();
       if (!mounted) return;
       // Capture navigator + scaffold before popping — context is dead after pop.
       final nav = Navigator.of(context);
@@ -642,6 +645,8 @@ class _VariantStockSheetState extends ConsumerState<_VariantStockSheet> {
         notes: _notesController.text.trim(),
       );
       ref.invalidate(productsProvider);
+      // Re-sync so variant_meta picks up the new stock quantities for the sell screen.
+      ref.read(syncControllerProvider.notifier).syncNow();
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(

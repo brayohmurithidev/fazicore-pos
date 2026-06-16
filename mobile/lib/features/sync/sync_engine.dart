@@ -9,6 +9,7 @@ import '../../core/api_client.dart';
 import '../../core/db/app_database.dart';
 import '../../core/providers.dart';
 import '../printing/printer_service.dart';
+import '../sell/catalog_providers.dart';
 
 const _kProductsSync = 'products_last_sync';
 const _kCustomersSync = 'customers_last_sync';
@@ -90,6 +91,8 @@ class SyncController extends StateNotifier<SyncState> {
     try {
       await _pushPending();
       await _pullProducts();
+      // Variant stock quantities changed — force a fresh read on next access.
+      ref.invalidate(variantMetaProvider);
       await _pullCustomers();
       await _pullOrgInfo();
       await ref.read(printerProvider.notifier).reload(); // refresh receipt header
