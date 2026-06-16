@@ -381,7 +381,7 @@ class _ManageVariantsSheetState extends ConsumerState<_ManageVariantsSheet> {
         ),
       );
     } catch (e) {
-      if (mounted) setState(() { _generating = false; _error = e.toString(); });
+      if (mounted) setState(() { _generating = false; _error = apiError(e); });
     }
   }
 

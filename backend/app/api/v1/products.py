@@ -19,6 +19,10 @@ from app.services.inventory import InventoryService
 
 router = APIRouter(prefix="/products", tags=["products"])
 
+# Roles that can manage inventory (variants, stock adjustments).
+# STOCK users receive shipments and set up variant matrices.
+_INVENTORY_ROLES = (UserRole.ADMIN, UserRole.MANAGER, UserRole.STOCK)
+
 
 def _enrich(product: Product, out: ProductOut, effective_branch: int | None) -> ProductOut:
     """Fill computed fields on ProductOut that can't be derived by model_validate alone."""
@@ -533,7 +537,7 @@ async def create_variant(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_active_user),
 ) -> ProductVariantOut:
-    if current_user.role not in (UserRole.ADMIN, UserRole.MANAGER):
+    if current_user.role not in _INVENTORY_ROLES:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     parent = await _get_parent_or_404(product_id, current_user.org_id, session)
 
@@ -585,7 +589,7 @@ async def generate_variants(
     current_user: User = Depends(get_current_active_user),
 ) -> list[ProductVariantOut]:
     """Generate all attribute combinations as variants (e.g. Size×Color matrix)."""
-    if current_user.role not in (UserRole.ADMIN, UserRole.MANAGER):
+    if current_user.role not in _INVENTORY_ROLES:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     if not data.attributes:
         raise HTTPException(status_code=422, detail="At least one attribute required")
@@ -653,7 +657,7 @@ async def delete_variant(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_active_user),
 ) -> None:
-    if current_user.role not in (UserRole.ADMIN, UserRole.MANAGER):
+    if current_user.role not in _INVENTORY_ROLES:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     await _get_parent_or_404(product_id, current_user.org_id, session)
     variant = await session.get(Product, variant_id)
@@ -683,7 +687,7 @@ async def bulk_stock_variants(
     current_user: User = Depends(get_current_active_user),
 ) -> None:
     """Add stock to multiple variants of a product in one request."""
-    if current_user.role not in (UserRole.ADMIN, UserRole.MANAGER):
+    if current_user.role not in _INVENTORY_ROLES:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     await _get_parent_or_404(product_id, current_user.org_id, session)
     inv_service = InventoryService(session)
