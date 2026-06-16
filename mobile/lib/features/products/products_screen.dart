@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_client.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
+import '../auth/auth_controller.dart';
 import '../manage/plan_provider.dart';
 import 'product_form_screen.dart';
 import 'products_repository.dart';
@@ -38,22 +39,26 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
   @override
   Widget build(BuildContext context) {
     final async = ref.watch(productsProvider);
+    final user = ref.watch(authControllerProvider).user;
+    final canManageProducts = user?.canManageProducts ?? false;
     final canAdd = ref.watch(planProvider).valueOrNull?.canAddProduct ?? true;
     return Scaffold(
       appBar: AppBar(title: const Text('Products')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          if (!canAdd) {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                content: Text('Product limit reached for your plan. Upgrade on the web admin.')));
-            return;
-          }
-          Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProductFormScreen()));
-        },
-        icon: const Icon(Icons.add),
-        label: const Text('Add product'),
-        backgroundColor: canAdd ? null : Colors.grey,
-      ),
+      floatingActionButton: canManageProducts
+          ? FloatingActionButton.extended(
+              onPressed: () {
+                if (!canAdd) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('Product limit reached for your plan. Upgrade on the web admin.')));
+                  return;
+                }
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProductFormScreen()));
+              },
+              icon: const Icon(Icons.add),
+              label: const Text('Add product'),
+              backgroundColor: canAdd ? null : Colors.grey,
+            )
+          : null,
       body: Column(
         children: [
           Padding(
@@ -122,12 +127,17 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
   }
 }
 
-class _ProductTile extends StatelessWidget {
+class _ProductTile extends ConsumerWidget {
   final Product p;
   const _ProductTile(this.p);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(authControllerProvider).user;
+    final canManageInventory = user?.canManageInventory ?? false;
+    final canManageProducts = user?.canManageProducts ?? false;
+    final hasAnyAction = canManageInventory || canManageProducts;
+
     final subtitleParts = <String>[
       if (p.sku != null && p.sku!.isNotEmpty) p.sku!,
       if (p.categoryName != null) p.categoryName!,
@@ -135,16 +145,22 @@ class _ProductTile extends StatelessWidget {
     return Card(
       margin: EdgeInsets.zero,
       child: ListTile(
-        onTap: () {
-          showModalBottomSheet<void>(
-            context: context,
-            isScrollControlled: true,
-            shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-            ),
-            builder: (_) => _ProductActionsSheet(product: p),
-          );
-        },
+        onTap: hasAnyAction
+            ? () {
+                showModalBottomSheet<void>(
+                  context: context,
+                  isScrollControlled: true,
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                  ),
+                  builder: (_) => _ProductActionsSheet(
+                    product: p,
+                    canManageInventory: canManageInventory,
+                    canManageProducts: canManageProducts,
+                  ),
+                );
+              }
+            : null,
         title: Row(
           children: [
             Expanded(child: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
@@ -193,7 +209,13 @@ class _ProductTile extends StatelessWidget {
 
 class _ProductActionsSheet extends StatelessWidget {
   final Product product;
-  const _ProductActionsSheet({required this.product});
+  final bool canManageInventory;
+  final bool canManageProducts;
+  const _ProductActionsSheet({
+    required this.product,
+    this.canManageInventory = true,
+    this.canManageProducts = true,
+  });
 
   void _openVariantStock(BuildContext context) {
     Navigator.of(context).pop();
@@ -240,7 +262,7 @@ class _ProductActionsSheet extends StatelessWidget {
               style: const TextStyle(color: Colors.grey, fontSize: 13),
             ),
             const SizedBox(height: 16),
-            if (hasVariants) ...[
+            if (hasVariants && canManageInventory) ...[
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.inventory_2_outlined),
@@ -250,27 +272,30 @@ class _ProductActionsSheet extends StatelessWidget {
               ),
               const Divider(height: 1),
             ],
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.style_outlined),
-              title: Text(hasVariants ? 'Manage Variants' : 'Set up Variants'),
-              subtitle: Text(hasVariants
-                  ? 'Edit options and generate new combinations'
-                  : 'Add Size, Color and other options'),
-              onTap: () => _openManageVariants(context),
-            ),
-            const Divider(height: 1),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.edit_outlined),
-              title: const Text('Edit product'),
-              onTap: () {
-                Navigator.of(context).pop();
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => ProductFormScreen(product: product)),
-                );
-              },
-            ),
+            if (canManageInventory) ...[
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.style_outlined),
+                title: Text(hasVariants ? 'Manage Variants' : 'Set up Variants'),
+                subtitle: Text(hasVariants
+                    ? 'Edit options and generate new combinations'
+                    : 'Add Size, Color and other options'),
+                onTap: () => _openManageVariants(context),
+              ),
+              const Divider(height: 1),
+            ],
+            if (canManageProducts)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.edit_outlined),
+                title: const Text('Edit product'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => ProductFormScreen(product: product)),
+                  );
+                },
+              ),
             const SizedBox(height: 8),
           ],
         ),

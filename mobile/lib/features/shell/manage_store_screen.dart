@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../auth/auth_controller.dart';
 import '../manage/manage_repository.dart';
 import '../sell/catalog_providers.dart';
 
@@ -10,6 +11,11 @@ class ManageStoreScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(authControllerProvider).user;
+    final canManageInventory = user?.canManageInventory ?? false;
+    final canManageProducts = user?.canManageProducts ?? false;
+    final canViewReports = user?.canViewReports ?? false;
+
     final products = ref.watch(cachedProductsProvider).valueOrNull;
     final categories = ref.watch(cachedCategoriesProvider).valueOrNull;
     final customers = ref.watch(cachedCustomersProvider).valueOrNull;
@@ -21,27 +27,30 @@ class ManageStoreScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _section('Products'),
-          _group([
-            _Row(
-              icon: Icons.inventory_2_outlined,
-              title: 'Products',
-              trailing: products == null ? null : '${products.length} items',
-              onTap: () => context.push('/products'),
-            ),
-            _Row(
-              icon: Icons.category_outlined,
-              title: 'Categories',
-              trailing: categories == null ? null : '${categories.length}',
-              onTap: () => context.push('/categories'),
-            ),
-            _Row(
-              icon: Icons.warehouse_outlined,
-              title: 'Inventory',
-              onTap: () => context.push('/inventory'),
-            ),
-          ]),
-          const SizedBox(height: 20),
+          if (canManageInventory) ...[
+            _section('Products'),
+            _group([
+              _Row(
+                icon: Icons.inventory_2_outlined,
+                title: 'Products',
+                trailing: products == null ? null : '${products.length} items',
+                onTap: () => context.push('/products'),
+              ),
+              if (canManageProducts)
+                _Row(
+                  icon: Icons.category_outlined,
+                  title: 'Categories',
+                  trailing: categories == null ? null : '${categories.length}',
+                  onTap: () => context.push('/categories'),
+                ),
+              _Row(
+                icon: Icons.warehouse_outlined,
+                title: 'Inventory',
+                onTap: () => context.push('/inventory'),
+              ),
+            ]),
+            const SizedBox(height: 20),
+          ],
           _section('Printer & receipt'),
           _group([
             _Row(
@@ -59,58 +68,74 @@ class ManageStoreScreen extends ConsumerWidget {
               trailing: customers == null ? null : '${customers.length}',
               onTap: () => context.push('/customers'),
             ),
-            _Row(
-              icon: Icons.badge_outlined,
-              title: 'Employees',
-              trailing: users == null ? null : '${users.length}',
-              onTap: () => context.push('/users'),
-            ),
-            _Row(
-              icon: Icons.store_outlined,
-              title: 'Branches',
-              trailing: branches == null ? null : '${branches.length}',
-              onTap: () => context.push('/branches'),
-            ),
-          ]),
-          const SizedBox(height: 20),
-          _section('Operations'),
-          _group([
-            _Row(
-              icon: Icons.local_shipping_outlined,
-              title: 'Suppliers',
-              onTap: () => context.push('/suppliers'),
-            ),
-            _Row(
-              icon: Icons.receipt_long_outlined,
-              title: 'Purchase Orders',
-              onTap: () => context.push('/purchase-orders'),
-            ),
-            if ((branches?.length ?? 0) > 1)
+            if (canManageProducts) ...[
               _Row(
-                icon: Icons.swap_horiz,
-                title: 'Stock Transfers',
-                onTap: () => context.push('/stock-transfers'),
+                icon: Icons.badge_outlined,
+                title: 'Employees',
+                trailing: users == null ? null : '${users.length}',
+                onTap: () => context.push('/users'),
               ),
+              _Row(
+                icon: Icons.store_outlined,
+                title: 'Branches',
+                trailing: branches == null ? null : '${branches.length}',
+                onTap: () => context.push('/branches'),
+              ),
+            ],
           ]),
-          const SizedBox(height: 20),
-          _section('Compliance & Programs'),
-          _group([
-            _Row(
-              icon: Icons.receipt_outlined,
-              title: 'eTIMS',
-              onTap: () => context.push('/etims'),
-            ),
-            _Row(
-              icon: Icons.card_giftcard_outlined,
-              title: 'Loyalty Program',
-              onTap: () => context.push('/loyalty'),
-            ),
-            _Row(
-              icon: Icons.schedule_outlined,
-              title: 'Attendance',
-              onTap: () => context.push('/attendance'),
-            ),
-          ]),
+          if (canManageInventory) ...[
+            const SizedBox(height: 20),
+            _section('Operations'),
+            _group([
+              _Row(
+                icon: Icons.local_shipping_outlined,
+                title: 'Suppliers',
+                onTap: () => context.push('/suppliers'),
+              ),
+              _Row(
+                icon: Icons.receipt_long_outlined,
+                title: 'Purchase Orders',
+                onTap: () => context.push('/purchase-orders'),
+              ),
+              if ((branches?.length ?? 0) > 1)
+                _Row(
+                  icon: Icons.swap_horiz,
+                  title: 'Stock Transfers',
+                  onTap: () => context.push('/stock-transfers'),
+                ),
+            ]),
+          ],
+          if (canViewReports) ...[
+            const SizedBox(height: 20),
+            _section('Compliance & Programs'),
+            _group([
+              _Row(
+                icon: Icons.receipt_outlined,
+                title: 'eTIMS',
+                onTap: () => context.push('/etims'),
+              ),
+              _Row(
+                icon: Icons.card_giftcard_outlined,
+                title: 'Loyalty Program',
+                onTap: () => context.push('/loyalty'),
+              ),
+              _Row(
+                icon: Icons.schedule_outlined,
+                title: 'Attendance',
+                onTap: () => context.push('/attendance'),
+              ),
+            ]),
+          ] else ...[
+            const SizedBox(height: 20),
+            _section('My attendance'),
+            _group([
+              _Row(
+                icon: Icons.schedule_outlined,
+                title: 'Attendance',
+                onTap: () => context.push('/attendance'),
+              ),
+            ]),
+          ],
         ],
       ),
     );

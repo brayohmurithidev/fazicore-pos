@@ -29,4 +29,18 @@ class AppUser {
         branchName: j['branch_name'] as String?,
         avatar: j['avatar'] as String?,
       );
+
+  bool get isAdmin => role == 'admin';
+  bool get isManager => role == 'manager';
+  bool get isStock => role == 'stock';
+  bool get isCashier => role == 'cashier';
+
+  /// Can add/receive stock and manage variants.
+  bool get canManageInventory => isAdmin || isManager || isStock;
+
+  /// Can create/edit/delete products, categories, users, branches.
+  bool get canManageProducts => isAdmin || isManager;
+
+  /// Can view dashboard, reports, and full management screens.
+  bool get canViewReports => isAdmin || isManager || isStock;
 }

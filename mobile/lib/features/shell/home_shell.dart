@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme.dart';
+import '../auth/auth_controller.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../reports/reports_screen.dart';
 import '../sales/sales_screen.dart';
@@ -21,19 +22,10 @@ class HomeShell extends ConsumerStatefulWidget {
 class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserver {
   int _index = 0;
 
-  static const _tabs = [
-    SellScreen(),
-    DashboardScreen(),
-    SalesScreen(),
-    ReportsScreen(),
-    MoreScreen(),
-  ];
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // Initial sync once we're logged in (the shell only mounts post-login).
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(syncControllerProvider.notifier).syncNow();
     });
@@ -47,8 +39,6 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Pull the latest catalog/customers (and flush any queued sales) each time
-    // the app returns to the foreground, so edits made elsewhere show up.
     if (state == AppLifecycleState.resumed) {
       ref.read(syncControllerProvider.notifier).syncNow();
     }
@@ -56,18 +46,29 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
 
   @override
   Widget build(BuildContext context) {
-    // Re-sync whenever the device regains connectivity.
     ref.listen(connectivityProvider, (prev, next) {
       final wasOffline = prev?.valueOrNull == false;
       final isOnline = next.valueOrNull == true;
-      if (wasOffline && isOnline) {
-        ref.read(syncControllerProvider.notifier).syncNow();
-      }
+      if (wasOffline && isOnline) ref.read(syncControllerProvider.notifier).syncNow();
     });
 
-    final onSell = _index == 0;
+    final user = ref.watch(authControllerProvider).user;
+    final isCashier = user?.isCashier ?? false;
+
+    // Cashiers only need: Sell (FAB) · Sales · More
+    // Everyone else: Sell (FAB) · Dashboard · Sales · Reports · More
+    final tabs = isCashier
+        ? const [SellScreen(), SalesScreen(), MoreScreen()]
+        : const [SellScreen(), DashboardScreen(), SalesScreen(), ReportsScreen(), MoreScreen()];
+
+    // Clamp index in case the tab count shrank on role change
+    final safeIndex = _index.clamp(0, tabs.length - 1);
+    if (safeIndex != _index) WidgetsBinding.instance.addPostFrameCallback((_) => setState(() => _index = safeIndex));
+
+    final onSell = safeIndex == 0;
+
     return Scaffold(
-      body: IndexedStack(index: _index, children: _tabs),
+      body: IndexedStack(index: safeIndex, children: tabs),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: SizedBox(
         width: 64,
@@ -89,13 +90,19 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
         notchMargin: 8,
         padding: EdgeInsets.zero,
         child: Row(
-          children: [
-            _NavItem(icon: Icons.dashboard_outlined, activeIcon: Icons.dashboard, label: 'Dashboard', index: 1, current: _index, onTap: _select),
-            _NavItem(icon: Icons.receipt_long_outlined, activeIcon: Icons.receipt_long, label: 'Sales', index: 2, current: _index, onTap: _select),
-            const SizedBox(width: 64), // notch gap for the Sell FAB
-            _NavItem(icon: Icons.bar_chart_outlined, activeIcon: Icons.bar_chart, label: 'Reports', index: 3, current: _index, onTap: _select),
-            _NavItem(icon: Icons.more_horiz, activeIcon: Icons.more_horiz, label: 'More', index: 4, current: _index, onTap: _select),
-          ],
+          children: isCashier
+              ? [
+                  _NavItem(icon: Icons.receipt_long_outlined, activeIcon: Icons.receipt_long, label: 'Sales',   index: 1, current: safeIndex, onTap: _select),
+                  const SizedBox(width: 64),
+                  _NavItem(icon: Icons.more_horiz,            activeIcon: Icons.more_horiz,   label: 'More',    index: 2, current: safeIndex, onTap: _select),
+                ]
+              : [
+                  _NavItem(icon: Icons.dashboard_outlined,    activeIcon: Icons.dashboard,     label: 'Dashboard', index: 1, current: safeIndex, onTap: _select),
+                  _NavItem(icon: Icons.receipt_long_outlined, activeIcon: Icons.receipt_long,  label: 'Sales',     index: 2, current: safeIndex, onTap: _select),
+                  const SizedBox(width: 64),
+                  _NavItem(icon: Icons.bar_chart_outlined,    activeIcon: Icons.bar_chart,     label: 'Reports',   index: 3, current: safeIndex, onTap: _select),
+                  _NavItem(icon: Icons.more_horiz,            activeIcon: Icons.more_horiz,    label: 'More',      index: 4, current: safeIndex, onTap: _select),
+                ],
         ),
       ),
     );
