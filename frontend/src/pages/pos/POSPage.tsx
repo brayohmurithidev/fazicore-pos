@@ -1220,10 +1220,14 @@ export function POSPage() {
           ) : (
             cart.map((item) => {
               const catColor = catMap.get(item.category)?.color ?? '#9CA3AF'
+              // For regular products, use live stock from displayProducts so the cap
+              // reflects the latest API data. For variant items the cart id is the
+              // variant's own id which never appears in displayProducts (parent-only),
+              // so fall back to the stock captured when the variant was added to cart.
               const product = displayProducts.find((p) => p.id === item.id.split(':')[0])
-              const maxQty = product
-                ? Math.floor(product.stock / item.selectedUnit.conversion_factor)
-                : item.qty
+              const maxQty = Math.floor(
+                (product?.stock ?? item.stock) / item.selectedUnit.conversion_factor
+              )
               return (
                 <CartItemRow
                   key={item.id}
