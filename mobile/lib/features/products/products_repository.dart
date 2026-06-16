@@ -160,6 +160,20 @@ Future<List<ProductVariant>> fetchProductVariants(WidgetRef ref, int productId) 
   return (res.data as List).map((e) => ProductVariant.fromJson(e as Map<String, dynamic>)).toList();
 }
 
+/// POST /products/{id}/variants/generate — generate all attribute combinations.
+/// [attributes] is a list of {"name": "Size", "values": ["S","M","L"]} maps.
+Future<int> generateVariants(
+  WidgetRef ref, {
+  required int productId,
+  required List<Map<String, dynamic>> attributes,
+}) async {
+  final res = await ref.read(apiClientProvider).dio.post(
+    '/products/$productId/variants/generate',
+    data: {'attributes': attributes},
+  );
+  return (res.data as List).length;
+}
+
 /// POST /products/{id}/variants/stock — add stock to multiple variants at once.
 Future<void> bulkVariantStock(
   WidgetRef ref, {
