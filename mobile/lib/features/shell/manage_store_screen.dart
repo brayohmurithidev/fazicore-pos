@@ -119,21 +119,12 @@ class ManageStoreScreen extends ConsumerWidget {
                 title: 'Loyalty Program',
                 onTap: () => context.push('/loyalty'),
               ),
-              _Row(
-                icon: Icons.schedule_outlined,
-                title: 'Attendance',
-                onTap: () => context.push('/attendance'),
-              ),
-            ]),
-          ] else ...[
-            const SizedBox(height: 20),
-            _section('My attendance'),
-            _group([
-              _Row(
-                icon: Icons.schedule_outlined,
-                title: 'Attendance',
-                onTap: () => context.push('/attendance'),
-              ),
+              if (canManageProducts)
+                _Row(
+                  icon: Icons.schedule_outlined,
+                  title: 'Attendance',
+                  onTap: () => context.push('/attendance'),
+                ),
             ]),
           ],
         ],
