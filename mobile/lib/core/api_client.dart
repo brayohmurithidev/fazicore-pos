@@ -7,9 +7,10 @@ import 'secure_store.dart';
 /// transparently refreshes the token once on a 401.
 class ApiClient {
   final SecureStore store;
+  final void Function()? onSessionExpired;
   late final Dio dio;
 
-  ApiClient(this.store) {
+  ApiClient(this.store, {this.onSessionExpired}) {
     dio = Dio(
       BaseOptions(
         baseUrl: Env.apiV1,
@@ -40,9 +41,11 @@ class ApiClient {
                 final retry = await dio.fetch(req);
                 return handler.resolve(retry);
               } catch (_) {
-                // fall through to original error
+                // fall through — session truly dead, signal logout below
               }
             }
+            // Refresh failed (or retry failed): kick the user back to login.
+            onSessionExpired?.call();
           }
           handler.next(e);
         },

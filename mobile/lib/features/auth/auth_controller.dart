@@ -23,6 +23,14 @@ class AuthController extends StateNotifier<AuthState> {
   final Ref ref;
   AuthController(this.ref) : super(const AuthState(AuthStatus.unknown)) {
     _init();
+    // When the API client signals that both tokens are dead, force logout so
+    // the router redirects to /login instead of showing "Could not validate credentials".
+    ref.listen<bool>(sessionExpiredProvider, (_, expired) {
+      if (expired) {
+        state = const AuthState(AuthStatus.loggedOut);
+        ref.read(sessionExpiredProvider.notifier).state = false;
+      }
+    });
   }
 
   Future<void> _init() async {
