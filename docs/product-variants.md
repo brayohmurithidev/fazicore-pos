@@ -122,7 +122,52 @@ Relevant files:
 - `frontend/src/pages/pos/POSPage.tsx` — `VariantPickerModal` component
 - `frontend/src/lib/queries.ts` — `useProductVariants`, `useGenerateVariants`, `useCreateVariant`, `useDeleteVariant`, `useBulkVariantStock` hooks
 
-## Mobile app (`sell_screen.dart`)
+## Mobile app — stock entry (`products_screen.dart`)
+
+Bulk stock entry on mobile lives in the **Products** screen (not the sell screen), since it's an admin/manager action done during receiving, not at point of sale.
+
+### How it works
+
+Tapping a product tile that has variants (`variantCount > 0`) opens `_ProductActionsSheet` — a small bottom sheet with two choices:
+
+- **Stock Entry** → opens `_VariantStockSheet`
+- **Edit product** → opens the standard `ProductFormScreen`
+
+Variant parent tiles show an indigo `{n}v` chip badge next to the product name so they're visually distinct in the list.
+
+### `_VariantStockSheet`
+
+A `DraggableScrollableSheet` (initial 65 %, max 95 %) that:
+
+1. Fetches `GET /products/{id}/variants` on open and shows a spinner while loading.
+2. Renders the grid based on attribute count:
+   - **2 attributes** (e.g. Size × Color): `Table` widget — rows are the first attribute, columns are the second. Current stock is shown colour-coded (red/amber/green) above each input cell. Missing combinations show `—`.
+   - **1 or 3+ attributes**: flat list — variant label | current stock | qty input.
+3. Optional notes field (passed as `notes` to the API).
+4. **Save** calls `POST /products/{id}/variants/stock` with all non-zero entries, invalidates `productsProvider`, and shows a snackbar confirming how many variants were updated.
+
+### New repository functions
+
+```dart
+// GET /products/{id}/variants
+Future<List<ProductVariant>> fetchProductVariants(WidgetRef ref, int productId)
+
+// POST /products/{id}/variants/stock
+Future<void> bulkVariantStock(WidgetRef ref, {
+  required int productId,
+  required List<Map<String, int>> entries,  // [{variant_id, qty}, ...]
+  String? notes,
+})
+```
+
+`Product` model additions:
+- `variantCount: int` — populated from `variant_count` in the API response
+- `variantOptions: Map<String, List<String>>` — parsed from `attributes.options` (the parent's template)
+- `hasVariants` getter — `variantCount > 0`
+
+## Mobile app — sell screen (`sell_screen.dart`)
+
+The sell screen is read-only with respect to stock — it only picks and adds variants to the cart. Stock is managed from the Products screen above.
 
 The mobile app avoids Drift schema changes by storing variant metadata as a JSON blob in `SyncMeta` under the key `variant_meta`.
 
