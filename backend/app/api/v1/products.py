@@ -35,6 +35,9 @@ def _enrich(product: Product, out: ProductOut, effective_branch: int | None) -> 
         out.category_name = product.category.name
     out.is_variant = product.parent_product_id is not None
     out.variant_count = len(product.variants) if product.variants else 0
+    # model_validate(product) already mapped variants from the ORM relationship with stock=0
+    # defaults. Reset and re-populate so each variant appears exactly once with correct stock.
+    out.variants = []
     for v in (product.variants or []):
         vout = ProductVariantOut.model_validate(v)
         vout.stock_quantity = sum(
