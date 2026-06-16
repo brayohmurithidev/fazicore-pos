@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.models.order import OrderStatus, PaymentMethod, PaymentStatus
 
@@ -84,6 +84,26 @@ class OrderOut(BaseModel):
     cashier_name: str | None = None
     status: OrderStatus
     payment_method: PaymentMethod
+
+    @field_validator('payment_method', mode='before')
+    @classmethod
+    def _coerce_payment_method(cls, v: object) -> PaymentMethod:
+        if isinstance(v, PaymentMethod):
+            return v
+        s = str(v).lower()
+        try:
+            return PaymentMethod(s)
+        except ValueError:
+            # Legacy values that the migration should have removed; fall back gracefully.
+            _legacy: dict[str, PaymentMethod] = {
+                'card': PaymentMethod.MPESA,
+                'airtel': PaymentMethod.MPESA,
+                'bank_transfer': PaymentMethod.MPESA,
+                'cheque': PaymentMethod.MPESA,
+                'other': PaymentMethod.MPESA,
+                'split': PaymentMethod.MPESA_CASH,
+            }
+            return _legacy.get(s, PaymentMethod.CASH)
     payment_status: PaymentStatus
     subtotal: float
     tax_amount: float

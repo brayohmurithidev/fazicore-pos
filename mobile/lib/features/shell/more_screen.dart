@@ -96,6 +96,10 @@ class MoreScreen extends ConsumerWidget {
                         backgroundColor: scheme.error.withValues(alpha: 0.04),
                         side: BorderSide(color: scheme.error),
                         padding: const EdgeInsets.symmetric(vertical: 16),
+                        // Explicit textStyle prevents lerp crash when auth-state
+                        // change triggers a screen transition while the button is
+                        // animating between inherited and non-inherited TextStyles.
+                        textStyle: Theme.of(context).textTheme.labelLarge,
                       ),
                       icon: const Icon(Icons.logout),
                       label: const Text('Log out'),
