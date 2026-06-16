@@ -40,6 +40,7 @@ Child variants are excluded from `GET /products/` by default. Pass `?parents_onl
 GET    /products/{id}/variants            List all variants for a parent
 POST   /products/{id}/variants            Create one variant manually
 POST   /products/{id}/variants/generate   Generate the full attribute matrix at once
+POST   /products/{id}/variants/stock      Bulk add stock across multiple variants
 DELETE /products/{id}/variants/{vid}      Delete a specific variant
 ```
 
@@ -69,6 +70,20 @@ Omitted `price`/`cost`/`sku` fall back to the parent's values. `sku` is auto-gen
 
 Produces 8 variants (Cartesian product). Combinations that already exist are skipped — safe to call again after adding a new colour. The parent's `attributes.options` is updated with the full template.
 
+#### Bulk stock entry — `POST /{id}/variants/stock`
+
+```json
+{
+  "entries": [
+    { "variant_id": 42, "qty": 10 },
+    { "variant_id": 43, "qty": 5 }
+  ],
+  "notes": "June shipment"
+}
+```
+
+Adds (not sets) stock to each variant via `TransactionType.PURCHASE`. Entries with `qty: 0` are silently skipped. Returns 204. All variant_ids must belong to the given parent or the request fails with 404.
+
 ### Name and SKU derivation
 
 | Input | Result |
@@ -86,6 +101,13 @@ Each variant has its own inventory rows. `stock_quantity` on `ProductVariantOut`
 
 Individual variants can be added manually or deleted from the same section. The product list shows a `{n}v` badge (indigo) next to variant-parent names.
 
+**Bulk stock entry** — once variants exist, a **Stock Entry** button (green, next to Generate) opens `VariantStockGrid` inline:
+
+- **2-attribute products** (e.g. Size × Color): renders a matrix — rows are the first attribute, columns are the second. Current stock is shown colour-coded (red/amber/green) above each input cell. Missing combinations (no variant for that pair) show `—`.
+- **1 or 3+ attributes**: renders a flat list with one row per variant.
+
+Inputs represent qty *to add*, not an absolute set — safe to submit multiple times across a shipment. The Save button is disabled until at least one input is non-zero and shows a running count (`Save (5)`) before submission. On success, both the variant list and the parent product card refresh via TanStack Query invalidation.
+
 **Selling** — the POS product grid filters out `is_variant == true` rows so only parent products appear. Clicking a tile with `variantCount > 0` opens `VariantPickerModal` instead of adding directly to cart.
 
 The modal uses cascading attribute selection:
@@ -96,9 +118,9 @@ The modal uses cascading attribute selection:
 4. On confirm the modal synthesises a `Product` object from the selected variant and calls `addToCart()`.
 
 Relevant files:
-- `frontend/src/pages/inventory/InventoryPage.tsx` — `ProductVariantsSection` component
+- `frontend/src/pages/inventory/InventoryPage.tsx` — `ProductVariantsSection` + `VariantStockGrid` components
 - `frontend/src/pages/pos/POSPage.tsx` — `VariantPickerModal` component
-- `frontend/src/lib/queries.ts` — `useProductVariants`, `useGenerateVariants`, `useCreateVariant`, `useDeleteVariant` hooks
+- `frontend/src/lib/queries.ts` — `useProductVariants`, `useGenerateVariants`, `useCreateVariant`, `useDeleteVariant`, `useBulkVariantStock` hooks
 
 ## Mobile app (`sell_screen.dart`)
 
