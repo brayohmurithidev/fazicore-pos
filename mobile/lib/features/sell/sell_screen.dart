@@ -174,6 +174,26 @@ Future<void> _onProductTap(BuildContext context, WidgetRef ref, LocalProduct p) 
   ref.read(cartProvider.notifier).add(p);
 }
 
+int _totalVariantQty(Cart cart, dynamic variantMeta, int parentId) {
+  final variants = (variantMeta?.variants[parentId] as List?) ?? const [];
+  return variants.fold<int>(0, (sum, v) {
+    final vid = v['id'] as int?;
+    return sum + (vid != null ? (cart.lines[vid]?.qty ?? 0) : 0);
+  });
+}
+
+String _variantPriceLabel(dynamic variantMeta, LocalProduct p) {
+  final variants = (variantMeta?.variants[p.id] as List?) ?? const [];
+  if (variants.isEmpty) return kes(p.price);
+  final prices = variants
+      .map((v) => (v['price'] as num?)?.toDouble() ?? p.price)
+      .toList();
+  final minP = prices.reduce((a, b) => a < b ? a : b);
+  final maxP = prices.reduce((a, b) => a > b ? a : b);
+  if ((maxP - minP).abs() < 0.01) return kes(minP);
+  return 'from ${kes(minP)}';
+}
+
 class _ProductGrid extends ConsumerWidget {
   final List<LocalProduct> items;
   const _ProductGrid({required this.items});
@@ -193,8 +213,11 @@ class _ProductGrid extends ConsumerWidget {
       itemCount: items.length,
       itemBuilder: (_, i) {
         final p = items[i];
-        final qty = cart.lines[p.id]?.qty ?? 0;
         final hasVariants = variantMeta?.hasVariants.contains(p.id) ?? false;
+        final qty = hasVariants
+            ? _totalVariantQty(cart, variantMeta, p.id)
+            : cart.lines[p.id]?.qty ?? 0;
+        final variantCount = variantMeta?.variants[p.id]?.length ?? 0;
         return Card(
           clipBehavior: Clip.antiAlias,
           child: InkWell(
@@ -219,14 +242,18 @@ class _ProductGrid extends ConsumerWidget {
                               color: const Color(0xFFEEF2FF),
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: const Text('v', style: TextStyle(fontSize: 10, color: Color(0xFF6366F1), fontWeight: FontWeight.bold)),
+                            child: Text(
+                              variantCount > 0 ? '${variantCount}v' : 'v',
+                              style: const TextStyle(fontSize: 10, color: Color(0xFF6366F1), fontWeight: FontWeight.bold),
+                            ),
                           ),
                       ]),
                       const SizedBox(height: 4),
                       Row(
                         children: [
                           Expanded(
-                            child: Text(kes(p.price),
+                            child: Text(
+                                hasVariants ? _variantPriceLabel(variantMeta, p) : kes(p.price),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
@@ -261,8 +288,11 @@ class _ProductList extends ConsumerWidget {
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (_, i) {
         final p = items[i];
-        final qty = cart.lines[p.id]?.qty ?? 0;
         final hasVariants = variantMeta?.hasVariants.contains(p.id) ?? false;
+        final qty = hasVariants
+            ? _totalVariantQty(cart, variantMeta, p.id)
+            : cart.lines[p.id]?.qty ?? 0;
+        final variantCount = variantMeta?.variants[p.id]?.length ?? 0;
         return Card(
           clipBehavior: Clip.antiAlias,
           child: InkWell(
@@ -289,12 +319,17 @@ class _ProductList extends ConsumerWidget {
                                 color: const Color(0xFFEEF2FF),
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: const Text('variants', style: TextStyle(fontSize: 9, color: Color(0xFF6366F1), fontWeight: FontWeight.bold)),
+                              child: Text(
+                                variantCount > 0 ? '${variantCount}v' : 'v',
+                                style: const TextStyle(fontSize: 9, color: Color(0xFF6366F1), fontWeight: FontWeight.bold),
+                              ),
                             ),
                         ]),
                         const SizedBox(height: 4),
-                        Text(kes(p.price),
-                            style: const TextStyle(color: AppColors.brand, fontWeight: FontWeight.bold)),
+                        Text(
+                          hasVariants ? _variantPriceLabel(variantMeta, p) : kes(p.price),
+                          style: const TextStyle(color: AppColors.brand, fontWeight: FontWeight.bold),
+                        ),
                       ],
                     ),
                   ),
@@ -371,6 +406,17 @@ class _VariantPickerSheet extends StatefulWidget {
 
 class _VariantPickerSheetState extends State<_VariantPickerSheet> {
   final Map<String, String> _selected = {};
+  int _qty = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-select attributes that have only one possible value.
+    for (final key in _keysFor()) {
+      final vals = _valuesFor(key);
+      if (vals.length == 1) _selected[key] = vals.first;
+    }
+  }
 
   List<String> _keysFor() {
     final keys = <String>{};
@@ -415,13 +461,24 @@ class _VariantPickerSheetState extends State<_VariantPickerSheet> {
     );
   }
 
+  String _priceRangeLabel() {
+    if (widget.variants.isEmpty) return kes(widget.parent.price);
+    final prices = widget.variants
+        .map((v) => (v['price'] as num?)?.toDouble() ?? widget.parent.price)
+        .toList();
+    final minP = prices.reduce((a, b) => a < b ? a : b);
+    final maxP = prices.reduce((a, b) => a > b ? a : b);
+    if ((maxP - minP).abs() < 0.01) return kes(minP);
+    return '${kes(minP)} – ${kes(maxP)}';
+  }
+
   void _confirm() {
     final v = _chosenVariant;
     if (v == null || v.isEmpty) return;
     final stock = v['stock_quantity'] as int? ?? 0;
     if (stock == 0) return;
+    final qty = _qty.clamp(1, stock);
 
-    // Synthesise a LocalProduct-like object using the cart controller's raw add
     final synthetic = LocalProduct(
       id: v['id'] as int,
       name: v['name'] as String,
@@ -439,7 +496,7 @@ class _VariantPickerSheetState extends State<_VariantPickerSheet> {
       isActive: true,
       trackInventory: widget.parent.trackInventory,
     );
-    widget.ref.read(cartProvider.notifier).add(synthetic);
+    widget.ref.read(cartProvider.notifier).addWithQty(synthetic, qty);
     Navigator.of(context).pop();
   }
 
@@ -448,98 +505,175 @@ class _VariantPickerSheetState extends State<_VariantPickerSheet> {
     final keys = _keysFor();
     final chosen = _chosenVariant;
     final chosenStock = chosen?['stock_quantity'] as int? ?? 0;
+    final canAdd = chosen != null && chosen.isNotEmpty && chosenStock > 0;
+    final cappedQty = canAdd ? _qty.clamp(1, chosenStock) : 1;
 
     return DraggableScrollableSheet(
       expand: false,
-      initialChildSize: 0.55,
-      maxChildSize: 0.9,
-      builder: (_, controller) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(width: 40, height: 4, decoration: BoxDecoration(
-                color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
-            ),
-            const SizedBox(height: 12),
-            Text(widget.parent.name,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            const SizedBox(height: 4),
-            const Text('Select variant', style: TextStyle(color: Colors.grey, fontSize: 13)),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView(
-                controller: controller,
-                children: [
-                  ...keys.map((key) {
-                    final values = _valuesFor(key);
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(key, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                          const SizedBox(height: 8),
-                          Wrap(spacing: 8, runSpacing: 8, children: values.map((val) {
-                            final isActive = _selected[key] == val;
-                            final inStock = _inStock(key, val);
-                            return GestureDetector(
-                              onTap: inStock ? () => setState(() => _selected[key] = val) : null,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: isActive ? Colors.grey.shade900 : Colors.white,
-                                  border: Border.all(
-                                    color: isActive ? Colors.grey.shade900
-                                        : inStock ? Colors.grey.shade300 : Colors.grey.shade100,
-                                  ),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  val,
-                                  style: TextStyle(
-                                    color: isActive ? Colors.white
-                                        : inStock ? Colors.grey.shade800 : Colors.grey.shade300,
-                                    fontWeight: FontWeight.w500,
-                                    decoration: inStock ? null : TextDecoration.lineThrough,
-                                  ),
-                                ),
-                              ),
-                            );
-                          }).toList()),
-                        ],
-                      ),
-                    );
-                  }),
-                  if (chosen != null && chosen.isNotEmpty)
-                    Container(
-                      margin: const EdgeInsets.only(top: 8, bottom: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade200),
-                      ),
-                      child: Row(children: [
-                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          const Text('Selected', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                          Text(_selected.values.join(' / '),
-                              style: const TextStyle(fontWeight: FontWeight.w600)),
-                        ])),
-                        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                          Text(kes((chosen['price'] as num).toDouble()),
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.brand)),
-                          Text('$chosenStock in stock',
-                              style: TextStyle(fontSize: 11, color: chosenStock == 0 ? Colors.red : Colors.grey)),
-                        ]),
-                      ]),
-                    ),
-                ],
+      initialChildSize: 0.58,
+      maxChildSize: 0.92,
+      builder: (_, controller) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Drag handle
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 12, bottom: 8),
+              child: Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
-            const SizedBox(height: 12),
-            Row(children: [
+          ),
+          // Header: image + product name + price range
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+            child: Row(children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: SizedBox(width: 60, height: 60, child: _ProductImage(url: widget.parent.imageUrl)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(
+                  widget.parent.name,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _priceRangeLabel(),
+                  style: const TextStyle(color: AppColors.brand, fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+              ])),
+            ]),
+          ),
+          const Divider(height: 1),
+          // Scrollable: attribute chips + selected summary + qty stepper
+          Expanded(
+            child: ListView(
+              controller: controller,
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+              children: [
+                ...keys.map((key) {
+                  final values = _valuesFor(key);
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(key, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                        const SizedBox(height: 8),
+                        Wrap(spacing: 8, runSpacing: 8, children: values.map((val) {
+                          final isActive = _selected[key] == val;
+                          final inStock = _inStock(key, val);
+                          return GestureDetector(
+                            onTap: inStock
+                                ? () => setState(() {
+                                      _selected[key] = val;
+                                      _qty = 1;
+                                    })
+                                : null,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: isActive ? Colors.grey.shade900 : Colors.white,
+                                border: Border.all(
+                                  color: isActive
+                                      ? Colors.grey.shade900
+                                      : inStock
+                                          ? Colors.grey.shade300
+                                          : Colors.grey.shade100,
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                val,
+                                style: TextStyle(
+                                  color: isActive
+                                      ? Colors.white
+                                      : inStock
+                                          ? Colors.grey.shade800
+                                          : Colors.grey.shade300,
+                                  fontWeight: FontWeight.w500,
+                                  decoration: inStock ? null : TextDecoration.lineThrough,
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList()),
+                      ],
+                    ),
+                  );
+                }),
+                if (chosen != null && chosen.isNotEmpty) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
+                    child: Row(children: [
+                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        const Text('Selected', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                        Text(
+                          _selected.values.join(' · '),
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ])),
+                      Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                        Text(
+                          kes((chosen['price'] as num).toDouble()),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.brand),
+                        ),
+                        Text(
+                          chosenStock == 0 ? 'Out of stock' : '$chosenStock in stock',
+                          style: TextStyle(
+                              fontSize: 11, color: chosenStock == 0 ? Colors.red : Colors.grey),
+                        ),
+                      ]),
+                    ]),
+                  ),
+                  if (chosenStock > 0) ...[
+                    const SizedBox(height: 16),
+                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      _QtyButton(
+                        icon: Icons.remove,
+                        onTap: cappedQty > 1 ? () => setState(() => _qty = cappedQty - 1) : null,
+                      ),
+                      const SizedBox(width: 12),
+                      SizedBox(
+                        width: 52,
+                        child: Center(
+                          child: Text(
+                            '$cappedQty',
+                            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      _QtyButton(
+                        icon: Icons.add,
+                        onTap: cappedQty < chosenStock ? () => setState(() => _qty = cappedQty + 1) : null,
+                      ),
+                    ]),
+                  ],
+                ],
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+          // Fixed bottom buttons
+          Padding(
+            padding: EdgeInsets.fromLTRB(20, 8, 20, MediaQuery.of(context).padding.bottom + 16),
+            child: Row(children: [
               Expanded(
                 child: OutlinedButton(
                   onPressed: () => Navigator.of(context).pop(),
@@ -549,14 +683,46 @@ class _VariantPickerSheetState extends State<_VariantPickerSheet> {
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: (chosen != null && chosen.isNotEmpty && chosenStock > 0) ? _confirm : null,
+                  onPressed: canAdd ? _confirm : null,
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.grey.shade900),
-                  child: const Text('Add to cart', style: TextStyle(color: Colors.white)),
+                  child: Text(
+                    canAdd ? 'Add $cappedQty to cart' : 'Add to cart',
+                    style: const TextStyle(color: Colors.white),
+                  ),
                 ),
               ),
             ]),
-            SizedBox(height: MediaQuery.of(context).padding.bottom + 12),
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QtyButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
+  const _QtyButton({required this.icon, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    return InkWell(
+      onTap: onTap,
+      customBorder: const CircleBorder(),
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: enabled ? Colors.grey.shade400 : Colors.grey.shade200,
+          ),
+        ),
+        child: Icon(
+          icon,
+          size: 20,
+          color: enabled ? Colors.grey.shade800 : Colors.grey.shade300,
         ),
       ),
     );

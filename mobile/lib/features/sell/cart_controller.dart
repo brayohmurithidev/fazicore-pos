@@ -57,6 +57,14 @@ class CartController extends StateNotifier<Cart> {
     state = Cart(lines, state.cartDiscountPct);
   }
 
+  void addWithQty(LocalProduct p, int qty) {
+    if (qty <= 0) return;
+    final lines = Map<int, CartLine>.from(state.lines);
+    final existing = lines[p.id];
+    lines[p.id] = existing == null ? CartLine(p, qty) : existing.copyWith(qty: existing.qty + qty);
+    state = Cart(lines, state.cartDiscountPct);
+  }
+
   void setQty(int productId, int qty) {
     final lines = Map<int, CartLine>.from(state.lines);
     if (qty <= 0) {
