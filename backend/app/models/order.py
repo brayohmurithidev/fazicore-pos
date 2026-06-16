@@ -1,7 +1,8 @@
 import enum
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, Numeric, String, Text, TypeDecorator
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -30,6 +31,43 @@ class PaymentStatus(str, enum.Enum):
     REFUNDED = "refunded"
 
 
+_LEGACY_PAYMENT: dict[str, PaymentMethod] = {
+    "card": PaymentMethod.MPESA,
+    "airtel": PaymentMethod.MPESA,
+    "bank_transfer": PaymentMethod.MPESA,
+    "cheque": PaymentMethod.MPESA,
+    "other": PaymentMethod.MPESA,
+    "split": PaymentMethod.MPESA_CASH,
+}
+
+
+class _PaymentMethodType(TypeDecorator):
+    """Stores payment_method as plain text; coerces case-insensitively on load.
+
+    Bypasses all SQLAlchemy native-enum label lookup so the column works
+    regardless of whether the DB has uppercase or lowercase PG enum labels,
+    or is plain text after migration.
+    """
+    impl = String(20)
+    cache_ok = True
+
+    def process_bind_param(self, value: Any, dialect: Any) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, PaymentMethod):
+            return value.value
+        return str(value).lower()
+
+    def process_result_value(self, value: Any, dialect: Any) -> PaymentMethod | None:
+        if value is None:
+            return None
+        s = str(value).lower()
+        try:
+            return PaymentMethod(s)
+        except ValueError:
+            return _LEGACY_PAYMENT.get(s, PaymentMethod.CASH)
+
+
 class Order(Base, TimestampMixin):
     __tablename__ = "orders"
 
@@ -41,7 +79,7 @@ class Order(Base, TimestampMixin):
     cashier_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     cashier_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     status: Mapped[OrderStatus] = mapped_column(Enum(OrderStatus), default=OrderStatus.PENDING, nullable=False)
-    payment_method: Mapped[PaymentMethod] = mapped_column(Enum(PaymentMethod, native_enum=False), nullable=False)
+    payment_method: Mapped[PaymentMethod] = mapped_column(_PaymentMethodType, nullable=False)
     payment_status: Mapped[PaymentStatus] = mapped_column(Enum(PaymentStatus), default=PaymentStatus.PENDING, nullable=False)
     subtotal: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     tax_amount: Mapped[float] = mapped_column(Numeric(12, 2), default=0, nullable=False)
