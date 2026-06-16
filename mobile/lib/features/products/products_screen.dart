@@ -238,6 +238,16 @@ class _ProductActionsSheet extends StatelessWidget {
     );
   }
 
+  void _openVariantPrices(BuildContext context) {
+    Navigator.of(context).pop();
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => _VariantPricesSheet(product: product),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final hasVariants = product.hasVariants;
@@ -273,6 +283,16 @@ class _ProductActionsSheet extends StatelessWidget {
               ),
               const Divider(height: 1),
             ],
+            if (hasVariants && canManageProducts) ...[
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.sell_outlined),
+                title: const Text('Variant Prices'),
+                subtitle: const Text('Set a different price per variant'),
+                onTap: () => _openVariantPrices(context),
+              ),
+              const Divider(height: 1),
+            ],
             if (canManageInventory) ...[
               ListTile(
                 contentPadding: EdgeInsets.zero,
@@ -298,6 +318,180 @@ class _ProductActionsSheet extends StatelessWidget {
                 },
               ),
             const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Variant prices sheet ──────────────────────────────────────────────────────
+
+class _VariantPricesSheet extends ConsumerStatefulWidget {
+  final Product product;
+  const _VariantPricesSheet({required this.product});
+
+  @override
+  ConsumerState<_VariantPricesSheet> createState() => _VariantPricesSheetState();
+}
+
+class _VariantPricesSheetState extends ConsumerState<_VariantPricesSheet> {
+  List<ProductVariant>? _variants;
+  String? _loadError;
+  bool _saving = false;
+  String? _saveError;
+  final Map<int, TextEditingController> _controllers = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    for (final c in _controllers.values) { c.dispose(); }
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final variants = await fetchProductVariants(ref, widget.product.id);
+      if (!mounted) return;
+      setState(() {
+        _variants = variants;
+        for (final v in variants) {
+          _controllers[v.id] = TextEditingController(text: v.price.toStringAsFixed(2));
+        }
+      });
+    } catch (e) {
+      if (mounted) setState(() => _loadError = apiError(e));
+    }
+  }
+
+  Future<void> _save() async {
+    final variants = _variants ?? [];
+    final changed = variants.where((v) {
+      final newPrice = double.tryParse(_controllers[v.id]?.text.trim() ?? '');
+      return newPrice != null && (newPrice - v.price.toDouble()).abs() > 0.001;
+    }).toList();
+
+    if (changed.isEmpty) {
+      Navigator.of(context).pop();
+      return;
+    }
+
+    setState(() { _saving = true; _saveError = null; });
+    try {
+      for (final v in changed) {
+        final newPrice = double.parse(_controllers[v.id]!.text.trim());
+        await saveProduct(ref, id: v.id, data: {'price': newPrice});
+      }
+      ref.invalidate(productsProvider);
+      ref.read(syncControllerProvider.notifier).syncNow();
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Prices updated for ${changed.length} variant${changed.length != 1 ? 's' : ''}')),
+        );
+      }
+    } catch (e) {
+      if (mounted) setState(() { _saving = false; _saveError = apiError(e); });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.6,
+      maxChildSize: 0.92,
+      builder: (_, scrollController) => Padding(
+        padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(context).viewInsets.bottom + 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(widget.product.name,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                maxLines: 1, overflow: TextOverflow.ellipsis),
+            Text('Base price: ${kes(widget.product.price.toDouble())}',
+                style: const TextStyle(color: Colors.grey, fontSize: 13)),
+            const SizedBox(height: 16),
+            Expanded(
+              child: _loadError != null
+                  ? Center(child: Text(_loadError!, style: const TextStyle(color: Colors.red)))
+                  : _variants == null
+                      ? const Center(child: CircularProgressIndicator())
+                      : ListView(
+                          controller: scrollController,
+                          children: [
+                            ...(_variants!).map((v) {
+                              final attrLabel = v.attributes.values.join(' / ');
+                              final ctrl = _controllers[v.id]!;
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 6),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(attrLabel,
+                                          style: const TextStyle(fontWeight: FontWeight.w500)),
+                                    ),
+                                    SizedBox(
+                                      width: 120,
+                                      child: TextField(
+                                        controller: ctrl,
+                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                        textAlign: TextAlign.right,
+                                        decoration: InputDecoration(
+                                          prefixText: 'KES ',
+                                          prefixStyle: const TextStyle(fontSize: 12, color: Colors.grey),
+                                          isDense: true,
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }),
+                            if (_saveError != null) ...[
+                              const SizedBox(height: 8),
+                              Text(_saveError!, style: const TextStyle(color: Colors.red, fontSize: 13)),
+                            ],
+                          ],
+                        ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _saving ? null : () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: _saving || _variants == null ? null : _save,
+                    child: _saving
+                        ? const SizedBox(
+                            width: 18, height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Text('Save prices'),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
