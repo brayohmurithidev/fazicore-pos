@@ -368,16 +368,17 @@ class _ManageVariantsSheetState extends ConsumerState<_ManageVariantsSheet> {
       final count = await generateVariants(ref, productId: widget.product.id, attributes: attrs);
       ref.invalidate(productsProvider);
       if (!mounted) return;
-      Navigator.of(context).pop();
-      // Show result snackbar and offer to open stock entry
-      ScaffoldMessenger.of(context).showSnackBar(
+      // Capture navigator + scaffold before popping — context is dead after pop.
+      final nav = Navigator.of(context);
+      final scaffold = ScaffoldMessenger.of(context);
+      nav.pop();
+      scaffold.showSnackBar(
         SnackBar(
           content: Text(count > 0 ? 'Generated $count new variant${count != 1 ? 's' : ''}' : 'No new variants (all combinations already exist)'),
           action: count > 0
               ? SnackBarAction(
                   label: 'Add Stock',
                   onPressed: () {
-                    // Re-fetch product to get updated variantOptions, then open stock entry
                     final updated = Product(
                       id: widget.product.id,
                       name: widget.product.name,
@@ -392,7 +393,7 @@ class _ManageVariantsSheetState extends ConsumerState<_ManageVariantsSheet> {
                       variantOptions: _options,
                     );
                     showModalBottomSheet<void>(
-                      context: context,
+                      context: nav.context,
                       isScrollControlled: true,
                       shape: const RoundedRectangleBorder(
                         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
