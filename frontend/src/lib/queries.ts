@@ -366,6 +366,25 @@ export function useDeleteVariant() {
   })
 }
 
+export function useBulkVariantStock() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      productId,
+      entries,
+      notes,
+    }: {
+      productId: number
+      entries: { variant_id: number; qty: number }[]
+      notes?: string
+    }) => api.post(`/products/${productId}/variants/stock`, { entries, notes }).then((r) => r.data),
+    onSuccess: (_d, { productId }) => {
+      qc.invalidateQueries({ queryKey: ['product-variants', productId] })
+      qc.invalidateQueries({ queryKey: ['products'] })
+    },
+  })
+}
+
 // ── Categories ────────────────────────────────────────────────────────────
 
 export function useCategories() {

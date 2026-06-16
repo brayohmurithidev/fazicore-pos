@@ -33,7 +33,7 @@ import {
   useReorderSuggestions, useInventoryAging, usePermissions, useBulkCreateProducts,
   useAdjustPrice, usePriceHistory, type ApiPriceHistory,
   useProductUnits, useCreateProductUnit, useDeleteProductUnit,
-  useProductVariants, useGenerateVariants, useDeleteVariant,
+  useProductVariants, useGenerateVariants, useDeleteVariant, useBulkVariantStock,
 } from '@/lib/queries'
 import { usePlanLimits, atPlanLimit } from '@/hooks/usePlanLimits'
 import { useAuthStore } from '@/stores/auth'
@@ -997,16 +997,175 @@ function ProductUnitsSection({ product, canManage }: { product: ApiProduct; canM
   )
 }
 
+function VariantStockGrid({
+  product,
+  variants,
+  isPending,
+  onClose,
+  onSave,
+}: {
+  product: ApiProduct
+  variants: ApiProductVariant[]
+  isPending: boolean
+  onClose: () => void
+  onSave: (entries: { variant_id: number; qty: number }[]) => Promise<void>
+}) {
+  const [qtys, setQtys] = useState<Record<number, string>>({})
+  const options: Record<string, string[]> =
+    (product.attributes as { options?: Record<string, string[]> } | null)?.options ?? {}
+  const attrKeys = Object.keys(options)
+
+  const variantByAttrs = (attrs: Record<string, string>) =>
+    variants.find((v) => {
+      const va = v.attributes as Record<string, string> | null
+      return va ? Object.entries(attrs).every(([k, val]) => va[k] === val) : false
+    })
+
+  const setQty = (id: number, val: string) => setQtys((p) => ({ ...p, [id]: val }))
+
+  const entries = Object.entries(qtys)
+    .filter(([, q]) => q !== '' && parseInt(q) > 0)
+    .map(([id, q]) => ({ variant_id: parseInt(id), qty: parseInt(q) }))
+
+  const inputCls =
+    'w-full h-7 text-center text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white'
+
+  const footer = (
+    <div className="flex gap-2 mt-3">
+      <Button size="sm" variant="outline" className="h-7 text-xs flex-1" onClick={onClose}>
+        Cancel
+      </Button>
+      <Button
+        size="sm"
+        className="h-7 text-xs flex-1"
+        disabled={entries.length === 0 || isPending}
+        onClick={() => void onSave(entries)}
+      >
+        {isPending && <Loader2 size={11} className="animate-spin mr-1" />}
+        Save{entries.length > 0 ? ` (${entries.length})` : ''}
+      </Button>
+    </div>
+  )
+
+  // Matrix layout — only when the parent options dict has exactly 2 keys
+  if (attrKeys.length === 2) {
+    const [rowKey, colKey] = attrKeys
+    const rowVals = options[rowKey] ?? []
+    const colVals = options[colKey] ?? []
+    return (
+      <div>
+        <p className="text-[11px] text-gray-500 mb-2">
+          Enter qty to <span className="font-semibold">add</span> per variant (current stock shown above each input):
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr>
+                <th className="text-left py-1.5 pr-3 text-[11px] font-medium text-gray-500">
+                  {rowKey} ╲ {colKey}
+                </th>
+                {colVals.map((c) => (
+                  <th key={c} className="text-center px-2 py-1.5 text-[11px] font-semibold text-gray-700 min-w-[64px]">
+                    {c}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rowVals.map((row) => (
+                <tr key={row} className="border-t border-gray-100">
+                  <td className="pr-3 py-1.5 font-semibold text-[11px] text-gray-700 whitespace-nowrap">{row}</td>
+                  {colVals.map((col) => {
+                    const v = variantByAttrs({ [rowKey]: row, [colKey]: col })
+                    if (!v)
+                      return (
+                        <td key={col} className="text-center text-[11px] text-gray-300 px-2">
+                          —
+                        </td>
+                      )
+                    return (
+                      <td key={col} className="px-1.5 py-1">
+                        <div
+                          className={`text-[10px] text-center mb-0.5 font-medium ${
+                            v.stock_quantity === 0
+                              ? 'text-red-400'
+                              : v.stock_quantity <= 5
+                                ? 'text-amber-500'
+                                : 'text-green-600'
+                          }`}
+                        >
+                          {v.stock_quantity}
+                        </div>
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="0"
+                          value={qtys[v.id] ?? ''}
+                          onChange={(e) => setQty(v.id, e.target.value)}
+                          className={inputCls}
+                        />
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {footer}
+      </div>
+    )
+  }
+
+  // List layout — 1 attribute or 3+
+  return (
+    <div>
+      <p className="text-[11px] text-gray-500 mb-2">
+        Enter qty to <span className="font-semibold">add</span>:
+      </p>
+      <div className="space-y-1">
+        {variants.map((v) => {
+          const attrLabel = v.attributes
+            ? Object.values(v.attributes as Record<string, string>).join(' / ')
+            : v.name.replace(product.name, '').replace(' - ', '')
+          return (
+            <div key={v.id} className="flex items-center gap-2 py-1">
+              <span className="flex-1 text-xs text-gray-700">{attrLabel}</span>
+              <span
+                className={`text-[11px] w-8 text-right font-medium flex-shrink-0 ${
+                  v.stock_quantity === 0 ? 'text-red-400' : v.stock_quantity <= 5 ? 'text-amber-500' : 'text-green-600'
+                }`}
+              >
+                {v.stock_quantity}
+              </span>
+              <input
+                type="number"
+                min="0"
+                placeholder="0"
+                value={qtys[v.id] ?? ''}
+                onChange={(e) => setQty(v.id, e.target.value)}
+                className="w-20 h-7 text-center text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+              />
+            </div>
+          )
+        })}
+      </div>
+      {footer}
+    </div>
+  )
+}
+
 function ProductVariantsSection({ product, canManage }: { product: ApiProduct; canManage: boolean }) {
   const { data: variants = [], isLoading } = useProductVariants(product.id)
   const generateVariants = useGenerateVariants()
   const deleteVariant = useDeleteVariant()
+  const bulkStock = useBulkVariantStock()
 
-  // Builder state — list of {name, values[]}
   const [attributes, setAttributes] = useState<{ name: string; values: string }[]>([
     { name: 'Size', values: '' },
   ])
   const [building, setBuilding] = useState(false)
+  const [stockEntry, setStockEntry] = useState(false)
 
   const options: Record<string, string[]> =
     (product.attributes as { options?: Record<string, string[]> } | null)?.options ?? {}
@@ -1031,19 +1190,49 @@ function ProductVariantsSection({ product, canManage }: { product: ApiProduct; c
     toast.success('Variant removed')
   }
 
+  const handleBulkStock = async (entries: { variant_id: number; qty: number }[]) => {
+    await bulkStock.mutateAsync({ productId: product.id, entries })
+    toast.success(`Stock updated for ${entries.length} variant${entries.length !== 1 ? 's' : ''}`)
+    setStockEntry(false)
+  }
+
   if (product.is_variant) return null
 
   return (
     <div className="px-5 py-4 border-b border-gray-100">
       <div className="flex items-center justify-between mb-3">
         <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Variants</div>
-        {canManage && !building && (
-          <button onClick={() => setBuilding(true)}
-            className="text-[11px] text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1">
-            <Wand2 size={11} />Generate
-          </button>
+        {canManage && !building && !stockEntry && (
+          <div className="flex items-center gap-3">
+            {variants.length > 0 && (
+              <button
+                onClick={() => setStockEntry(true)}
+                className="text-[11px] text-green-600 hover:text-green-700 font-medium flex items-center gap-1"
+              >
+                <Package size={11} />Stock Entry
+              </button>
+            )}
+            <button
+              onClick={() => setBuilding(true)}
+              className="text-[11px] text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1"
+            >
+              <Wand2 size={11} />Generate
+            </button>
+          </div>
         )}
       </div>
+
+      {stockEntry && (
+        <div className="bg-gray-50 rounded-lg p-3 mb-3">
+          <VariantStockGrid
+            product={product}
+            variants={variants}
+            isPending={bulkStock.isPending}
+            onClose={() => setStockEntry(false)}
+            onSave={handleBulkStock}
+          />
+        </div>
+      )}
 
       {building && (
         <div className="space-y-2 mb-3 bg-gray-50 rounded-lg p-3">
@@ -1051,29 +1240,41 @@ function ProductVariantsSection({ product, canManage }: { product: ApiProduct; c
           {attributes.map((a, i) => (
             <div key={i} className="flex gap-2 items-center">
               <Input
-                value={a.name} placeholder="Attribute (e.g. Size)"
+                value={a.name}
+                placeholder="Attribute (e.g. Size)"
                 className="h-8 text-xs w-28 flex-shrink-0"
-                onChange={(e) => setAttributes((prev) => prev.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
+                onChange={(e) =>
+                  setAttributes((prev) => prev.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))
+                }
               />
               <Input
-                value={a.values} placeholder="Values (e.g. S, M, L, XL)"
+                value={a.values}
+                placeholder="Values (e.g. S, M, L, XL)"
                 className="h-8 text-xs flex-1"
-                onChange={(e) => setAttributes((prev) => prev.map((x, j) => j === i ? { ...x, values: e.target.value } : x))}
+                onChange={(e) =>
+                  setAttributes((prev) => prev.map((x, j) => (j === i ? { ...x, values: e.target.value } : x)))
+                }
               />
               {attributes.length > 1 && (
-                <button onClick={() => setAttributes((prev) => prev.filter((_, j) => j !== i))}
-                  className="text-gray-400 hover:text-red-500">
+                <button
+                  onClick={() => setAttributes((prev) => prev.filter((_, j) => j !== i))}
+                  className="text-gray-400 hover:text-red-500"
+                >
                   <X size={14} />
                 </button>
               )}
             </div>
           ))}
-          <button onClick={() => setAttributes((prev) => [...prev, { name: '', values: '' }])}
-            className="text-[11px] text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1 mt-1">
+          <button
+            onClick={() => setAttributes((prev) => [...prev, { name: '', values: '' }])}
+            className="text-[11px] text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1 mt-1"
+          >
             <Plus size={11} />Add attribute
           </button>
           <div className="flex gap-2 mt-3">
-            <Button size="sm" variant="outline" className="h-7 text-xs flex-1" onClick={() => setBuilding(false)}>Cancel</Button>
+            <Button size="sm" variant="outline" className="h-7 text-xs flex-1" onClick={() => setBuilding(false)}>
+              Cancel
+            </Button>
             <Button size="sm" className="h-7 text-xs flex-1" disabled={generateVariants.isPending} onClick={handleGenerate}>
               {generateVariants.isPending && <Loader2 size={11} className="animate-spin mr-1" />}
               Generate
@@ -1082,7 +1283,7 @@ function ProductVariantsSection({ product, canManage }: { product: ApiProduct; c
         </div>
       )}
 
-      {hasOptions && !building && (
+      {hasOptions && !building && !stockEntry && (
         <div className="flex flex-wrap gap-1 mb-3">
           {Object.entries(options).map(([key, vals]) => (
             <div key={key} className="text-[11px] text-gray-500">
@@ -1092,37 +1293,47 @@ function ProductVariantsSection({ product, canManage }: { product: ApiProduct; c
         </div>
       )}
 
-      {isLoading ? (
-        <div className="space-y-1.5">{[1,2,3].map((i) => <div key={i} className="h-8 bg-gray-100 rounded animate-pulse" />)}</div>
-      ) : variants.length === 0 ? (
-        <div className="text-center py-4 text-[12px] text-gray-400">
-          {hasOptions ? 'No variants yet. Click Generate.' : 'No variants — click Generate to create size/colour options.'}
-        </div>
-      ) : (
-        <div className="space-y-0.5">
-          {variants.map((v) => {
-            const attrLabel = v.attributes
-              ? Object.values(v.attributes as Record<string, string>).join(' / ')
-              : v.name.replace(product.name, '').replace(' - ', '')
-            return (
-              <div key={v.id} className="flex items-center gap-2.5 py-1.5 border-b border-gray-50 last:border-0">
-                <div className="flex-1 min-w-0">
-                  <span className="text-xs font-medium text-gray-800">{attrLabel}</span>
-                  {v.sku && <span className="text-[11px] text-gray-400 ml-2">{v.sku}</span>}
+      {!stockEntry && (
+        isLoading ? (
+          <div className="space-y-1.5">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-8 bg-gray-100 rounded animate-pulse" />
+            ))}
+          </div>
+        ) : variants.length === 0 ? (
+          <div className="text-center py-4 text-[12px] text-gray-400">
+            {hasOptions ? 'No variants yet. Click Generate.' : 'No variants — click Generate to create size/colour options.'}
+          </div>
+        ) : (
+          <div className="space-y-0.5">
+            {variants.map((v) => {
+              const attrLabel = v.attributes
+                ? Object.values(v.attributes as Record<string, string>).join(' / ')
+                : v.name.replace(product.name, '').replace(' - ', '')
+              return (
+                <div key={v.id} className="flex items-center gap-2.5 py-1.5 border-b border-gray-50 last:border-0">
+                  <div className="flex-1 min-w-0">
+                    <span className="text-xs font-medium text-gray-800">{attrLabel}</span>
+                    {v.sku && <span className="text-[11px] text-gray-400 ml-2">{v.sku}</span>}
+                  </div>
+                  <span className="text-[11px] text-gray-500 flex-shrink-0">{fmtKES(v.price)}</span>
+                  <span
+                    className={`text-[11px] font-semibold flex-shrink-0 ${
+                      v.stock_quantity === 0 ? 'text-red-500' : v.stock_quantity <= 5 ? 'text-amber-500' : 'text-green-600'
+                    }`}
+                  >
+                    {v.stock_quantity}
+                  </span>
+                  {canManage && (
+                    <button onClick={() => void handleDelete(v)} className="text-gray-300 hover:text-red-500 flex-shrink-0">
+                      <Trash2 size={13} />
+                    </button>
+                  )}
                 </div>
-                <span className="text-[11px] text-gray-500 flex-shrink-0">{fmtKES(v.price)}</span>
-                <span className={`text-[11px] font-semibold flex-shrink-0 ${v.stock_quantity === 0 ? 'text-red-500' : v.stock_quantity <= 5 ? 'text-amber-500' : 'text-green-600'}`}>
-                  {v.stock_quantity}
-                </span>
-                {canManage && (
-                  <button onClick={() => handleDelete(v)} className="text-gray-300 hover:text-red-500 flex-shrink-0">
-                    <Trash2 size={13} />
-                  </button>
-                )}
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+        )
       )}
     </div>
   )

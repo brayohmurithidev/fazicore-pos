@@ -661,3 +661,43 @@ async def delete_variant(
         raise HTTPException(status_code=404, detail="Variant not found")
     await session.delete(variant)
     await session.flush()
+
+
+# ── Bulk variant stock entry ───────────────────────────────────────────────────
+
+class _VariantStockEntry(BaseModel):
+    variant_id: int
+    qty: int
+
+
+class _VariantBulkStockIn(BaseModel):
+    entries: list[_VariantStockEntry]
+    notes: str | None = None
+
+
+@router.post("/{product_id}/variants/stock", status_code=status.HTTP_204_NO_CONTENT)
+async def bulk_stock_variants(
+    product_id: int,
+    data: _VariantBulkStockIn,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_active_user),
+) -> None:
+    """Add stock to multiple variants of a product in one request."""
+    if current_user.role not in (UserRole.ADMIN, UserRole.MANAGER):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    await _get_parent_or_404(product_id, current_user.org_id, session)
+    inv_service = InventoryService(session)
+    for entry in data.entries:
+        if entry.qty == 0:
+            continue
+        variant = await session.get(Product, entry.variant_id)
+        if not variant or variant.parent_product_id != product_id:
+            raise HTTPException(status_code=404, detail=f"Variant {entry.variant_id} not found")
+        await inv_service.adjust(
+            product_id=variant.id,
+            branch_id=current_user.branch_id,
+            qty_change=entry.qty,
+            type=TransactionType.PURCHASE,
+            performed_by=current_user.id,
+            notes=data.notes or "Bulk stock entry",
+        )
