@@ -30,14 +30,22 @@ class ProductRepository(BaseRepository[Product, ProductCreate, ProductUpdate]):
         skip: int = 0,
         limit: int = 50,
         active_only: bool = True,
+        parents_only: bool = False,
     ) -> list[Product]:
         stmt = (
             select(Product)
-            .options(selectinload(Product.inventory), joinedload(Product.category), selectinload(Product.units))
+            .options(
+                selectinload(Product.inventory),
+                joinedload(Product.category),
+                selectinload(Product.units),
+                selectinload(Product.variants).selectinload(Product.inventory),
+            )
             .where(Product.org_id == org_id)
         )
         if active_only:
             stmt = stmt.where(Product.is_active == True)
+        if parents_only:
+            stmt = stmt.where(Product.parent_product_id == None)
         if category_id is not None:
             stmt = stmt.where(Product.category_id == category_id)
         if q:

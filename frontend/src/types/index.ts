@@ -20,6 +20,18 @@ export interface ProductUnit {
   is_default: boolean
 }
 
+export interface ProductVariant {
+  id: number
+  name: string
+  sku: string | null
+  barcode: string | null
+  price: number
+  cost: number | null
+  attributes: Record<string, string> | null
+  stock_quantity: number
+  is_active: boolean
+}
+
 export interface Product {
   id: string
   name: string
@@ -35,6 +47,8 @@ export interface Product {
   vatRate: number
   imageUrl?: string
   units: ProductUnit[]
+  variantCount: number
+  variants: ProductVariant[]
 }
 
 export interface Branch {

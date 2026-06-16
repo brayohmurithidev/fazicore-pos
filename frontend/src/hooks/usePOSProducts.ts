@@ -30,6 +30,9 @@ function localToApi(p: LocalProduct): ApiProduct {
     stock_quantity: p.stock_quantity,
     parent_product_id: null,
     attributes: null,
+    is_variant: false,
+    variant_count: 0,
+    variants: [],
     units: [],
     created_at: '',
   }

@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -51,6 +52,9 @@ class ProductCreate(BaseModel):
     min_stock: int = 10
     track_inventory: bool = True
     initial_stock: int = 0
+    # When creating a variant-parent, pass the attribute options here.
+    # e.g. {"Size": ["S","M","L","XL"], "Color": ["Red","Blue"]}
+    variant_options: dict[str, list[str]] | None = None
 
 
 class ProductBulkCreate(ProductCreate):
@@ -72,7 +76,46 @@ class ProductUpdate(BaseModel):
     min_stock: int | None = None
     is_active: bool | None = None
     track_inventory: bool | None = None
+    variant_options: dict[str, list[str]] | None = None
 
+
+# ── Variant schemas ───────────────────────────────────────────────────────────
+
+class VariantCreate(BaseModel):
+    """Create a single variant manually."""
+    attributes: dict[str, str]   # e.g. {"Size": "M", "Color": "Red"}
+    sku: str | None = None
+    barcode: str | None = None
+    price: float | None = None   # defaults to parent price
+    cost: float | None = None
+    initial_stock: int = 0
+
+
+class VariantAttributeIn(BaseModel):
+    name: str             # e.g. "Size"
+    values: list[str]     # e.g. ["S", "M", "L", "XL"]
+
+
+class VariantGenerateIn(BaseModel):
+    """Generate all attribute combinations as variants at once."""
+    attributes: list[VariantAttributeIn]
+
+
+class ProductVariantOut(BaseModel):
+    id: int
+    name: str
+    sku: str | None
+    barcode: str | None
+    price: float
+    cost: float | None
+    attributes: dict[str, Any] | None
+    stock_quantity: int = 0
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+# ── Main product out ──────────────────────────────────────────────────────────
 
 class ProductOut(BaseModel):
     id: int
@@ -94,5 +137,10 @@ class ProductOut(BaseModel):
     stock_quantity: int = 0
     units: list[ProductUnitOut] = []
     created_at: datetime
+    parent_product_id: int | None = None
+    attributes: dict[str, Any] | None = None
+    is_variant: bool = False
+    variant_count: int = 0
+    variants: list[ProductVariantOut] = []
 
     model_config = {"from_attributes": True}

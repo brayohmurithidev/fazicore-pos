@@ -12,6 +12,8 @@ import '../printing/printer_service.dart';
 
 const _kProductsSync = 'products_last_sync';
 const _kCustomersSync = 'customers_last_sync';
+// Stores JSON: {"has_variants": [id,...], "is_variant": [id,...], "variants": {parentId: [{...}]}}
+const _kVariantMeta = 'variant_meta';
 const _uuid = Uuid();
 
 class SyncState {
@@ -133,12 +135,16 @@ class SyncController extends StateNotifier<SyncState> {
   // ── Pull ──────────────────────────────────────────────────────────────────
   Future<void> _pullProducts() async {
     final rows = <LocalProductsCompanion>[];
+    final allPages = <Map<String, dynamic>>[];
     var skip = 0;
     const limit = 200;
     while (true) {
       final res = await _api.dio.get('/products/', queryParameters: {'skip': skip, 'limit': limit});
       final page = (res.data as List).cast<Map<String, dynamic>>();
+      allPages.addAll(page);
       for (final j in page) {
+        // Skip child variants from the local catalog — they are only reachable via the picker
+        if ((j['parent_product_id'] as int?) != null) continue;
         rows.add(LocalProductsCompanion.insert(
           id: Value(j['id'] as int),
           name: j['name'] as String,
@@ -162,6 +168,19 @@ class SyncController extends StateNotifier<SyncState> {
     }
     await _db.replaceProducts(rows);
     await _db.setMeta(_kProductsSync, DateTime.now().toIso8601String());
+
+    // Persist variant metadata so the sell screen can show the picker without extra API calls.
+    final hasVariants = <int>[];
+    final variantMap = <String, dynamic>{};
+    for (final j in allPages) {
+      final variantCount = (j['variant_count'] as int?) ?? 0;
+      if (variantCount > 0) {
+        final id = j['id'] as int;
+        hasVariants.add(id);
+        variantMap[id.toString()] = (j['variants'] as List? ?? []);
+      }
+    }
+    await _db.setMeta(_kVariantMeta, jsonEncode({'has_variants': hasVariants, 'variants': variantMap}));
   }
 
   Future<void> _pullCustomers() async {

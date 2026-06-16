@@ -33,6 +33,7 @@ import {
   useReorderSuggestions, useInventoryAging, usePermissions, useBulkCreateProducts,
   useAdjustPrice, usePriceHistory, type ApiPriceHistory,
   useProductUnits, useCreateProductUnit, useDeleteProductUnit,
+  useProductVariants, useGenerateVariants, useDeleteVariant,
 } from '@/lib/queries'
 import { usePlanLimits, atPlanLimit } from '@/hooks/usePlanLimits'
 import { useAuthStore } from '@/stores/auth'
@@ -43,7 +44,7 @@ import { useFeature } from '@/hooks/useFeature'
 import { fmtKES } from '@/lib/data'
 import { resolveImageUrl } from '@/lib/api'
 import { useTauriFileDrop } from '@/hooks/useTauriFileDrop'
-import type { ApiProduct, ApiCategory, ApiPurchaseOrder, ApiInventoryItem, ApiSupplier, TransferStatus, ReorderUrgency, AgingBucket, ApiProductUnit } from '@/types/api'
+import type { ApiProduct, ApiCategory, ApiPurchaseOrder, ApiInventoryItem, ApiSupplier, TransferStatus, ReorderUrgency, AgingBucket, ApiProductUnit, ApiProductVariant } from '@/types/api'
 
 // ── Utilities ─────────────────────────────────────────────────────────────
 
@@ -996,6 +997,137 @@ function ProductUnitsSection({ product, canManage }: { product: ApiProduct; canM
   )
 }
 
+function ProductVariantsSection({ product, canManage }: { product: ApiProduct; canManage: boolean }) {
+  const { data: variants = [], isLoading } = useProductVariants(product.id)
+  const generateVariants = useGenerateVariants()
+  const deleteVariant = useDeleteVariant()
+
+  // Builder state — list of {name, values[]}
+  const [attributes, setAttributes] = useState<{ name: string; values: string }[]>([
+    { name: 'Size', values: '' },
+  ])
+  const [building, setBuilding] = useState(false)
+
+  const options: Record<string, string[]> =
+    (product.attributes as { options?: Record<string, string[]> } | null)?.options ?? {}
+  const hasOptions = Object.keys(options).length > 0
+
+  const handleGenerate = async () => {
+    const attrs = attributes
+      .filter((a) => a.name.trim() && a.values.trim())
+      .map((a) => ({
+        name: a.name.trim(),
+        values: a.values.split(',').map((v) => v.trim()).filter(Boolean),
+      }))
+    if (!attrs.length) return
+    await generateVariants.mutateAsync({ productId: product.id, attributes: attrs })
+    setBuilding(false)
+    toast.success(`Variants generated`)
+  }
+
+  const handleDelete = async (v: ApiProductVariant) => {
+    if (!confirm(`Delete variant "${v.name}"?`)) return
+    await deleteVariant.mutateAsync({ productId: product.id, variantId: v.id })
+    toast.success('Variant removed')
+  }
+
+  if (product.is_variant) return null
+
+  return (
+    <div className="px-5 py-4 border-b border-gray-100">
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Variants</div>
+        {canManage && !building && (
+          <button onClick={() => setBuilding(true)}
+            className="text-[11px] text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1">
+            <Wand2 size={11} />Generate
+          </button>
+        )}
+      </div>
+
+      {building && (
+        <div className="space-y-2 mb-3 bg-gray-50 rounded-lg p-3">
+          <p className="text-[11px] text-gray-500 mb-2">Define attribute options (comma-separated values):</p>
+          {attributes.map((a, i) => (
+            <div key={i} className="flex gap-2 items-center">
+              <Input
+                value={a.name} placeholder="Attribute (e.g. Size)"
+                className="h-8 text-xs w-28 flex-shrink-0"
+                onChange={(e) => setAttributes((prev) => prev.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
+              />
+              <Input
+                value={a.values} placeholder="Values (e.g. S, M, L, XL)"
+                className="h-8 text-xs flex-1"
+                onChange={(e) => setAttributes((prev) => prev.map((x, j) => j === i ? { ...x, values: e.target.value } : x))}
+              />
+              {attributes.length > 1 && (
+                <button onClick={() => setAttributes((prev) => prev.filter((_, j) => j !== i))}
+                  className="text-gray-400 hover:text-red-500">
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          ))}
+          <button onClick={() => setAttributes((prev) => [...prev, { name: '', values: '' }])}
+            className="text-[11px] text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1 mt-1">
+            <Plus size={11} />Add attribute
+          </button>
+          <div className="flex gap-2 mt-3">
+            <Button size="sm" variant="outline" className="h-7 text-xs flex-1" onClick={() => setBuilding(false)}>Cancel</Button>
+            <Button size="sm" className="h-7 text-xs flex-1" disabled={generateVariants.isPending} onClick={handleGenerate}>
+              {generateVariants.isPending && <Loader2 size={11} className="animate-spin mr-1" />}
+              Generate
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {hasOptions && !building && (
+        <div className="flex flex-wrap gap-1 mb-3">
+          {Object.entries(options).map(([key, vals]) => (
+            <div key={key} className="text-[11px] text-gray-500">
+              <span className="font-semibold text-gray-700">{key}:</span> {vals.join(', ')}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="space-y-1.5">{[1,2,3].map((i) => <div key={i} className="h-8 bg-gray-100 rounded animate-pulse" />)}</div>
+      ) : variants.length === 0 ? (
+        <div className="text-center py-4 text-[12px] text-gray-400">
+          {hasOptions ? 'No variants yet. Click Generate.' : 'No variants — click Generate to create size/colour options.'}
+        </div>
+      ) : (
+        <div className="space-y-0.5">
+          {variants.map((v) => {
+            const attrLabel = v.attributes
+              ? Object.values(v.attributes as Record<string, string>).join(' / ')
+              : v.name.replace(product.name, '').replace(' - ', '')
+            return (
+              <div key={v.id} className="flex items-center gap-2.5 py-1.5 border-b border-gray-50 last:border-0">
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs font-medium text-gray-800">{attrLabel}</span>
+                  {v.sku && <span className="text-[11px] text-gray-400 ml-2">{v.sku}</span>}
+                </div>
+                <span className="text-[11px] text-gray-500 flex-shrink-0">{fmtKES(v.price)}</span>
+                <span className={`text-[11px] font-semibold flex-shrink-0 ${v.stock_quantity === 0 ? 'text-red-500' : v.stock_quantity <= 5 ? 'text-amber-500' : 'text-green-600'}`}>
+                  {v.stock_quantity}
+                </span>
+                {canManage && (
+                  <button onClick={() => handleDelete(v)} className="text-gray-300 hover:text-red-500 flex-shrink-0">
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ProductDetailPane({ product, categories, onClose, onEdit, onAdjust, onDelete, canManage = true, isAdmin = false }: {
   product: ApiProduct
   categories: ApiCategory[]
@@ -1168,6 +1300,9 @@ function ProductDetailPane({ product, categories, onClose, onEdit, onAdjust, onD
 
         {/* Units */}
         <ProductUnitsSection product={product} canManage={canManage} />
+
+        {/* Variants */}
+        <ProductVariantsSection product={product} canManage={canManage} />
 
         {/* Price history */}
         {priceHistory.length > 0 && (
@@ -1682,7 +1817,14 @@ function ProductsTab({ branchId }: { branchId?: number }) {
                             )}
                           </div>
                           <div className="min-w-0">
-                            <div className="font-semibold text-sm text-gray-900 truncate max-w-[140px]">{p.name}</div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-semibold text-sm text-gray-900 truncate max-w-[130px]">{p.name}</span>
+                              {p.variant_count > 0 && (
+                                <span className="inline-flex items-center text-[10px] font-medium bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                                  {p.variant_count}v
+                                </span>
+                              )}
+                            </div>
                             <div className="text-[11px] text-gray-400">{p.sku ? `SKU: ${p.sku}` : '—'}</div>
                           </div>
                         </div>

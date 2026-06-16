@@ -23,6 +23,139 @@ import { useOfflineStore } from '@/stores/offline'
 import { printESCPOS } from '@/lib/escpos'
 import type { CartItem, Product, SaleInfo, SelectedUnit } from '@/types'
 
+// ── Variant picker ────────────────────────────────────────────────────────────
+
+function VariantPickerModal({ product, onSelect, onClose }: {
+  product: Product | null
+  onSelect: (variant: Product) => void
+  onClose: () => void
+}) {
+  if (!product) return null
+
+  // Collect unique attribute keys from all variants
+  const attrKeys = Array.from(
+    new Set(product.variants.flatMap((v) => Object.keys(v.attributes ?? {})))
+  )
+
+  // Build cascading selection state — one chosen value per attribute key
+  const [selected, setSelected] = useState<Record<string, string>>({})
+
+  // Reset when product changes
+  useEffect(() => { setSelected({}) }, [product?.id])
+
+  // Narrow down variants as attributes are selected
+  const matchingVariants = product.variants.filter((v) => {
+    return Object.entries(selected).every(([k, val]) => (v.attributes ?? {})[k] === val)
+  })
+
+  const chosenVariant = matchingVariants.length === 1 ? matchingVariants[0] : null
+
+  const getAvailableValues = (key: string) => {
+    // Which values for this key still lead to at least one stock-available match
+    const priorSelection = Object.fromEntries(
+      Object.entries(selected).filter(([k]) => k !== key)
+    )
+    const candidates = product.variants.filter((v) =>
+      Object.entries(priorSelection).every(([k, val]) => (v.attributes ?? {})[k] === val)
+    )
+    return Array.from(new Set(candidates.map((v) => (v.attributes ?? {})[key]).filter(Boolean)))
+  }
+
+  const handleConfirm = () => {
+    if (!chosenVariant) return
+    // Represent the variant as a Product for the cart
+    const variantAsProduct: Product = {
+      ...product,
+      id: String(chosenVariant.id),
+      name: chosenVariant.name,
+      price: chosenVariant.price,
+      cost: chosenVariant.cost ?? product.cost,
+      sku: chosenVariant.sku ?? '',
+      barcode: chosenVariant.barcode ?? '',
+      stock: chosenVariant.stock_quantity,
+      variantCount: 0,
+      variants: [],
+    }
+    onSelect(variantAsProduct)
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{product.name}</p>
+        <p className="text-sm font-bold text-gray-900 mb-4">Select variant</p>
+
+        <div className="space-y-4">
+          {attrKeys.map((key) => (
+            <div key={key}>
+              <p className="text-xs text-gray-500 mb-2 font-medium">{key}</p>
+              <div className="flex flex-wrap gap-2">
+                {getAvailableValues(key).map((val) => {
+                  const isActive = selected[key] === val
+                  const hasStock = product.variants.some((v) =>
+                    (v.attributes ?? {})[key] === val &&
+                    Object.entries({ ...selected, [key]: val })
+                      .filter(([k]) => k !== key)
+                      .every(([k, sv]) => (v.attributes ?? {})[k] === sv) &&
+                    v.stock_quantity > 0
+                  )
+                  return (
+                    <button
+                      key={val}
+                      onClick={() => setSelected((s) => ({ ...s, [key]: val }))}
+                      disabled={!hasStock}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
+                        isActive
+                          ? 'bg-gray-900 text-white border-gray-900'
+                          : hasStock
+                          ? 'border-gray-200 text-gray-700 hover:border-gray-400'
+                          : 'border-gray-100 text-gray-300 cursor-not-allowed line-through'
+                      }`}
+                    >
+                      {val}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {chosenVariant && (
+          <div className="mt-4 bg-gray-50 rounded-xl px-4 py-3 flex items-center justify-between">
+            <div>
+              <div className="text-xs text-gray-500">Selected</div>
+              <div className="text-sm font-semibold text-gray-900">
+                {Object.values(selected).join(' / ')}
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-sm font-bold text-gray-900">{fmtKES(chosenVariant.price)}</div>
+              <div className={`text-[11px] ${chosenVariant.stock_quantity === 0 ? 'text-red-500' : 'text-gray-400'}`}>
+                {chosenVariant.stock_quantity} in stock
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex gap-2 mt-4">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 hover:border-gray-400">
+            Cancel
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={!chosenVariant || chosenVariant.stock_quantity === 0}
+            className="flex-1 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-semibold disabled:opacity-40"
+          >
+            Add to cart
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Kbd hint badge ────────────────────────────────────────────────────────────
 
 function Kbd({ children, light }: { children: React.ReactNode; light?: boolean }) {
@@ -181,7 +314,9 @@ function ProductTile({
         {defaultUnit.conversion_factor !== 1 && (
           <span className="text-[9px] text-gray-400 font-medium">{defaultUnit.name}</span>
         )}
-        {hasMultiUnit && <span className="text-[9px] text-gray-400 ml-auto">▾</span>}
+        {product.variantCount > 0
+          ? <span className="text-[9px] text-indigo-500 font-semibold ml-auto">{product.variantCount}v ▾</span>
+          : hasMultiUnit && <span className="text-[9px] text-gray-400 ml-auto">▾</span>}
       </div>
       <div className={`text-[10px] mt-0.5 font-medium ${
         isExpired ? 'text-red-500' : isOut ? 'text-red-500' : isCapped ? 'text-amber-500' : isLow ? 'text-orange-500' : 'text-gray-400'
@@ -386,6 +521,7 @@ export function POSPage() {
   const [customerPickerOpen, setCustomerPickerOpen] = useState(false)
   const [pointsRedeemed, setPointsRedeemed] = useState(0)
   const [redeemOpen, setRedeemOpen] = useState(false)
+  const [variantProduct, setVariantProduct] = useState<Product | null>(null)
 
   const createOrder = useCreateOrder()
   const { isOnline, createOfflineOrder, setPosBranchOverride } = useOfflineStore()
@@ -416,7 +552,7 @@ export function POSPage() {
     pendingApproval.current = null
   }
 
-  const noModalOpen = !payOpen && !receiptOpen && !approvalOpen && !discountOpen && !shortcutsOpen && !notesOpen && !customerPickerOpen && !redeemOpen
+  const noModalOpen = !payOpen && !receiptOpen && !approvalOpen && !discountOpen && !shortcutsOpen && !notesOpen && !customerPickerOpen && !redeemOpen && !variantProduct
 
   const userBranchId = user?.branch ? (Number(user.branch) || undefined) : undefined
 
@@ -451,25 +587,39 @@ export function POSPage() {
     [apiCategories]
   )
 
-  // Normalize API products
+  // Normalize API products — exclude child variants from the main grid (they appear via picker)
   const products = useMemo<Product[]>(
     () =>
-      apiProducts.map((p) => ({
-        id: String(p.id),
-        name: p.name,
-        category: String(p.category_id ?? ''),
-        price: p.price,
-        cost: p.cost ?? 0,
-        sku: p.sku ?? '',
-        barcode: p.barcode ?? '',
-        stock: p.stock_quantity,
-        minStock: p.min_stock,
-        expiryDate: p.expiry_date ?? '',
-        unit: p.unit,
-        vatRate: p.vat_rate,
-        imageUrl: resolveImageUrl(p.image_url) ?? undefined,
-        units: p.units ?? [],
-      })),
+      apiProducts
+        .filter((p) => !p.is_variant)
+        .map((p) => ({
+          id: String(p.id),
+          name: p.name,
+          category: String(p.category_id ?? ''),
+          price: p.price,
+          cost: p.cost ?? 0,
+          sku: p.sku ?? '',
+          barcode: p.barcode ?? '',
+          stock: p.stock_quantity,
+          minStock: p.min_stock,
+          expiryDate: p.expiry_date ?? '',
+          unit: p.unit,
+          vatRate: p.vat_rate,
+          imageUrl: resolveImageUrl(p.image_url) ?? undefined,
+          units: p.units ?? [],
+          variantCount: p.variant_count ?? 0,
+          variants: (p.variants ?? []).map((v) => ({
+            id: v.id,
+            name: v.name,
+            sku: v.sku,
+            barcode: v.barcode,
+            price: v.price,
+            cost: v.cost ?? null,
+            attributes: v.attributes as Record<string, string> | null,
+            stock_quantity: v.stock_quantity,
+            is_active: v.is_active,
+          })),
+        })),
     [apiProducts]
   )
 
@@ -957,7 +1107,10 @@ export function POSPage() {
                   product={p}
                   catColor={catMap.get(p.category)?.color ?? '#9CA3AF'}
                   cartQty={cartQtyMap.get(p.id) ?? 0}
-                  onAdd={(unit) => addToCart(p, unit)}
+                  onAdd={(unit) => {
+                    if (p.variantCount > 0) { setVariantProduct(p); return }
+                    addToCart(p, unit)
+                  }}
                   expiryTracking={settings.expiryTracking}
                 />
               ))}
@@ -1301,6 +1454,12 @@ export function POSPage() {
         settings={settings}
       />
       <ReceiptModal open={receiptOpen} onClose={() => setReceiptOpen(false)} sale={lastSale} />
+
+      <VariantPickerModal
+        product={variantProduct}
+        onSelect={(v) => addToCart(v)}
+        onClose={() => setVariantProduct(null)}
+      />
 
       {/* ── Keyboard shortcuts reference ──────────────────────────────────── */}
       <Dialog open={shortcutsOpen} onOpenChange={(v) => !v && setShortcutsOpen(false)}>

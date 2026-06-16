@@ -55,7 +55,7 @@ import type {
   ApiExpenditure, ApiExpenditureSummary, ApiLoyaltySettings,
   ApiEtimsConfig, ApiEtimsSubmission,
   ApiDailySummary, ApiShiftReport, ApiStockLevel, ApiVoidLog,
-  ApiProductUnit,
+  ApiProductUnit, ApiProductVariant,
 } from '@/types/api'
 
 // ── Local-mode adapters ───────────────────────────────────────────────────────
@@ -75,7 +75,7 @@ function localProductToApi(p: LocalProduct): ApiProduct {
     image_url: p.local_image_path ?? p.image_url, unit: p.unit, vat_rate: p.vat_rate,
     expiry_date: null, min_stock: p.min_stock, is_active: p.is_active,
     track_inventory: p.track_inventory, stock_quantity: p.stock_quantity,
-    parent_product_id: null, attributes: null, units: [], created_at: '',
+    parent_product_id: null, attributes: null, is_variant: false, variant_count: 0, variants: [], units: [], created_at: '',
   }
 }
 
@@ -317,6 +317,52 @@ export function useBulkCreateProducts() {
   return useMutation({
     mutationFn: (data: Record<string, unknown>[]) => api.post('/products/bulk', data).then((r) => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['products'] }),
+  })
+}
+
+// ── Product variants ──────────────────────────────────────────────────────
+
+export function useProductVariants(productId: number) {
+  return useQuery<ApiProductVariant[]>({
+    queryKey: ['product-variants', productId],
+    queryFn: () => api.get(`/products/${productId}/variants`).then((r) => r.data),
+    enabled: productId > 0,
+  })
+}
+
+export function useGenerateVariants() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ productId, attributes }: { productId: number; attributes: { name: string; values: string[] }[] }) =>
+      api.post(`/products/${productId}/variants/generate`, { attributes }).then((r) => r.data),
+    onSuccess: (_d, { productId }) => {
+      qc.invalidateQueries({ queryKey: ['product-variants', productId] })
+      qc.invalidateQueries({ queryKey: ['products'] })
+    },
+  })
+}
+
+export function useCreateVariant() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ productId, data }: { productId: number; data: Record<string, unknown> }) =>
+      api.post(`/products/${productId}/variants`, data).then((r) => r.data),
+    onSuccess: (_d, { productId }) => {
+      qc.invalidateQueries({ queryKey: ['product-variants', productId] })
+      qc.invalidateQueries({ queryKey: ['products'] })
+    },
+  })
+}
+
+export function useDeleteVariant() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ productId, variantId }: { productId: number; variantId: number }) =>
+      api.delete(`/products/${productId}/variants/${variantId}`).then((r) => r.data),
+    onSuccess: (_d, { productId }) => {
+      qc.invalidateQueries({ queryKey: ['product-variants', productId] })
+      qc.invalidateQueries({ queryKey: ['products'] })
+    },
   })
 }
 

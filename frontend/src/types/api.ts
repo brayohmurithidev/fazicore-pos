@@ -39,6 +39,18 @@ export interface ApiCategory {
   product_count?: number
 }
 
+export interface ApiProductVariant {
+  id: number
+  name: string
+  sku: string | null
+  barcode: string | null
+  price: number
+  cost: number | null
+  attributes: Record<string, string> | null
+  stock_quantity: number
+  is_active: boolean
+}
+
 export interface ApiProduct {
   id: number
   name: string
@@ -58,7 +70,10 @@ export interface ApiProduct {
   track_inventory: boolean
   stock_quantity: number
   parent_product_id: number | null
-  attributes: Record<string, string> | null
+  attributes: Record<string, unknown> | null
+  is_variant: boolean
+  variant_count: number
+  variants: ApiProductVariant[]
   units: ApiProductUnit[]
   created_at: string
 }
@@ -475,8 +490,7 @@ export interface ApiDailySummary {
   cash_total: number
   mpesa_total: number
   credit_total: number
-  split_total: number
-  other_total: number
+  mpesa_cash_total: number
   by_payment: { method: string; count: number; total: number }[]
   by_cashier: { cashier_id: number | null; cashier_name: string; count: number; total: number }[]
   top_products: { name: string; qty: number; revenue: number }[]

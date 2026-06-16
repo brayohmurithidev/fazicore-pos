@@ -155,6 +155,25 @@ class _FilterRow extends ConsumerWidget {
   }
 }
 
+Future<void> _onProductTap(BuildContext context, WidgetRef ref, LocalProduct p) async {
+  final meta = ref.read(variantMetaProvider).valueOrNull;
+  if (meta != null && meta.hasVariants.contains(p.id)) {
+    final variants = meta.variants[p.id] ?? [];
+    if (variants.isNotEmpty) {
+      await showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (_) => _VariantPickerSheet(parent: p, variants: variants, ref: ref),
+      );
+      return;
+    }
+  }
+  ref.read(cartProvider.notifier).add(p);
+}
+
 class _ProductGrid extends ConsumerWidget {
   final List<LocalProduct> items;
   const _ProductGrid({required this.items});
@@ -162,6 +181,7 @@ class _ProductGrid extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cart = ref.watch(cartProvider);
+    final variantMeta = ref.watch(variantMetaProvider).valueOrNull;
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -174,10 +194,11 @@ class _ProductGrid extends ConsumerWidget {
       itemBuilder: (_, i) {
         final p = items[i];
         final qty = cart.lines[p.id]?.qty ?? 0;
+        final hasVariants = variantMeta?.hasVariants.contains(p.id) ?? false;
         return Card(
           clipBehavior: Clip.antiAlias,
           child: InkWell(
-            onTap: () => ref.read(cartProvider.notifier).add(p),
+            onTap: () => _onProductTap(context, ref, p),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -187,8 +208,20 @@ class _ProductGrid extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                      Row(children: [
+                        Expanded(child: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13))),
+                        if (hasVariants)
+                          Container(
+                            margin: const EdgeInsets.only(left: 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEEF2FF),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text('v', style: TextStyle(fontSize: 10, color: Color(0xFF6366F1), fontWeight: FontWeight.bold)),
+                          ),
+                      ]),
                       const SizedBox(height: 4),
                       Row(
                         children: [
@@ -199,7 +232,7 @@ class _ProductGrid extends ConsumerWidget {
                                 style: const TextStyle(
                                     color: AppColors.brand, fontWeight: FontWeight.bold, fontSize: 14)),
                           ),
-                          _AddButton(qty: qty, onAdd: () => ref.read(cartProvider.notifier).add(p)),
+                          _AddButton(qty: qty, onAdd: () => _onProductTap(context, ref, p)),
                         ],
                       ),
                     ],
@@ -221,6 +254,7 @@ class _ProductList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cart = ref.watch(cartProvider);
+    final variantMeta = ref.watch(variantMetaProvider).valueOrNull;
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
       itemCount: items.length,
@@ -228,10 +262,11 @@ class _ProductList extends ConsumerWidget {
       itemBuilder: (_, i) {
         final p = items[i];
         final qty = cart.lines[p.id]?.qty ?? 0;
+        final hasVariants = variantMeta?.hasVariants.contains(p.id) ?? false;
         return Card(
           clipBehavior: Clip.antiAlias,
           child: InkWell(
-            onTap: () => ref.read(cartProvider.notifier).add(p),
+            onTap: () => _onProductTap(context, ref, p),
             child: Padding(
               padding: const EdgeInsets.all(8),
               child: Row(
@@ -243,15 +278,27 @@ class _ProductList extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.w600)),
+                        Row(children: [
+                          Expanded(child: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontWeight: FontWeight.w600))),
+                          if (hasVariants)
+                            Container(
+                              margin: const EdgeInsets.only(left: 4),
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEEF2FF),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Text('variants', style: TextStyle(fontSize: 9, color: Color(0xFF6366F1), fontWeight: FontWeight.bold)),
+                            ),
+                        ]),
                         const SizedBox(height: 4),
                         Text(kes(p.price),
                             style: const TextStyle(color: AppColors.brand, fontWeight: FontWeight.bold)),
                       ],
                     ),
                   ),
-                  _AddButton(qty: qty, onAdd: () => ref.read(cartProvider.notifier).add(p)),
+                  _AddButton(qty: qty, onAdd: () => _onProductTap(context, ref, p)),
                 ],
               ),
             ),
@@ -307,6 +354,210 @@ class _AddButton extends StatelessWidget {
         height: 30,
         decoration: BoxDecoration(color: AppColors.brand.withValues(alpha: 0.12), shape: BoxShape.circle),
         child: const Icon(Icons.add, color: AppColors.brand, size: 20),
+      ),
+    );
+  }
+}
+
+class _VariantPickerSheet extends StatefulWidget {
+  final LocalProduct parent;
+  final List<Map<String, dynamic>> variants;
+  final WidgetRef ref;
+  const _VariantPickerSheet({required this.parent, required this.variants, required this.ref});
+
+  @override
+  State<_VariantPickerSheet> createState() => _VariantPickerSheetState();
+}
+
+class _VariantPickerSheetState extends State<_VariantPickerSheet> {
+  final Map<String, String> _selected = {};
+
+  List<String> _keysFor() {
+    final keys = <String>{};
+    for (final v in widget.variants) {
+      final attrs = (v['attributes'] as Map?)?.cast<String, String>() ?? {};
+      keys.addAll(attrs.keys);
+    }
+    return keys.toList();
+  }
+
+  List<String> _valuesFor(String key) {
+    final prior = Map<String, String>.from(_selected)..remove(key);
+    return widget.variants
+        .where((v) {
+          final attrs = (v['attributes'] as Map?)?.cast<String, String>() ?? {};
+          return prior.entries.every((e) => attrs[e.key] == e.value);
+        })
+        .map((v) => ((v['attributes'] as Map?)?.cast<String, String>() ?? {})[key] ?? '')
+        .where((s) => s.isNotEmpty)
+        .toSet()
+        .toList();
+  }
+
+  bool _inStock(String key, String val) {
+    final trial = Map<String, String>.from(_selected)..[key] = val;
+    return widget.variants.any((v) {
+      final attrs = (v['attributes'] as Map?)?.cast<String, String>() ?? {};
+      return trial.entries.every((e) => attrs[e.key] == e.value) &&
+          (v['stock_quantity'] as int? ?? 0) > 0;
+    });
+  }
+
+  Map<String, dynamic>? get _chosenVariant {
+    final keys = _keysFor();
+    if (_selected.length < keys.length) return null;
+    return widget.variants.firstWhere(
+      (v) {
+        final attrs = (v['attributes'] as Map?)?.cast<String, String>() ?? {};
+        return keys.every((k) => attrs[k] == _selected[k]);
+      },
+      orElse: () => {},
+    );
+  }
+
+  void _confirm() {
+    final v = _chosenVariant;
+    if (v == null || v.isEmpty) return;
+    final stock = v['stock_quantity'] as int? ?? 0;
+    if (stock == 0) return;
+
+    // Synthesise a LocalProduct-like object using the cart controller's raw add
+    final synthetic = LocalProduct(
+      id: v['id'] as int,
+      name: v['name'] as String,
+      price: (v['price'] as num).toDouble(),
+      cost: (v['cost'] as num?)?.toDouble(),
+      sku: v['sku'] as String?,
+      barcode: v['barcode'] as String?,
+      unit: widget.parent.unit,
+      categoryId: widget.parent.categoryId,
+      categoryName: widget.parent.categoryName,
+      stockQuantity: stock,
+      minStock: widget.parent.minStock,
+      imageUrl: widget.parent.imageUrl,
+      vatRate: widget.parent.vatRate,
+      isActive: true,
+      trackInventory: widget.parent.trackInventory,
+    );
+    widget.ref.read(cartProvider.notifier).add(synthetic);
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final keys = _keysFor();
+    final chosen = _chosenVariant;
+    final chosenStock = chosen?['stock_quantity'] as int? ?? 0;
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.55,
+      maxChildSize: 0.9,
+      builder: (_, controller) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(width: 40, height: 4, decoration: BoxDecoration(
+                color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+            ),
+            const SizedBox(height: 12),
+            Text(widget.parent.name,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 4),
+            const Text('Select variant', style: TextStyle(color: Colors.grey, fontSize: 13)),
+            const SizedBox(height: 16),
+            Expanded(
+              child: ListView(
+                controller: controller,
+                children: [
+                  ...keys.map((key) {
+                    final values = _valuesFor(key);
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(key, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                          const SizedBox(height: 8),
+                          Wrap(spacing: 8, runSpacing: 8, children: values.map((val) {
+                            final isActive = _selected[key] == val;
+                            final inStock = _inStock(key, val);
+                            return GestureDetector(
+                              onTap: inStock ? () => setState(() => _selected[key] = val) : null,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: isActive ? Colors.grey.shade900 : Colors.white,
+                                  border: Border.all(
+                                    color: isActive ? Colors.grey.shade900
+                                        : inStock ? Colors.grey.shade300 : Colors.grey.shade100,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  val,
+                                  style: TextStyle(
+                                    color: isActive ? Colors.white
+                                        : inStock ? Colors.grey.shade800 : Colors.grey.shade300,
+                                    fontWeight: FontWeight.w500,
+                                    decoration: inStock ? null : TextDecoration.lineThrough,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList()),
+                        ],
+                      ),
+                    );
+                  }),
+                  if (chosen != null && chosen.isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.only(top: 8, bottom: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: Row(children: [
+                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          const Text('Selected', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                          Text(_selected.values.join(' / '),
+                              style: const TextStyle(fontWeight: FontWeight.w600)),
+                        ])),
+                        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                          Text(kes((chosen['price'] as num).toDouble()),
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.brand)),
+                          Text('$chosenStock in stock',
+                              style: TextStyle(fontSize: 11, color: chosenStock == 0 ? Colors.red : Colors.grey)),
+                        ]),
+                      ]),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: (chosen != null && chosen.isNotEmpty && chosenStock > 0) ? _confirm : null,
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.grey.shade900),
+                  child: const Text('Add to cart', style: TextStyle(color: Colors.white)),
+                ),
+              ),
+            ]),
+            SizedBox(height: MediaQuery.of(context).padding.bottom + 12),
+          ],
+        ),
       ),
     );
   }

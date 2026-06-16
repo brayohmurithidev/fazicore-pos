@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/db/app_database.dart';
@@ -43,3 +45,25 @@ final cachedCustomersProvider = FutureProvider.autoDispose<List<LocalCustomer>>(
   final db = ref.watch(appDatabaseProvider);
   return db.allCustomers();
 });
+
+/// Persisted variant metadata from the last sync.
+/// Returns {hasVariants: Set<int>, variants: Map<int, List<Map>>}
+final variantMetaProvider = FutureProvider<_VariantMeta>((ref) async {
+  final db = ref.watch(appDatabaseProvider);
+  final raw = await db.getMeta('variant_meta');
+  if (raw == null) return const _VariantMeta({}, {});
+  final j = jsonDecode(raw) as Map<String, dynamic>;
+  final hasVariants = ((j['has_variants'] as List?) ?? []).cast<int>().toSet();
+  final variantMap = <int, List<Map<String, dynamic>>>{};
+  final rawMap = (j['variants'] as Map<String, dynamic>?) ?? {};
+  for (final entry in rawMap.entries) {
+    variantMap[int.parse(entry.key)] = (entry.value as List).cast<Map<String, dynamic>>();
+  }
+  return _VariantMeta(hasVariants, variantMap);
+});
+
+class _VariantMeta {
+  final Set<int> hasVariants;
+  final Map<int, List<Map<String, dynamic>>> variants;
+  const _VariantMeta(this.hasVariants, this.variants);
+}
