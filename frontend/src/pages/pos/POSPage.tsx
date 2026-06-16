@@ -192,12 +192,15 @@ function ProductTile({
   const [imgError, setImgError] = useState(false)
   const [unitPickerOpen, setUnitPickerOpen] = useState(false)
   const defaultUnit = baseUnitOf(product)
+  const isVariantProduct = product.variantCount > 0
   // cartQty is base units already consumed from cart
   const baseRemaining = product.stock - cartQty
   const available = Math.floor(baseRemaining / defaultUnit.conversion_factor)
-  const isOut = product.stock === 0
-  const isCapped = baseRemaining < defaultUnit.conversion_factor && product.stock > 0
-  const isLow = product.stock > 0 && available <= Math.ceil(product.minStock / defaultUnit.conversion_factor) && !isCapped
+  // Variant-parent products hold no stock themselves — stock lives on each variant.
+  // Never treat them as out-of-stock; the variant picker handles that gating.
+  const isOut = isVariantProduct ? false : product.stock === 0
+  const isCapped = isVariantProduct ? false : baseRemaining < defaultUnit.conversion_factor && product.stock > 0
+  const isLow = isVariantProduct ? false : product.stock > 0 && available <= Math.ceil(product.minStock / defaultUnit.conversion_factor) && !isCapped
   const hasMultiUnit = product.units.length > 0
 
   const today = new Date(); today.setHours(0, 0, 0, 0)
@@ -210,7 +213,8 @@ function ProductTile({
 
   const handleClick = () => {
     if (blocked) return
-    if (hasMultiUnit) { setUnitPickerOpen(true); return }
+    // Variant products skip the unit picker — the variant picker handles everything.
+    if (!isVariantProduct && hasMultiUnit) { setUnitPickerOpen(true); return }
     onAdd(defaultUnit)
   }
 
@@ -321,7 +325,7 @@ function ProductTile({
       <div className={`text-[10px] mt-0.5 font-medium ${
         isExpired ? 'text-red-500' : isOut ? 'text-red-500' : isCapped ? 'text-amber-500' : isLow ? 'text-orange-500' : 'text-gray-400'
       }`}>
-        {isExpired ? 'Expired' : isOut ? 'Out of stock' : isCapped ? 'Max in cart' : isLow ? `Low: ${available}` : `${available} left`}
+        {isExpired ? 'Expired' : isVariantProduct ? `${product.variantCount} variant${product.variantCount !== 1 ? 's' : ''}` : isOut ? 'Out of stock' : isCapped ? 'Max in cart' : isLow ? `Low: ${available}` : `${available} left`}
       </div>
     </button>
     </>
