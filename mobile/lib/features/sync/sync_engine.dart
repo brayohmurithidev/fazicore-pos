@@ -91,9 +91,14 @@ class SyncController extends StateNotifier<SyncState> {
     try {
       await _pushPending();
       await _pullProducts();
-      // Variant stock quantities changed — force a fresh read on next access.
+      // Drift rows changed under these providers — force a fresh read on
+      // next access instead of leaving screens stuck on whatever (possibly
+      // empty) snapshot they first resolved to before this sync landed.
       ref.invalidate(variantMetaProvider);
+      ref.invalidate(cachedProductsProvider);
+      ref.invalidate(cachedCategoriesProvider);
       await _pullCustomers();
+      ref.invalidate(cachedCustomersProvider);
       await _pullOrgInfo();
       await ref.read(printerProvider.notifier).reload(); // refresh receipt header
     } catch (e) {
