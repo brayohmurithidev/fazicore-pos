@@ -159,6 +159,7 @@ class _LineRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final notifier = ref.read(cartProvider.notifier);
     final discounted = line.discountPct > 0;
+    final atStockLimit = line.product.trackInventory && line.qty >= line.product.stockQuantity;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
@@ -181,7 +182,7 @@ class _LineRow extends ConsumerWidget {
               _QtyStepper(
                 qty: line.qty,
                 onDec: () => notifier.setQty(line.product.id, line.qty - 1),
-                onInc: () => notifier.add(line.product),
+                onInc: atStockLimit ? null : () => notifier.add(line.product),
               ),
               SizedBox(
                 width: 84,
@@ -216,6 +217,11 @@ class _LineRow extends ConsumerWidget {
               },
             ),
           ),
+          if (atStockLimit)
+            const Padding(
+              padding: EdgeInsets.only(left: 8, top: 2),
+              child: Text('Max stock reached', style: TextStyle(fontSize: 11, color: Colors.red)),
+            ),
         ],
       ),
     );
@@ -225,7 +231,7 @@ class _LineRow extends ConsumerWidget {
 class _QtyStepper extends StatelessWidget {
   final int qty;
   final VoidCallback onDec;
-  final VoidCallback onInc;
+  final VoidCallback? onInc; // null when at the stock ceiling
   const _QtyStepper({required this.qty, required this.onDec, required this.onInc});
 
   @override

@@ -50,10 +50,18 @@ final cartProvider = StateNotifierProvider<CartController, Cart>((ref) => CartCo
 class CartController extends StateNotifier<Cart> {
   CartController() : super(const Cart());
 
+  /// Caps at on-hand stock for tracked products; untracked products
+  /// (services, etc.) have no ceiling.
+  int _cap(LocalProduct p, int wanted) =>
+      p.trackInventory ? wanted.clamp(0, p.stockQuantity) : wanted;
+
   void add(LocalProduct p) {
     final lines = Map<int, CartLine>.from(state.lines);
     final existing = lines[p.id];
-    lines[p.id] = existing == null ? CartLine(p, 1) : existing.copyWith(qty: existing.qty + 1);
+    final wanted = (existing?.qty ?? 0) + 1;
+    final qty = _cap(p, wanted);
+    if (qty == (existing?.qty ?? 0)) return; // already at stock ceiling
+    lines[p.id] = existing == null ? CartLine(p, qty) : existing.copyWith(qty: qty);
     state = Cart(lines, state.cartDiscountPct);
   }
 
@@ -61,7 +69,10 @@ class CartController extends StateNotifier<Cart> {
     if (qty <= 0) return;
     final lines = Map<int, CartLine>.from(state.lines);
     final existing = lines[p.id];
-    lines[p.id] = existing == null ? CartLine(p, qty) : existing.copyWith(qty: existing.qty + qty);
+    final wanted = (existing?.qty ?? 0) + qty;
+    final capped = _cap(p, wanted);
+    if (capped == (existing?.qty ?? 0)) return;
+    lines[p.id] = existing == null ? CartLine(p, capped) : existing.copyWith(qty: capped);
     state = Cart(lines, state.cartDiscountPct);
   }
 
@@ -70,7 +81,8 @@ class CartController extends StateNotifier<Cart> {
     if (qty <= 0) {
       lines.remove(productId);
     } else if (lines.containsKey(productId)) {
-      lines[productId] = lines[productId]!.copyWith(qty: qty);
+      final line = lines[productId]!;
+      lines[productId] = line.copyWith(qty: _cap(line.product, qty));
     }
     state = Cart(lines, state.cartDiscountPct);
   }
