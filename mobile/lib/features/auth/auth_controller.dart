@@ -45,13 +45,25 @@ class AuthController extends StateNotifier<AuthState> {
     }
     // Restore the persisted user profile so the app is fully functional on
     // every resume — not just immediately after a fresh login.
+    final db = ref.read(appDatabaseProvider);
     AppUser? user;
     try {
-      final raw = await ref.read(appDatabaseProvider).getMeta(_kCurrentUser);
+      final raw = await db.getMeta(_kCurrentUser);
       if (raw != null && raw.isNotEmpty) {
         user = AppUser.fromJson(jsonDecode(raw) as Map<String, dynamic>);
       }
     } catch (_) {}
+
+    // A valid token can outlive the local cache (e.g. secure storage survives
+    // a reinstall, or the cache write never landed) — without this, every
+    // role check falls back to `user?.x ?? false` and the app silently runs
+    // with no permissions at all until the user manually logs out/in again.
+    if (user == null) {
+      try {
+        user = await ref.read(authRepositoryProvider).fetchMe();
+        await db.setMeta(_kCurrentUser, jsonEncode(user.toJson()));
+      } catch (_) {}
+    }
     state = AuthState(AuthStatus.loggedIn, user);
   }
 

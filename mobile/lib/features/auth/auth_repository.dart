@@ -32,4 +32,12 @@ class AuthRepository {
       AppUser.fromJson(d['user'] as Map<String, dynamic>),
     );
   }
+
+  /// GET /users/me — used to recover the profile when a valid token exists
+  /// but the locally cached user record is missing (e.g. secure storage
+  /// survived a reinstall while the local DB didn't).
+  Future<AppUser> fetchMe() async {
+    final res = await api.dio.get('/users/me');
+    return AppUser.fromJson(res.data as Map<String, dynamic>);
+  }
 }
