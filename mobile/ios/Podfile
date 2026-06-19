@@ -43,8 +43,14 @@ post_install do |installer|
   # connectivity_plus 7.1.1 references NWPath.isUltraConstrained (iOS 26 SDK only).
   # Stable Xcode (16.x) doesn't have that symbol, so the compiler rejects it even
   # behind an #available guard.  Strip the block so CI builds on Xcode 16.
-  provider = installer.sandbox.root +
-    'connectivity_plus/Sources/connectivity_plus/PathMonitorConnectivityProvider.swift'
+  #
+  # Flutter plugins resolved via `:path` (every Flutter plugin) aren't copied into
+  # the Pods sandbox — CocoaPods compiles them straight from where flutter_install_all_ios_pods
+  # symlinked them, under .symlinks/plugins/. installer.sandbox.root pointed at a path
+  # that never exists for path-based pods, so this patch was silently a no-op.
+  provider = File.dirname(File.realpath(__FILE__)) +
+    '/.symlinks/plugins/connectivity_plus/ios/connectivity_plus/Sources/connectivity_plus/PathMonitorConnectivityProvider.swift'
+  provider = Pathname.new(provider)
   if provider.exist?
     src = provider.read
     if src.include?('isUltraConstrained')
