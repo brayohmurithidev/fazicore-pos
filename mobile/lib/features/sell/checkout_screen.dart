@@ -210,9 +210,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
   Widget _methodChipBar() {
     final methods = <_MethodDef>[
-      _MethodDef(PayMethod.mpesa,  'M-Pesa', const Icon(Icons.mobile_friendly, size: 18, color: Color(0xFF00A550))),
+      const _MethodDef(PayMethod.mpesa,  'M-Pesa', Icon(Icons.mobile_friendly, size: 18, color: Color(0xFF00A550))),
       if (planAllows(ref, Feat.creditSystem))
-        _MethodDef(PayMethod.credit, 'Credit', const Icon(Icons.receipt_long, size: 18, color: Colors.grey)),
+        const _MethodDef(PayMethod.credit, 'Credit', Icon(Icons.receipt_long, size: 18, color: Colors.grey)),
     ];
     return Container(
       color: Colors.white,

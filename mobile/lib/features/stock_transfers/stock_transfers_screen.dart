@@ -255,7 +255,7 @@ class _InitiateTransferSheetState extends State<_InitiateTransferSheet> {
             Text('Initiate Transfer', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
             DropdownButtonFormField<int>(
-              value: _productId,
+              initialValue: _productId,
               decoration: const InputDecoration(labelText: 'Product *'),
               items: products
                   .map((p) => DropdownMenuItem(value: p.id, child: Text(p.name)))
@@ -265,7 +265,7 @@ class _InitiateTransferSheetState extends State<_InitiateTransferSheet> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<int>(
-              value: _fromBranchId,
+              initialValue: _fromBranchId,
               decoration: const InputDecoration(labelText: 'From branch *'),
               items: branches
                   .map((b) => DropdownMenuItem(value: b.id, child: Text(b.name)))
@@ -275,7 +275,7 @@ class _InitiateTransferSheetState extends State<_InitiateTransferSheet> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<int>(
-              value: _toBranchId,
+              initialValue: _toBranchId,
               decoration: const InputDecoration(labelText: 'To branch *'),
               items: branches
                   .map((b) => DropdownMenuItem(value: b.id, child: Text(b.name)))

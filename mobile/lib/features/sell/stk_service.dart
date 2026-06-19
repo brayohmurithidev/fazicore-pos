@@ -35,11 +35,11 @@ Future<PaystackStkResult> pushPaystackMobileMoneyAndWait(
       return PaystackStkResult(true, reference, 'Payment received');
     }
     if (status == 'failed' || status == 'abandoned') {
-      return PaystackStkResult(false, null, 'Payment ${status}');
+      return PaystackStkResult(false, null, 'Payment $status');
     }
     // ongoing / pending → keep polling
   }
-  return PaystackStkResult(false, null, 'Timed out waiting for payment');
+  return const PaystackStkResult(false, null, 'Timed out waiting for payment');
 }
 
 class StkResult {
