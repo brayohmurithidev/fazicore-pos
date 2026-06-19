@@ -13,6 +13,7 @@ import 'features/loyalty/loyalty_screen.dart';
 import 'features/manage/branches_screen.dart';
 import 'features/manage/business_info_screen.dart';
 import 'features/manage/categories_screen.dart';
+import 'features/manage/mpesa_settings_screen.dart';
 import 'features/manage/subscription_screen.dart';
 import 'features/manage/users_screen.dart';
 import 'features/printing/printer_settings_screen.dart';
@@ -61,6 +62,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/subscription', builder: (_, __) => const SubscriptionScreen()),
       GoRoute(path: '/inventory', builder: (_, __) => const InventoryScreen()),
       GoRoute(path: '/printer', builder: (_, __) => const PrinterSettingsScreen()),
+      GoRoute(path: '/mpesa-settings', builder: (_, __) => const MpesaSettingsScreen()),
       GoRoute(path: '/customers', builder: (_, __) => const CustomersScreen()),
       GoRoute(
         path: '/customers/:id',

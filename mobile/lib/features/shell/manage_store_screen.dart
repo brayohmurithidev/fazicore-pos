@@ -15,6 +15,7 @@ class ManageStoreScreen extends ConsumerWidget {
     final canManageInventory = user?.canManageInventory ?? false;
     final canManageProducts = user?.canManageProducts ?? false;
     final canViewReports = user?.canViewReports ?? false;
+    final isAdmin = user?.isAdmin ?? false;
 
     final products = ref.watch(cachedProductsProvider).valueOrNull;
     final categories = ref.watch(cachedCategoriesProvider).valueOrNull;
@@ -60,6 +61,17 @@ class ManageStoreScreen extends ConsumerWidget {
             ),
           ]),
           const SizedBox(height: 20),
+          if (isAdmin) ...[
+            _section('Payments'),
+            _group([
+              _Row(
+                icon: Icons.phone_iphone_outlined,
+                title: 'M-Pesa Daraja API',
+                onTap: () => context.push('/mpesa-settings'),
+              ),
+            ]),
+            const SizedBox(height: 20),
+          ],
           _section('People'),
           _group([
             _Row(
