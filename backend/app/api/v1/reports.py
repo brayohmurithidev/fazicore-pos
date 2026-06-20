@@ -28,6 +28,16 @@ def _require_manager(current_user: User) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager or admin access required")
 
 
+def _require_stock_report_access(current_user: User) -> None:
+    """Stock levels carry no financial/cashier data, so STOCK can see this one
+    report — the frontend already only shows Stock + Reorder tabs for that
+    role, but the backend was blanket-denying every /reports/* endpoint to
+    STOCK, leaving the page stuck on an infinite loading spinner."""
+    if current_user.role not in (UserRole.ADMIN, UserRole.MANAGER, UserRole.STOCK):
+        from fastapi import HTTPException, status
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager, admin, or stock access required")
+
+
 def _effective_branch(current_user: User, branch_id: int | None) -> int | None | str:
     if current_user.role != UserRole.ADMIN:
         return current_user.branch_id
@@ -302,7 +312,7 @@ async def stock_levels(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_active_user),
 ) -> list[StockLevelItem]:
-    _require_manager(current_user)
+    _require_stock_report_access(current_user)
 
     effective_branch: int | None | str
     if current_user.role != UserRole.ADMIN:
