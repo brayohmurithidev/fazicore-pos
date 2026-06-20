@@ -12,6 +12,7 @@ from app.api.v1.analytics import sales_router
 from app.core.config import settings
 from app.middleware.tenant import TenantMiddleware
 from app.services.etims_worker import start_worker
+from app.services.mpesa_reconciliation import start_worker as start_mpesa_reconciliation_worker
 
 app = FastAPI(
     title="Fazi POS API",
@@ -74,6 +75,7 @@ app.include_router(reports.router, prefix=API_PREFIX)
 @app.on_event("startup")
 async def startup_event() -> None:
     asyncio.create_task(start_worker())
+    asyncio.create_task(start_mpesa_reconciliation_worker())
 
 
 @app.exception_handler(Exception)

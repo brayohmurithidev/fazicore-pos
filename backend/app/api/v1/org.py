@@ -492,6 +492,8 @@ async def initiate_subscription_upgrade(
 
     base = (settings.MPESA_CALLBACK_BASE_URL or str(request.base_url).rstrip("/"))
     callback_url = f"{base}/api/v1/hooks/{org.slug}/stk"
+    if settings.MPESA_PLATFORM_CALLBACK_KEY:
+        callback_url += f"?ck={settings.MPESA_PLATFORM_CALLBACK_KEY}"
 
     try:
         result = await client.stk_push(

@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     # Must be reachable by Safaricom — set this in production/staging.
     # Falls back to the request's base_url when unset (fine only if the API is public).
     MPESA_CALLBACK_BASE_URL: str | None = None
+    # Appended as `?ck=` on platform-initiated STK callbacks (subscription
+    # upgrade / payment reminder) — these don't go through a tenant's own
+    # MpesaCredentials row, so they need their own shared secret to pass the
+    # callback-key check in app/api/v1/hooks.py. Required for those flows to
+    # work at all once a callback key is enforced.
+    MPESA_PLATFORM_CALLBACK_KEY: str | None = None
 
     # SMTP — leave SMTP_HOST blank to disable email (safe for local dev)
     SMTP_HOST: str = ""

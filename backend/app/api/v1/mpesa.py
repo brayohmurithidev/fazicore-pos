@@ -10,7 +10,8 @@ Authenticated endpoints (JWT required):
   GET    /mpesa/transactions              — list transactions
   POST   /mpesa/transactions/{id}/attach  — attach C2B tx to order
 
-Public webhooks (Safaricom posts here — no JWT):
+Legacy public webhooks (no JWT) — superseded by app/api/v1/hooks.py, kept only
+for any tenant still registered against the old path; both require `?ck=...`:
   POST /mpesa/callback/{org_slug}/stk     — STK result callback
   POST /mpesa/callback/{org_slug}/c2b     — C2B confirmation callback
 
@@ -19,6 +20,7 @@ routed directly to the right organisation with no shortcode lookup ambiguity.
 """
 
 import json
+import secrets
 from datetime import date, datetime, timedelta, timezone
 from typing import Annotated
 from urllib.parse import urlparse
@@ -28,6 +30,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1 import hooks as _hooks
 from app.core.database import get_session
 from app.core.deps import get_current_active_user, require_roles
 from app.models.mpesa import (
@@ -41,6 +44,7 @@ from app.models.customer import Customer
 from app.models.organization import Organization
 from app.models.user import User, UserRole
 from app.services.mpesa import DarajaClient, decrypt_credential, encrypt_credential
+from app.services.mpesa_reconciliation import resolve_stk_transaction
 
 router = APIRouter(prefix="/mpesa", tags=["mpesa"])
 
@@ -81,16 +85,12 @@ def _stk_callback_url(request: Request, org_slug: str) -> str:
     return f"{_hooks_base(request)}/{org_slug}/stk"
 
 
-def _c2b_confirmation_url(request: Request, org_slug: str) -> str:
-    return f"{_hooks_base(request)}/{org_slug}/c2b/confirm"
-
-
-def _c2b_validation_url(request: Request, org_slug: str) -> str:
-    return f"{_hooks_base(request)}/{org_slug}/c2b/validate"
-
-
-def _c2b_callback_url(request: Request, org_slug: str) -> str:
-    return _c2b_confirmation_url(request, org_slug)
+def _with_callback_key(url: str, key: str | None) -> str:
+    """Append the `?ck=` param Safaricom must echo back for the callback to be accepted."""
+    if not key:
+        return url
+    sep = "&" if "?" in url else "?"
+    return f"{url}{sep}ck={key}"
 
 
 def _build_client(creds: MpesaCredentials) -> DarajaClient:
@@ -143,6 +143,10 @@ class StkPushOut(BaseModel):
     customer_message: str
 
 
+class StatusOut(BaseModel):
+    has_live_credentials: bool
+
+
 class TransactionOut(BaseModel):
     id: int
     transaction_type: str
@@ -171,6 +175,7 @@ def _origin(override: str | None, request: Request) -> str:
 
 def _creds_out(creds: MpesaCredentials, request: Request, slug: str) -> CredentialsOut:
     base = _origin(creds.callback_url_override, request)
+    key = creds.callback_key
     return CredentialsOut(
         environment=creds.environment,
         shortcode=creds.shortcode,
@@ -180,9 +185,9 @@ def _creds_out(creds: MpesaCredentials, request: Request, slug: str) -> Credenti
         callback_url_override=creds.callback_url_override,
         is_active=creds.is_active,
         is_live=creds.is_live,
-        stk_callback_url=f"{base}/api/v1/hooks/{slug}/stk",
-        c2b_confirmation_url=f"{base}/api/v1/hooks/{slug}/c2b/confirm",
-        c2b_validation_url=f"{base}/api/v1/hooks/{slug}/c2b/validate",
+        stk_callback_url=_with_callback_key(f"{base}/api/v1/hooks/{slug}/stk", key),
+        c2b_confirmation_url=_with_callback_key(f"{base}/api/v1/hooks/{slug}/c2b/confirm", key),
+        c2b_validation_url=_with_callback_key(f"{base}/api/v1/hooks/{slug}/c2b/validate", key),
     )
 
 
@@ -220,6 +225,8 @@ async def save_credentials(
             creds.passkey_enc         = encrypt_credential(body.passkey)
         creds.callback_url_override = body.callback_url_override
         creds.is_active             = True
+        if not creds.callback_key:
+            creds.callback_key = secrets.token_urlsafe(24)
     else:
         if not body.consumer_key or not body.consumer_secret or not body.passkey:
             raise HTTPException(status_code=422, detail="consumer_key, consumer_secret and passkey are required for new credentials")
@@ -234,6 +241,7 @@ async def save_credentials(
             passkey_enc=encrypt_credential(body.passkey),
             callback_url_override=body.callback_url_override,
             is_live=len(existing_any) == 0,
+            callback_key=secrets.token_urlsafe(24),
         )
         session.add(creds)
 
@@ -272,6 +280,23 @@ async def delete_credentials(
         await session.commit()
 
 
+@router.get("/status", response_model=StatusOut)
+async def get_status(
+    user: Annotated[User, Depends(get_current_active_user)],
+    session: AsyncSession = Depends(get_session),
+):
+    """Whether this org has a live, active Daraja integration — any role can
+    call this (no secrets in the response), unlike GET /credentials which is
+    admin-only. The POS payment flow needs this to decide whether to actually
+    contact Safaricom or fall back to the local simulation; previously it
+    called GET /credentials directly, which 403'd for non-admin cashiers and
+    silently defaulted to "no Daraja configured" — every cashier-initiated
+    STK push was running in fake simulation mode instead of charging anyone.
+    """
+    creds = await _get_creds(user.org_id, session)
+    return StatusOut(has_live_credentials=bool(creds and creds.is_active))
+
+
 # ── C2B URL Registration ──────────────────────────────────────────────────────
 
 @router.post("/register-c2b", status_code=200)
@@ -287,9 +312,14 @@ async def register_c2b(
 
     slug = await _get_org_slug(user.org_id, session)
 
+    if not creds.callback_key:
+        creds.callback_key = secrets.token_urlsafe(24)
+        await session.commit()
+        await session.refresh(creds)
+
     base = _origin(creds.callback_url_override, request)
-    confirmation_url = f"{base}/api/v1/hooks/{slug}/c2b/confirm"
-    validation_url   = f"{base}/api/v1/hooks/{slug}/c2b/validate"
+    confirmation_url = _with_callback_key(f"{base}/api/v1/hooks/{slug}/c2b/confirm", creds.callback_key)
+    validation_url   = _with_callback_key(f"{base}/api/v1/hooks/{slug}/c2b/validate", creds.callback_key)
 
     client = _build_client(creds)
     try:
@@ -378,7 +408,13 @@ async def initiate_stk_push(
         raise HTTPException(status_code=400, detail="M-Pesa not configured for this account")
 
     slug = await _get_org_slug(user.org_id, session)
-    callback_url = creds.callback_url_override or _stk_callback_url(request, slug)
+    if not creds.callback_key:
+        creds.callback_key = secrets.token_urlsafe(24)
+        await session.flush()
+    callback_url = _with_callback_key(
+        creds.callback_url_override or _stk_callback_url(request, slug),
+        creds.callback_key,
+    )
 
     client = _build_client(creds)
     try:
@@ -501,6 +537,36 @@ async def list_transactions(
     ]
 
 
+@router.post("/transactions/{tx_id}/reconcile")
+async def reconcile_transaction(
+    tx_id: int,
+    user: Annotated[User, Depends(get_current_active_user)],
+    session: AsyncSession = Depends(get_session),
+):
+    """Force an immediate Daraja status check for a stuck PENDING STK push,
+    instead of waiting for the next background reconciliation sweep —
+    for support staff investigating a "customer says they paid" report."""
+    tx = await session.get(MpesaTransaction, tx_id)
+    if not tx or tx.org_id != user.org_id:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    if tx.transaction_type != MpesaTransactionType.STK_PUSH:
+        raise HTTPException(status_code=400, detail="Only STK push transactions can be reconciled")
+
+    if tx.status != MpesaTransactionStatus.PENDING:
+        return {"status": tx.status.value, "outcome": "already_resolved"}
+
+    creds = await _get_creds(user.org_id, session)
+    outcome = await resolve_stk_transaction(tx, creds)
+    await session.commit()
+
+    return {
+        "status": tx.status.value,
+        "outcome": outcome,
+        "mpesa_receipt_number": tx.mpesa_receipt_number,
+        "result_desc": tx.result_desc,
+    }
+
+
 @router.post("/transactions/{tx_id}/attach")
 async def attach_transaction(
     tx_id: int,
@@ -517,70 +583,30 @@ async def attach_transaction(
 
 
 # ── Tenant-scoped Safaricom callbacks (no auth) ───────────────────────────────
+# Superseded by the /api/v1/hooks/{org_slug}/... paths (this router's prefix
+# contains "mpesa", which Daraja's URL keyword filter rejects — see hooks.py's
+# module docstring). Kept only in case any tenant still has these registered
+# from before that move; they delegate to the hooks.py implementations so
+# there's exactly one copy of the callback-key check and dedup logic.
 
 @router.post("/callback/{org_slug}/stk", include_in_schema=False)
 async def stk_callback(
     org_slug: str,
     request: Request,
     session: AsyncSession = Depends(get_session),
+    ck: str | None = Query(None),
 ):
-    """Safaricom posts the STK Push result here. org_slug scopes it to one tenant."""
-    try:
-        payload = await request.json()
-    except Exception:
-        return {"ResultCode": "0", "ResultDesc": "Accepted"}
-
-    body = payload.get("Body", {})
-    stk  = body.get("stkCallback", {})
-    checkout_request_id = stk.get("CheckoutRequestID")
-    result_code         = stk.get("ResultCode")
-    result_desc         = stk.get("ResultDesc", "")
-
-    if not checkout_request_id:
-        return {"ResultCode": "0", "ResultDesc": "Accepted"}
-
-    # Scope lookup to the org that owns this slug
-    org_id = await session.scalar(
-        select(Organization.id).where(Organization.slug == org_slug)
-    )
-
-    tx = await session.scalar(
-        select(MpesaTransaction).where(
-            MpesaTransaction.checkout_request_id == checkout_request_id,
-            *([MpesaTransaction.org_id == org_id] if org_id else []),
-        )
-    )
-
-    if tx:
-        tx.result_code  = result_code
-        tx.result_desc  = result_desc
-        tx.raw_callback = json.dumps(payload)
-
-        if result_code == 0:
-            tx.status = MpesaTransactionStatus.COMPLETED
-            items = {
-                item["Name"]: item.get("Value")
-                for item in stk.get("CallbackMetadata", {}).get("Item", [])
-            }
-            tx.mpesa_receipt_number = str(items.get("MpesaReceiptNumber", ""))
-            tx.phone = str(items.get("PhoneNumber", tx.phone or ""))
-        else:
-            tx.status = MpesaTransactionStatus.FAILED
-
-        await session.commit()
-
-    return {"ResultCode": "0", "ResultDesc": "Accepted"}
+    return await _hooks.stk_hook(org_slug, request, session, ck)
 
 
 @router.post("/callback/{org_slug}/c2b/validate", include_in_schema=False)
-async def c2b_validation(org_slug: str, request: Request):
-    """
-    Safaricom calls this BEFORE processing a C2B payment to ask permission.
-    Respond immediately — ResultCode 0 = accept, 1 = reject.
-    Must reply within a few seconds or Safaricom auto-rejects.
-    """
-    # Always accept; add business logic here to reject (e.g. closed hours, blacklist)
-    return {"ResultCode": "0", "ResultDesc": "Accepted"}
+async def c2b_validation(
+    org_slug: str,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    ck: str | None = Query(None),
+):
+    return await _hooks.c2b_validate(org_slug, request, session, ck)
 
 
 @router.post("/callback/{org_slug}/c2b/confirm", include_in_schema=False)
@@ -588,46 +614,9 @@ async def c2b_confirmation(
     org_slug: str,
     request: Request,
     session: AsyncSession = Depends(get_session),
+    ck: str | None = Query(None),
 ):
-    """
-    Safaricom posts the final C2B payment confirmation here.
-    At this point the money has already moved — store the transaction.
-    """
-    try:
-        payload = await request.json()
-    except Exception:
-        return {"ResultCode": "0", "ResultDesc": "Accepted"}
-
-    org_id = await session.scalar(
-        select(Organization.id).where(Organization.slug == org_slug)
-    )
-    if not org_id:
-        return {"ResultCode": "0", "ResultDesc": "Accepted"}
-
-    receipt = payload.get("TransID", "")
-    amount  = float(payload.get("TransAmount", 0))
-    phone   = str(payload.get("MSISDN", ""))
-    first   = payload.get("FirstName", "").strip()
-    middle  = payload.get("MiddleName", "").strip()
-    last    = payload.get("LastName", "").strip()
-    sender_name = " ".join(p for p in [first, middle, last] if p) or None
-
-    tx = MpesaTransaction(
-        org_id=org_id,
-        transaction_type=MpesaTransactionType.C2B,
-        status=MpesaTransactionStatus.COMPLETED,
-        phone=phone,
-        sender_name=sender_name,
-        amount=amount,
-        mpesa_receipt_number=receipt,
-        result_code=0,
-        result_desc="C2B payment received",
-        raw_callback=json.dumps(payload),
-    )
-    session.add(tx)
-    await session.commit()
-
-    return {"ResultCode": "0", "ResultDesc": "Accepted"}
+    return await _hooks.c2b_confirm(org_slug, request, session, ck)
 
 
 # Keep old /c2b route for backwards compatibility with any already-registered URLs
@@ -636,5 +625,6 @@ async def c2b_callback_legacy(
     org_slug: str,
     request: Request,
     session: AsyncSession = Depends(get_session),
+    ck: str | None = Query(None),
 ):
-    return await c2b_confirmation(org_slug, request, session)
+    return await c2b_confirmation(org_slug, request, session, ck)

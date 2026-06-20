@@ -48,10 +48,21 @@ class MpesaCredentials(Base, TimestampMixin):
     passkey_enc: Mapped[str] = mapped_column(Text, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     callback_url_override: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Random per-credentials secret appended to callback URLs as `?ck=...` and
+    # checked on every inbound callback — Daraja has no payload signing, so this
+    # is the only thing standing between a forged HTTP POST and a "paid" order.
+    callback_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
 
 class MpesaTransaction(Base, TimestampMixin):
     __tablename__ = "mpesa_transactions"
+    __table_args__ = (
+        # Safaricom retries callback delivery on its own timeouts; without this,
+        # a retried C2B confirmation creates a second row and double-credits the
+        # sale. NULL receipt numbers (pending STK) are exempt — Postgres treats
+        # each NULL as distinct, so multiple pending rows are still allowed.
+        UniqueConstraint("org_id", "mpesa_receipt_number", name="uq_mpesa_tx_org_receipt"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), nullable=False, index=True)

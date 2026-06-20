@@ -7,6 +7,12 @@ Registered paths (use these in Daraja portal):
   POST /api/v1/hooks/{org_slug}/c2b/validate — C2B validation (accept/reject)
   POST /api/v1/hooks/{org_slug}/c2b/confirm  — C2B confirmation (store tx)
   POST /api/v1/hooks/gateway                 — Paystack event webhook (HMAC signed)
+
+The three M-Pesa paths above require a `?ck=<callback_key>` query param matching
+the org's MpesaCredentials.callback_key — Daraja doesn't sign callbacks, so this
+is what stops anyone who guesses an org_slug from POSTing a fake "payment
+confirmed" event. The full URL (key included) is what GET /mpesa/credentials
+returns and what gets registered via POST /mpesa/register-c2b.
 """
 
 import json
@@ -15,19 +21,109 @@ import hmac
 import logging
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.billing import renew_subscription
 from app.core.config import settings
 from app.core.database import get_session
-from app.models.mpesa import MpesaTransaction, MpesaTransactionStatus, MpesaTransactionType
+from app.models.mpesa import (
+    MpesaCredentials,
+    MpesaTransaction,
+    MpesaTransactionStatus,
+    MpesaTransactionType,
+)
 from app.models.organization import Organization, OrgStatus, SubscriptionPlan
 from app.models.subscription import BillingInterval, Plan, Subscription, SubscriptionStatus
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/hooks", tags=["hooks"])
+
+
+# ── M-Pesa callback authentication ──────────────────────────────────────────
+# Daraja does not sign callback payloads, so each org's callback URLs carry a
+# random `?ck=` key (set on MpesaCredentials when first configured). Any POST
+# without a matching key is rejected before it touches the database.
+
+async def _verify_callback_key(org_slug: str, key: str | None, session: AsyncSession) -> int | None:
+    """Return the org_id if `key` matches one of that org's configured callback keys,
+    or the shared platform key (used by platform-initiated pushes — subscription
+    upgrade / payment reminder — which have no tenant MpesaCredentials row of their own)."""
+    if not key:
+        return None
+    org_id = await session.scalar(select(Organization.id).where(Organization.slug == org_slug))
+    if not org_id:
+        return None
+
+    platform_key = settings.MPESA_PLATFORM_CALLBACK_KEY
+    if platform_key and hmac.compare_digest(platform_key, key):
+        return org_id
+
+    stored_keys = (await session.scalars(
+        select(MpesaCredentials.callback_key).where(MpesaCredentials.org_id == org_id)
+    )).all()
+    if any(stored and hmac.compare_digest(stored, key) for stored in stored_keys):
+        return org_id
+    return None
+
+
+async def _store_c2b_transaction(
+    org_id: int,
+    payload: dict,
+    session: AsyncSession,
+    result_desc: str = "C2B payment received",
+    **extra_fields,
+) -> tuple[MpesaTransaction, bool]:
+    """Idempotently record a C2B confirmation. Returns (transaction, created).
+
+    Safaricom retries callback delivery on its own timeouts — without this
+    check (and the matching DB unique constraint as a race-condition backstop)
+    a retried confirmation would create a second row and double-credit the sale.
+    """
+    receipt = payload.get("TransID", "")
+    existing = await session.scalar(
+        select(MpesaTransaction).where(
+            MpesaTransaction.org_id == org_id,
+            MpesaTransaction.mpesa_receipt_number == receipt,
+        )
+    )
+    if existing:
+        logger.info("C2B callback: duplicate receipt %s for org %s ignored", receipt, org_id)
+        return existing, False
+
+    first  = payload.get("FirstName", "").strip()
+    middle = payload.get("MiddleName", "").strip()
+    last   = payload.get("LastName", "").strip()
+
+    tx = MpesaTransaction(
+        org_id=org_id,
+        transaction_type=MpesaTransactionType.C2B,
+        status=MpesaTransactionStatus.COMPLETED,
+        phone=str(payload.get("MSISDN", "")),
+        sender_name=" ".join(p for p in [first, middle, last] if p) or None,
+        amount=float(payload.get("TransAmount", 0)),
+        mpesa_receipt_number=receipt,
+        result_code=0,
+        result_desc=result_desc,
+        raw_callback=json.dumps(payload),
+        **extra_fields,
+    )
+    session.add(tx)
+    try:
+        await session.flush()
+    except IntegrityError:
+        # Lost a race against a concurrent delivery of the same callback.
+        await session.rollback()
+        existing = await session.scalar(
+            select(MpesaTransaction).where(
+                MpesaTransaction.org_id == org_id,
+                MpesaTransaction.mpesa_receipt_number == receipt,
+            )
+        )
+        return existing, False  # type: ignore[return-value]
+    return tx, True
 
 
 # ── Inbound from central billing system (Fazilabs Invoicing) ───────────────────
@@ -97,7 +193,13 @@ async def stk_hook(
     org_slug: str,
     request: Request,
     session: AsyncSession = Depends(get_session),
+    ck: str | None = Query(None),
 ):
+    org_id = await _verify_callback_key(org_slug, ck, session)
+    if org_id is None:
+        logger.warning("STK callback: rejected (missing/invalid key) for org_slug=%s", org_slug)
+        raise HTTPException(status_code=403, detail="Invalid callback key")
+
     try:
         payload = await request.json()
     except Exception:
@@ -112,14 +214,10 @@ async def stk_hook(
     if not checkout_request_id:
         return {"ResultCode": "0", "ResultDesc": "Accepted"}
 
-    org_id = await session.scalar(
-        select(Organization.id).where(Organization.slug == org_slug)
-    )
-
     tx = await session.scalar(
         select(MpesaTransaction).where(
             MpesaTransaction.checkout_request_id == checkout_request_id,
-            *([MpesaTransaction.org_id == org_id] if org_id else []),
+            MpesaTransaction.org_id == org_id,
         )
     )
 
@@ -177,8 +275,17 @@ async def _activate_subscription(tx: MpesaTransaction, session: AsyncSession) ->
 
 
 @router.post("/{org_slug}/c2b/validate", include_in_schema=False)
-async def c2b_validate(org_slug: str, request: Request):
-    """Accept all incoming C2B payments. Add rejection logic here if needed."""
+async def c2b_validate(
+    org_slug: str,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    ck: str | None = Query(None),
+):
+    """Safaricom asks permission before processing. Reject unrecognised callers."""
+    org_id = await _verify_callback_key(org_slug, ck, session)
+    if org_id is None:
+        logger.warning("C2B validate: rejected (missing/invalid key) for org_slug=%s", org_slug)
+        return {"ResultCode": "1", "ResultDesc": "Rejected"}
     return {"ResultCode": "0", "ResultDesc": "Accepted"}
 
 
@@ -187,39 +294,19 @@ async def c2b_confirm(
     org_slug: str,
     request: Request,
     session: AsyncSession = Depends(get_session),
+    ck: str | None = Query(None),
 ):
+    org_id = await _verify_callback_key(org_slug, ck, session)
+    if org_id is None:
+        logger.warning("C2B confirm: rejected (missing/invalid key) for org_slug=%s", org_slug)
+        raise HTTPException(status_code=403, detail="Invalid callback key")
+
     try:
         payload = await request.json()
     except Exception:
         return {"ResultCode": "0", "ResultDesc": "Accepted"}
 
-    org_id = await session.scalar(
-        select(Organization.id).where(Organization.slug == org_slug)
-    )
-    if not org_id:
-        return {"ResultCode": "0", "ResultDesc": "Accepted"}
-
-    receipt     = payload.get("TransID", "")
-    amount      = float(payload.get("TransAmount", 0))
-    phone       = str(payload.get("MSISDN", ""))
-    first       = payload.get("FirstName", "").strip()
-    middle      = payload.get("MiddleName", "").strip()
-    last        = payload.get("LastName", "").strip()
-    sender_name = " ".join(p for p in [first, middle, last] if p) or None
-
-    tx = MpesaTransaction(
-        org_id=org_id,
-        transaction_type=MpesaTransactionType.C2B,
-        status=MpesaTransactionStatus.COMPLETED,
-        phone=phone,
-        sender_name=sender_name,
-        amount=amount,
-        mpesa_receipt_number=receipt,
-        result_code=0,
-        result_desc="C2B payment received",
-        raw_callback=json.dumps(payload),
-    )
-    session.add(tx)
+    await _store_c2b_transaction(org_id, payload, session)
     await session.commit()
 
     return {"ResultCode": "0", "ResultDesc": "Accepted"}
@@ -248,9 +335,6 @@ async def platform_c2b_confirm(
         return {"ResultCode": "0", "ResultDesc": "Accepted"}
 
     bill_ref = str(payload.get("BillRefNumber", "")).strip().lower()
-    receipt  = str(payload.get("TransID", ""))
-    amount   = float(payload.get("TransAmount", 0))
-    phone    = str(payload.get("MSISDN", ""))
 
     if not bill_ref:
         return {"ResultCode": "0", "ResultDesc": "Accepted"}
@@ -262,20 +346,22 @@ async def platform_c2b_confirm(
     if not org:
         return {"ResultCode": "0", "ResultDesc": "Accepted"}
 
-    # Store raw C2B transaction tied to the org
-    tx = MpesaTransaction(
-        org_id=org.id,
-        transaction_type=MpesaTransactionType.C2B,
-        status=MpesaTransactionStatus.COMPLETED,
-        phone=phone,
-        amount=amount,
-        mpesa_receipt_number=receipt,
-        result_code=0,
+    # Store raw C2B transaction tied to the org — idempotent on receipt number
+    # so a retried Safaricom delivery can't renew the subscription twice.
+    tx, created = await _store_c2b_transaction(
+        org.id,
+        payload,
+        session,
         result_desc="Platform C2B subscription payment",
         account_reference=f"PLATFORM_C2B:{bill_ref}",
-        raw_callback=json.dumps(payload),
     )
-    session.add(tx)
+    if not created:
+        await session.commit()
+        return {"ResultCode": "0", "ResultDesc": "Accepted"}
+
+    receipt = tx.mpesa_receipt_number
+    amount = float(tx.amount)
+    phone = tx.phone
 
     # Look up current plan from most-recent subscription
     from sqlalchemy.orm import selectinload  # noqa: PLC0415
