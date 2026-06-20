@@ -1,4 +1,3 @@
-import hashlib
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -7,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
 from app.core.deps import get_current_active_user
+from app.core.security import verify_password
 from app.models.user import User, UserRole
 from app.repositories.order import OrderRepository
 from app.repositories.organization import OrganizationRepository
@@ -33,20 +33,23 @@ def _check_pin(pin: str | None, current_user: User) -> None:
 
 
 async def _verify_elevated_pin(pin: str, org_id: int, session: AsyncSession) -> User:
-    """Return the manager/admin whose PIN matches, or raise 403."""
-    pin_hash = hashlib.sha256(pin.encode()).hexdigest()
+    """Return the manager/admin whose PIN matches, or raise 403.
+
+    pin_hash is bcrypt (see core/security.hash_password) — salted, so it can't
+    be looked up by equality. Fetch the candidates and verify each with
+    passlib, same as the regular login path (repositories/user.py:authenticate).
+    """
     result = await session.execute(
         select(User).where(
             User.org_id == org_id,
-            User.pin_hash == pin_hash,
             User.role.in_([UserRole.ADMIN, UserRole.MANAGER]),
             User.is_active == True,  # noqa: E712
         )
     )
-    manager = result.scalar_one_or_none()
-    if not manager:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid PIN")
-    return manager
+    for candidate in result.scalars().all():
+        if verify_password(pin, candidate.pin_hash):
+            return candidate
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid PIN")
 
 
 @router.post("/", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
