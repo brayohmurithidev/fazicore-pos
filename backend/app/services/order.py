@@ -121,11 +121,36 @@ class OrderService:
         amount_paid = round(data.amount_paid, 2)
         change_given = round(max(0.0, amount_paid - total), 2)
 
+        # Credit sales from POS never carry a customer_id — the cashier just
+        # types a name/phone, even when picking an existing customer from the
+        # autocomplete. Resolve (or create) the Customer here so the debt is
+        # actually trackable on the Customers page instead of vanishing into
+        # the order's free-text credit_customer_name/phone fields.
+        resolved_customer_id = data.customer_id
+        if data.payment_method == "credit" and not resolved_customer_id and data.credit_customer_phone:
+            existing_customer = await self.session.scalar(
+                select(Customer).where(
+                    Customer.org_id == org_id,
+                    Customer.phone == data.credit_customer_phone,
+                )
+            )
+            if existing_customer:
+                resolved_customer_id = existing_customer.id
+            else:
+                new_customer = Customer(
+                    org_id=org_id,
+                    name=data.credit_customer_name or "Walk-in customer",
+                    phone=data.credit_customer_phone,
+                )
+                self.session.add(new_customer)
+                await self.session.flush()
+                resolved_customer_id = new_customer.id
+
         order = Order(
             org_id=org_id,
             branch_id=branch_id if branch_id is not None else data.branch_id,
             order_number=order_number,
-            customer_id=data.customer_id,
+            customer_id=resolved_customer_id,
             cashier_id=cashier_id,
             cashier_name=cashier_name,
             status=OrderStatus.COMPLETED,
@@ -150,15 +175,17 @@ class OrderService:
         await self.session.refresh(order)
 
         # ── Customer stats + loyalty points ──────────────────────────────
-        if data.customer_id:
+        if resolved_customer_id:
             cust_result = await self.session.execute(
-                select(Customer).where(Customer.id == data.customer_id)
+                select(Customer).where(Customer.id == resolved_customer_id)
             )
             customer = cust_result.scalar_one_or_none()
             if customer:
                 # Always update stats regardless of loyalty toggle
                 customer.total_spent = float(customer.total_spent) + float(total)
                 customer.total_orders = customer.total_orders + 1
+                if data.payment_method == "credit":
+                    customer.credit_balance = float(customer.credit_balance) + float(total)
 
                 # Points only when loyalty is enabled
                 ls_result = await self.session.execute(
