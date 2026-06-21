@@ -39,5 +39,6 @@ class SubscriptionInvoice(Base, TimestampMixin):
     # mpesa_stk | mpesa_c2b | manual
     payment_method: Mapped[str | None] = mapped_column(String(50), nullable=True)
     mpesa_receipt: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
-    mpesa_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Widened from 20 — fed from MpesaTransaction.phone, see that model for why.
+    mpesa_phone: Mapped[str | None] = mapped_column(String(100), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -83,7 +83,9 @@ class MpesaTransaction(Base, TimestampMixin):
     checkout_request_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     account_reference: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
-    phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Widened from 20: Safaricom's documented masked MSISDN ("2547 ***** 126")
+    # fits in 20, but at least one shortcode sends a 64-char hashed MSISDN instead.
+    phone: Mapped[str | None] = mapped_column(String(100), nullable=True)
     sender_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     mpesa_receipt_number: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
