@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router'
 import {
   LayoutDashboard, Monitor, Package, Receipt, Building2, Settings,
-  ChevronLeft, ChevronRight, LogOut, BarChart3, UserCheck, Menu, X, Clock, TrendingDown, UserCircle, Search, Plus, Truck, ShoppingCart, ArrowLeftRight, FileCheck, Star, CalendarClock,
+  ChevronLeft, ChevronRight, LogOut, BarChart3, UserCheck, Menu, X, Clock, UserCircle, Search, Plus,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Toaster } from '@/components/ui/Toaster'
@@ -32,21 +32,17 @@ interface NavItem {
   roles: Role[]
 }
 
+// Kept to the handful of pages used daily. Expenditures, Suppliers, Purchase
+// Orders, Stock Transfers, eTIMS, Loyalty, Attendance, and Branches moved to
+// tabs under Inventory/Settings (see InventoryPage.tsx / SettingsPage.tsx) —
+// they're occasional-use, not separate destinations someone navigates to all day.
 const NAV: NavItem[] = [
   { id: 'dashboard',  label: 'Dashboard',  icon: LayoutDashboard, path: '/dashboard',  roles: ['admin', 'manager'] },
   { id: 'pos',        label: 'POS',        icon: Monitor,         path: '/pos',        roles: ['admin', 'manager', 'cashier'] },
   { id: 'inventory',  label: 'Inventory',  icon: Package,         path: '/inventory',  roles: ['admin', 'manager', 'stock'] },
   { id: 'sales',      label: 'Sales',      icon: Receipt,         path: '/sales',      roles: ['admin', 'manager', 'cashier'] },
   { id: 'customers',  label: 'Customers',  icon: UserCheck,       path: '/customers',  roles: ['admin', 'manager', 'cashier'] },
-  { id: 'reports',       label: 'Reports',       icon: BarChart3,    path: '/reports',       roles: ['admin', 'manager', 'stock'] },
-  { id: 'expenditures', label: 'Expenditures', icon: TrendingDown, path: '/expenditures', roles: ['admin', 'manager'] },
-  { id: 'suppliers',       label: 'Suppliers',       icon: Truck,        path: '/suppliers',       roles: ['admin', 'manager'] },
-  { id: 'purchase-orders', label: 'Purchase Orders', icon: ShoppingCart,    path: '/purchase-orders', roles: ['admin', 'manager'] },
-  { id: 'stock-transfers', label: 'Stock Transfers', icon: ArrowLeftRight, path: '/stock-transfers', roles: ['admin', 'manager'] },
-  { id: 'etims',       label: 'eTIMS',      icon: FileCheck,    path: '/etims',       roles: ['admin', 'manager'] },
-  { id: 'loyalty',    label: 'Loyalty',    icon: Star,         path: '/loyalty',    roles: ['admin', 'manager'] },
-  { id: 'attendance', label: 'Attendance', icon: CalendarClock, path: '/attendance', roles: ['admin', 'manager'] },
-  { id: 'branches',     label: 'Branches',     icon: Building2,    path: '/branches',     roles: ['admin'] },
+  { id: 'reports',    label: 'Reports',    icon: BarChart3,       path: '/reports',    roles: ['admin', 'manager', 'stock'] },
   { id: 'settings',   label: 'Settings',   icon: Settings,        path: '/settings',   roles: ['admin', 'manager', 'cashier', 'stock'] },
 ]
 
@@ -121,18 +117,8 @@ export function AppShell() {
 
   const allowedNav = NAV.filter((n) => {
     if (!n.roles.includes(user.role)) return false
-    // Branches: show when the multi_branch feature is on (regardless of how many branches exist)
-    if (n.id === 'branches' && featureFlags.multi_branch === false) return false
     if (n.id === 'customers' && featureFlags.credit_system === false) return false
-    if (n.id === 'audit' && featureFlags.audit_logs === false) return false
     if (n.id === 'reports' && featureFlags.advanced_reports === false) return false
-    if (n.id === 'expenditures' && featureFlags.expenditure_tracking === false) return false
-    if (n.id === 'suppliers' && featureFlags.supplier_management === false) return false
-    if (n.id === 'purchase-orders' && featureFlags.supplier_management === false) return false
-    if (n.id === 'stock-transfers' && featureFlags.multi_branch === false) return false
-    if (n.id === 'etims' && featureFlags.etims === false) return false
-    if (n.id === 'loyalty' && featureFlags.loyalty_program === false) return false
-    if (n.id === 'attendance' && featureFlags.attendance === false) return false
     return true
   })
 

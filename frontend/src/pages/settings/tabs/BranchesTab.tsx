@@ -13,6 +13,9 @@ import { usePlanLimits, atPlanLimit } from '@/hooks/usePlanLimits'
 import { toast } from '@/lib/toast'
 import type { ApiBranch, ApiUser } from '@/types/api'
 
+// Moved here from the standalone /branches page — content unchanged, just
+// dropped the page-level header since the Settings tab nav already labels it.
+
 function StatCard({ label, value, icon: Icon, accent = '#111827' }: { label: string; value: string | number; icon: React.ElementType; accent?: string }) {
   return (
     <Card>
@@ -31,7 +34,7 @@ function StatCard({ label, value, icon: Icon, accent = '#111827' }: { label: str
   )
 }
 
-export function BranchesPage() {
+export function BranchesTab() {
   const { data: apiBranches } = useBranches()
   const [selected, setSelected] = useState<ApiBranch | null>(null)
   const [addOpen, setAddOpen] = useState(false)
@@ -43,13 +46,9 @@ export function BranchesPage() {
   const atLimit = atPlanLimit(maxBranches, branches.filter((b) => b.is_active).length)
 
   return (
-    <div className="p-4 sm:p-6 overflow-y-auto h-full">
+    <div className="p-4 sm:p-6">
       <div className="flex justify-between items-center mb-5 sm:mb-6">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Branch Management</h1>
-          <p className="text-sm text-gray-400 mt-0.5">Oversee all business locations</p>
-        </div>
-        <div className="flex items-center gap-3">
           {maxBranches !== undefined && (
             <span className={`text-xs font-medium ${atLimit ? 'text-amber-600' : 'text-gray-400'}`}>
               {maxBranches === 1
@@ -58,15 +57,15 @@ export function BranchesPage() {
               }
             </span>
           )}
-          <Button
-            size="sm"
-            disabled={atLimit}
-            title={atLimit ? 'Branch limit reached — contact your admin to upgrade' : undefined}
-            onClick={() => setAddOpen(true)}
-          >
-            <Plus size={14} className="mr-1.5" />Add Branch
-          </Button>
         </div>
+        <Button
+          size="sm"
+          disabled={atLimit}
+          title={atLimit ? 'Branch limit reached — contact your admin to upgrade' : undefined}
+          onClick={() => setAddOpen(true)}
+        >
+          <Plus size={14} className="mr-1.5" />Add Branch
+        </Button>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-3.5 mb-6 sm:mb-7">

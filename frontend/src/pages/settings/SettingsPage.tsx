@@ -5,7 +5,8 @@ import { RefreshCw } from 'lucide-react'
 import {
   CheckCircle2, XCircle, Pencil, X, Check, Zap, Loader2, Lock, Star,
   Settings, CreditCard, Users, Shield, ClipboardList, Sparkles,
-  Usb, Printer as PrinterIcon, Bluetooth, Circle, UserCircle, ChevronRight,
+  Usb, Printer as PrinterIcon, Bluetooth, UserCircle, ChevronRight,
+  TrendingDown, CalendarClock, Building2,
 } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { Input } from '@/components/ui/input'
@@ -25,9 +26,6 @@ import {
   useMpesaCredentials, useSaveMpesaCredentials, useDeleteMpesaCredentials,
   useSetLiveMpesaEnvironment, useRegisterC2bUrls, useSimulateC2b,
   useOrgInfo, useUpgradeSubscription, useStkStatus, useQueryUpgradeStatus,
-  useLoyaltySettings, useUpdateLoyaltySettings,
-  useEtimsConfig, useUpdateEtimsConfig, useTestEtimsConnection,
-  useEtimsSubmissions, useRetryEtimsSubmission,
   usePaystackCredentials, useSavePaystackCredentials, useDeletePaystackCredentials,
   type MpesaCredentialsOut, type UpgradeInitiated,
 } from '@/lib/queries'
@@ -35,13 +33,18 @@ import { useFeatureFlags } from '@/hooks/useFeature'
 import { useAuthStore } from '@/stores/auth'
 import { UsersPage } from '@/pages/users/UsersPage'
 import { AuditPage } from '@/pages/audit/AuditPage'
+import { EtimsTab } from '@/pages/settings/tabs/EtimsTab'
+import { AttendanceTab } from '@/pages/settings/tabs/AttendanceTab'
+import { LoyaltyTab } from '@/pages/settings/tabs/LoyaltyTab'
+import { BranchesTab } from '@/pages/settings/tabs/BranchesTab'
+import { ExpendituresTab } from '@/pages/settings/tabs/ExpendituresTab'
 import { cn } from '@/lib/utils'
 import type { Settings as SettingsType } from '@/types'
 import type { ApiPlanInfo } from '@/types/api'
 
 // ── Tab definitions ───────────────────────────────────────────────────────────
 
-type TabId = 'general' | 'payments' | 'users' | 'permissions' | 'audit' | 'plan' | 'etims'
+type TabId = 'general' | 'payments' | 'users' | 'permissions' | 'audit' | 'plan' | 'etims' | 'attendance' | 'loyalty' | 'branches' | 'expenditures'
 
 // ── Shared primitives ─────────────────────────────────────────────────────────
 
@@ -584,7 +587,6 @@ function GeneralTab() {
         <Toggle label="Digital Receipt (SMS)" sub="Send receipt via SMS to customer" value={settings.smsReceipt} onChange={(v) => patch('smsReceipt', v)} locked={!isAdmin || flags.sms_receipts === false} lockedReason={!isAdmin ? 'Admin only' : 'Upgrade'} />
       </Section>
       {(isTauri || flags.thermal_printing !== false) && <PrinterSetupSection />}
-      <LoyaltySection />
       {isTauri && <MultiTerminalSection />}
       {isAdmin && (
         <Section title="Branches">
@@ -594,104 +596,6 @@ function GeneralTab() {
         </Section>
       )}
     </div>
-  )
-}
-
-// ── Loyalty settings section ──────────────────────────────────────────────────
-
-function LoyaltySection() {
-  const { user } = useAuthStore()
-  const isAdmin = user?.role === 'admin' || user?.role === 'manager'
-  const { data: ls, isLoading } = useLoyaltySettings()
-  const update = useUpdateLoyaltySettings()
-
-  if (isLoading || !ls) return null
-
-  const patch = (key: string, value: unknown) => update.mutate({ [key]: value })
-
-  return (
-    <Section title="Loyalty & Rewards">
-      <Toggle
-        label="Enable Loyalty Programme"
-        sub="Customers earn and redeem points at checkout"
-        value={ls.enabled}
-        onChange={(v) => patch('enabled', v)}
-        locked={!isAdmin}
-        lockedReason="Admin or manager only"
-      />
-      {ls.enabled && (
-        <>
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <div className="text-sm font-medium text-gray-900">Earn rate</div>
-              <div className="text-xs text-gray-400 mt-0.5">Points earned per KES 1 spent</div>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <input
-                type="number"
-                min={0.01}
-                step={0.1}
-                defaultValue={ls.points_per_kes}
-                disabled={!isAdmin}
-                onBlur={(e) => {
-                  const v = parseFloat(e.target.value)
-                  if (!isNaN(v) && v > 0) patch('points_per_kes', v)
-                }}
-                className="w-20 text-sm border border-gray-200 rounded-md px-2 py-1.5 text-right focus:outline-none focus:ring-2 focus:ring-gray-300 disabled:opacity-50"
-              />
-              <span className="text-xs text-gray-400">pts / KES</span>
-            </div>
-          </div>
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <div className="text-sm font-medium text-gray-900">Redemption value</div>
-              <div className="text-xs text-gray-400 mt-0.5">KES given per 1 point redeemed</div>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-gray-400">KES</span>
-              <input
-                type="number"
-                min={0.01}
-                step={0.1}
-                defaultValue={ls.kes_per_point}
-                disabled={!isAdmin}
-                onBlur={(e) => {
-                  const v = parseFloat(e.target.value)
-                  if (!isNaN(v) && v > 0) patch('kes_per_point', v)
-                }}
-                className="w-20 text-sm border border-gray-200 rounded-md px-2 py-1.5 text-right focus:outline-none focus:ring-2 focus:ring-gray-300 disabled:opacity-50"
-              />
-              <span className="text-xs text-gray-400">/ pt</span>
-            </div>
-          </div>
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <div className="text-sm font-medium text-gray-900">Minimum to redeem</div>
-              <div className="text-xs text-gray-400 mt-0.5">Fewest points a customer must have to redeem</div>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <input
-                type="number"
-                min={1}
-                step={1}
-                defaultValue={ls.min_redeem_points}
-                disabled={!isAdmin}
-                onBlur={(e) => {
-                  const v = parseInt(e.target.value)
-                  if (!isNaN(v) && v > 0) patch('min_redeem_points', v)
-                }}
-                className="w-20 text-sm border border-gray-200 rounded-md px-2 py-1.5 text-right focus:outline-none focus:ring-2 focus:ring-gray-300 disabled:opacity-50"
-              />
-              <span className="text-xs text-gray-400">pts</span>
-            </div>
-          </div>
-          <div className="mt-1 px-3 py-2.5 bg-gray-50 rounded-lg text-xs text-gray-500">
-            Example: KES 500 sale → earns <strong>{Math.floor(500 * ls.points_per_kes)} pts</strong>.{' '}
-            100 pts redeems as <strong>KES {(100 * ls.kes_per_point).toFixed(0)}</strong>.
-          </div>
-        </>
-      )}
-    </Section>
   )
 }
 
@@ -835,7 +739,6 @@ function EnvCredPanel({ env, existing, orgSlug }: {
 }) {
   const save        = useSaveMpesaCredentials()
   const remove      = useDeleteMpesaCredentials()
-  const setLive     = useSetLiveMpesaEnvironment()
   const registerC2b = useRegisterC2bUrls()
   const simulate    = useSimulateC2b()
 
@@ -876,34 +779,12 @@ function EnvCredPanel({ env, existing, orgSlug }: {
   }
 
   const isSandbox = env === 'sandbox'
-  const bannerCls = isSandbox
-    ? 'bg-gray-50 border-gray-200 text-gray-700'
-    : 'bg-amber-50 border-amber-200 text-amber-800'
 
   return (
-    <div className={`rounded-lg border p-4 space-y-3 ${existing?.is_live ? 'border-green-300 ring-1 ring-green-200' : 'border-gray-200'}`}>
+    <div className="rounded-lg border border-gray-200 p-4 space-y-3">
       {/* Header row */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isSandbox ? 'bg-gray-100 text-gray-600' : 'bg-amber-100 text-amber-700'}`}>
-            {isSandbox ? 'Sandbox' : 'Production'}
-          </span>
-          {existing?.is_live && (
-            <span className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700">
-              <Circle size={7} className="fill-current" /> Live
-            </span>
-          )}
-          {existing && !existing.is_live && (
-            <button
-              onClick={async () => { await setLive.mutateAsync(env); setMsg(null) }}
-              disabled={setLive.isPending}
-              className="text-xs text-gray-500 hover:text-green-700 underline"
-            >
-              Set as live
-            </button>
-          )}
-        </div>
-        {existing && !editing && (
+      {existing && !editing && (
+        <div className="flex items-center justify-end">
           <div className="flex gap-1.5">
             <Button size="sm" variant="outline" onClick={() => { setEditing(true); setMsg(null) }}>Edit</Button>
             <Button
@@ -923,10 +804,10 @@ function EnvCredPanel({ env, existing, orgSlug }: {
             </Button>
             <Button size="sm" variant="destructive" onClick={async () => { if (!confirm(`Remove ${env} credentials?`)) return; await remove.mutateAsync(env); setEditing(false); setMsg(null) }} disabled={remove.isPending}>Remove</Button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      <div className={`text-xs px-3 py-2 rounded border ${bannerCls}`}>
+      <div className="text-xs px-3 py-2 rounded border border-gray-200 bg-gray-50 text-gray-600">
         {isSandbox ? 'Test only — no real money charged. Use test credentials from developer.safaricom.co.ke.' : 'Live payments — real money. Ensure your production app is approved.'}
       </div>
 
@@ -1038,21 +919,69 @@ function MpesaCredentialsSection() {
   const { data: allCreds = [], isLoading } = useMpesaCredentials()
   const { data: orgInfo } = useOrgInfo()
   const orgSlug = orgInfo?.slug ?? 'your-org'
+  const setLive = useSetLiveMpesaEnvironment()
+  const [tab, setTab] = useState<'sandbox' | 'production'>('sandbox')
 
   if (isLoading) return null
 
   const sandbox    = allCreds.find((c) => c.environment === 'sandbox')
   const production = allCreds.find((c) => c.environment === 'production')
+  const liveEnv: 'sandbox' | 'production' | null =
+    sandbox?.is_live ? 'sandbox' : production?.is_live ? 'production' : null
+
+  const ENVS: { id: 'sandbox' | 'production'; label: string; existing: MpesaCredentialsOut | undefined }[] = [
+    { id: 'sandbox',    label: 'Sandbox',    existing: sandbox },
+    { id: 'production', label: 'Production', existing: production },
+  ]
 
   return (
     <Section title="M-Pesa Daraja API">
       <p className="text-xs text-gray-400 -mt-1 mb-3">
-        Both environments are stored independently. Toggle which one is <strong>Live</strong> to switch between testing and real payments.
+        Configure each environment independently, then choose which one is live.
       </p>
-      <div className="space-y-4">
-        <EnvCredPanel env="sandbox"    existing={sandbox}    orgSlug={orgSlug} />
-        <EnvCredPanel env="production" existing={production} orgSlug={orgSlug} />
+
+      <div className="flex items-center justify-between border border-gray-200 rounded-lg px-3 py-2.5 mb-4">
+        <div>
+          <div className="text-sm font-medium text-gray-900">Live environment</div>
+          <div className="text-xs text-gray-400 mt-0.5">Which credentials process real customer payments</div>
+        </div>
+        <div className="inline-flex rounded-md border border-gray-200 bg-gray-50 p-0.5">
+          {ENVS.map(({ id, label, existing }) => (
+            <button
+              key={id}
+              type="button"
+              disabled={!existing || setLive.isPending}
+              onClick={() => setLive.mutate(id)}
+              title={!existing ? `Configure ${label} credentials first` : undefined}
+              className={`px-3 py-1 text-xs font-semibold rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                liveEnv === id ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
+
+      <div className="flex gap-4 border-b border-gray-200 mb-3">
+        {ENVS.map(({ id, label }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setTab(id)}
+            className={`pb-2 -mb-px text-sm font-semibold border-b-2 transition-colors flex items-center gap-1.5 ${
+              tab === id ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            {label}
+            {liveEnv === id && <span className="w-1.5 h-1.5 rounded-full bg-green-500" />}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'sandbox'
+        ? <EnvCredPanel env="sandbox"    existing={sandbox}    orgSlug={orgSlug} />
+        : <EnvCredPanel env="production" existing={production} orgSlug={orgSlug} />}
     </Section>
   )
 }
@@ -1716,224 +1645,6 @@ function PlanTab() {
     </div>
   )
 }
-
-// ── eTIMS / KRA tab ──────────────────────────────────────────────────────────
-
-function EtimsTab() {
-  const { user } = useAuthStore()
-  const isAdmin = user?.role === 'admin'
-
-  const { data: cfg, isLoading } = useEtimsConfig()
-  const updateCfg = useUpdateEtimsConfig()
-  const testConn = useTestEtimsConnection()
-  const { data: submissions = [] } = useEtimsSubmissions()
-  const retryMutation = useRetryEtimsSubmission()
-
-  const [form, setForm] = useState({
-    kra_pin: '',
-    bhf_id: '00',
-    device_serial: '',
-    sandbox_mode: true,
-    is_active: false,
-  })
-  const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null)
-
-  useEffect(() => {
-    if (cfg) {
-      setForm({
-        kra_pin: cfg.kra_pin,
-        bhf_id: cfg.bhf_id,
-        device_serial: cfg.device_serial ?? '',
-        sandbox_mode: cfg.sandbox_mode,
-        is_active: cfg.is_active,
-      })
-    }
-  }, [cfg])
-
-  const handleSave = () => {
-    updateCfg.mutate({ ...form, device_serial: form.device_serial || undefined })
-  }
-
-  const handleTest = async () => {
-    setTestResult(null)
-    try {
-      const res = await testConn.mutateAsync(undefined)
-      setTestResult({ ok: res.ok, msg: res.ok ? 'Connection successful' : (res.error ?? 'Failed') })
-    } catch {
-      setTestResult({ ok: false, msg: 'Network error' })
-    }
-  }
-
-  const statusColor = {
-    submitted: 'text-emerald-600 bg-emerald-50',
-    pending:   'text-amber-600 bg-amber-50',
-    failed:    'text-red-600 bg-red-50',
-  }
-
-  if (isLoading) return <div className="p-6 text-sm text-gray-400">Loading…</div>
-
-  return (
-    <div className="p-4 sm:p-6 max-w-2xl space-y-6">
-
-      {/* Info banner */}
-      <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-800 space-y-1">
-        <div className="font-semibold">KRA eTIMS VSCU Integration</div>
-        <div className="text-blue-600 text-xs">
-          Each sale is automatically submitted to KRA when a tenant KRA PIN is configured and active.
-          Offline sales are queued and retried automatically with exponential backoff.
-        </div>
-      </div>
-
-      {/* Config form */}
-      <Section title="VSCU Credentials">
-        <div className="py-2 space-y-3">
-          <div>
-            <label className="text-xs font-medium text-gray-700">KRA PIN</label>
-            <input
-              value={form.kra_pin}
-              onChange={(e) => setForm((f) => ({ ...f, kra_pin: e.target.value.toUpperCase() }))}
-              placeholder="A123456789B"
-              disabled={!isAdmin}
-              className="mt-1 w-full text-sm border border-gray-200 rounded-md px-3 py-1.5 font-mono focus:outline-none focus:ring-2 focus:ring-gray-300 disabled:opacity-50"
-            />
-          </div>
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <label className="text-xs font-medium text-gray-700">Branch Code (bhfId)</label>
-              <input
-                value={form.bhf_id}
-                onChange={(e) => setForm((f) => ({ ...f, bhf_id: e.target.value }))}
-                placeholder="00"
-                disabled={!isAdmin}
-                className="mt-1 w-full text-sm border border-gray-200 rounded-md px-3 py-1.5 font-mono focus:outline-none focus:ring-2 focus:ring-gray-300 disabled:opacity-50"
-              />
-            </div>
-            <div className="flex-1">
-              <label className="text-xs font-medium text-gray-700">Device Serial (optional)</label>
-              <input
-                value={form.device_serial}
-                onChange={(e) => setForm((f) => ({ ...f, device_serial: e.target.value }))}
-                placeholder="VSCU000001"
-                disabled={!isAdmin}
-                className="mt-1 w-full text-sm border border-gray-200 rounded-md px-3 py-1.5 font-mono focus:outline-none focus:ring-2 focus:ring-gray-300 disabled:opacity-50"
-              />
-            </div>
-          </div>
-          <div className="flex gap-6 pt-1">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={form.sandbox_mode}
-                onChange={(e) => setForm((f) => ({ ...f, sandbox_mode: e.target.checked }))}
-                disabled={!isAdmin}
-                className="accent-amber-500"
-              />
-              <span className="text-sm text-gray-700">Sandbox mode</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={form.is_active}
-                onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
-                disabled={!isAdmin}
-                className="accent-emerald-600"
-              />
-              <span className="text-sm text-gray-700">Active (submit invoices)</span>
-            </label>
-          </div>
-          {!form.is_active && (
-            <div className="text-xs text-amber-600">
-              eTIMS is disabled — invoices will not be submitted to KRA until you enable it.
-            </div>
-          )}
-          {form.sandbox_mode && form.is_active && (
-            <div className="text-xs text-amber-600">
-              Sandbox mode is on — submissions go to the KRA test environment, not production.
-            </div>
-          )}
-        </div>
-        {isAdmin && (
-          <div className="flex gap-2 pt-2">
-            <Button size="sm" onClick={handleSave} disabled={updateCfg.isPending}>
-              {updateCfg.isPending ? 'Saving…' : 'Save'}
-            </Button>
-            <Button size="sm" variant="outline" onClick={handleTest} disabled={testConn.isPending || !form.kra_pin}>
-              {testConn.isPending ? 'Testing…' : 'Test connection'}
-            </Button>
-          </div>
-        )}
-        {testResult && (
-          <div className={`mt-2 text-xs font-medium ${testResult.ok ? 'text-emerald-600' : 'text-red-500'}`}>
-            {testResult.msg}
-          </div>
-        )}
-        {updateCfg.isSuccess && (
-          <div className="mt-2 text-xs text-emerald-600">Saved.</div>
-        )}
-      </Section>
-
-      {/* Submissions log */}
-      <Section title={`Submissions (${submissions.length})`}>
-        {submissions.length === 0 ? (
-          <div className="py-4 text-sm text-gray-400 text-center">No submissions yet.</div>
-        ) : (
-          <div className="overflow-x-auto -mx-1">
-            <table className="w-full text-xs min-w-[480px]">
-              <thead>
-                <tr className="text-left text-gray-400 border-b border-gray-100">
-                  <th className="py-2 px-2 font-medium">Order</th>
-                  <th className="py-2 px-2 font-medium">CU Invoice</th>
-                  <th className="py-2 px-2 font-medium">Status</th>
-                  <th className="py-2 px-2 font-medium">Attempts</th>
-                  <th className="py-2 px-2 font-medium">Date</th>
-                  <th className="py-2 px-2" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {submissions.map((s) => (
-                  <tr key={s.id} className="hover:bg-gray-50">
-                    <td className="py-2 px-2 font-mono">{s.order_id ?? '—'}</td>
-                    <td className="py-2 px-2 font-mono text-emerald-700">{s.cu_invoice_no ?? '—'}</td>
-                    <td className="py-2 px-2">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusColor[s.status as keyof typeof statusColor] ?? ''}`}>
-                        {s.status}
-                      </span>
-                    </td>
-                    <td className="py-2 px-2 text-gray-500">{s.attempt_count}</td>
-                    <td className="py-2 px-2 text-gray-400">{new Date(s.created_at).toLocaleDateString()}</td>
-                    <td className="py-2 px-2">
-                      {s.status !== 'submitted' && isAdmin && (
-                        <button
-                          onClick={() => retryMutation.mutate(s.id)}
-                          disabled={retryMutation.isPending}
-                          className="text-blue-600 underline text-[10px]"
-                        >
-                          Retry
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Section>
-
-      {/* Registration guide */}
-      <Section title="Setup Checklist">
-        <ol className="text-sm text-gray-600 space-y-2 list-decimal list-inside py-2">
-          <li>Apply to KRA as a certified Third Party Vendor (submit eTIMS Bio Data Form once for Fazi POS).</li>
-          <li>Your tenant selects <strong>VSCU/OSCU</strong> on the KRA eTIMS portal and associates their PIN with Fazi POS.</li>
-          <li>Enter their KRA PIN + branch code above and save.</li>
-          <li>Toggle <strong>Sandbox mode</strong> on and run a few test sales — check the submissions table above.</li>
-          <li>When KRA approves production access, turn off Sandbox mode and enable <strong>Active</strong>.</li>
-        </ol>
-      </Section>
-    </div>
-  )
-}
-
 // ── Page shell ────────────────────────────────────────────────────────────────
 
 export function SettingsPage() {
@@ -1947,13 +1658,17 @@ export function SettingsPage() {
   const isManagerOrAbove = isAdmin || user?.role === 'manager'
 
   const TABS = ([
-    { id: 'general',     label: 'General',        icon: Settings },
-    { id: 'payments',    label: 'Payments',        icon: CreditCard,    managerOnly: true },
-    { id: 'users',       label: 'Users',           icon: Users,          adminOnly: true },
-    { id: 'permissions', label: 'Permissions',     icon: Shield,         adminOnly: true, hidden: flags.permissions_mgmt === false },
-    { id: 'audit',       label: 'Audit Log',       icon: ClipboardList,  adminOnly: true, hidden: flags.audit_logs === false },
-    { id: 'plan',        label: 'Plan & Billing',  icon: Sparkles,       adminOnly: true },
-    { id: 'etims',       label: 'eTIMS / KRA',     icon: ClipboardList,  adminOnly: true },
+    { id: 'general',      label: 'General',        icon: Settings },
+    { id: 'payments',     label: 'Payments',        icon: CreditCard,    managerOnly: true },
+    { id: 'users',        label: 'Users',           icon: Users,          adminOnly: true },
+    { id: 'permissions',  label: 'Permissions',     icon: Shield,         adminOnly: true, hidden: flags.permissions_mgmt === false },
+    { id: 'audit',        label: 'Audit Log',       icon: ClipboardList,  adminOnly: true, hidden: flags.audit_logs === false },
+    { id: 'plan',         label: 'Plan & Billing',  icon: Sparkles,       adminOnly: true },
+    { id: 'etims',        label: 'eTIMS / KRA',     icon: ClipboardList,  managerOnly: true },
+    { id: 'expenditures', label: 'Expenditures',    icon: TrendingDown,   managerOnly: true, hidden: flags.expenditure_tracking === false },
+    { id: 'loyalty',      label: 'Loyalty',         icon: Star,           managerOnly: true, hidden: flags.loyalty_program === false },
+    { id: 'attendance',   label: 'Attendance',      icon: CalendarClock,  managerOnly: true, hidden: flags.attendance === false },
+    { id: 'branches',     label: 'Branches',        icon: Building2,      adminOnly: true, hidden: flags.multi_branch === false },
   ] as { id: TabId; label: string; icon: React.ElementType; adminOnly?: boolean; managerOnly?: boolean; hidden?: boolean }[])
     .filter((t) => !t.hidden && (!t.adminOnly || isAdmin) && (!t.managerOnly || isManagerOrAbove))
 
@@ -2024,6 +1739,10 @@ export function SettingsPage() {
           {tab === 'audit'       && <AuditPage />}
           {tab === 'plan'        && <PlanTab />}
           {tab === 'etims'       && <EtimsTab />}
+          {tab === 'expenditures' && <ExpendituresTab />}
+          {tab === 'loyalty'     && <LoyaltyTab />}
+          {tab === 'attendance'  && <AttendanceTab />}
+          {tab === 'branches'    && <BranchesTab />}
         </div>
       </div>
     </div>

@@ -12,10 +12,14 @@ import {
   useEtimsSubmissions, useRetryEtimsSubmission,
 } from '@/lib/queries'
 import { toast } from '@/lib/toast'
+import { useAuthStore } from '@/stores/auth'
 import type { ApiEtimsSubmission } from '@/types/api'
 import { cn } from '@/lib/utils'
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// Moved here from the standalone /etims page (richer than the old Settings
+// tab — status filtering, summary chips, per-row retry) merged with the old
+// tab's admin-only edit gating (managers can view config/submissions but not
+// change KRA credentials or retry a submission) and its setup checklist.
 
 const fmtDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleString('en-KE', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'
@@ -34,9 +38,7 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
-// ── Config card ───────────────────────────────────────────────────────────────
-
-function ConfigCard() {
+function ConfigCard({ isAdmin }: { isAdmin: boolean }) {
   const [editOpen, setEditOpen] = useState(false)
   const [form, setForm] = useState({ kra_pin: '', bhf_id: '00', device_serial: '', sandbox_mode: true, is_active: false })
   const [testResult, setTestResult] = useState<'ok' | 'fail' | null>(null)
@@ -105,9 +107,11 @@ function ConfigCard() {
               <div className="text-xs text-gray-500 mt-0.5">Kenya Revenue Authority — Electronic Tax Invoice Management System</div>
             </div>
           </div>
-          <Button size="sm" variant="outline" onClick={openEdit} className="gap-1.5 shrink-0">
-            <Settings size={13} />{config ? 'Edit' : 'Configure'}
-          </Button>
+          {isAdmin && (
+            <Button size="sm" variant="outline" onClick={openEdit} className="gap-1.5 shrink-0">
+              <Settings size={13} />{config ? 'Edit' : 'Configure'}
+            </Button>
+          )}
         </div>
 
         {!config ? (
@@ -142,23 +146,25 @@ function ConfigCard() {
 
         {config && (
           <div className="flex items-center gap-3 mt-4 pt-4 border-t border-gray-100">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleTest}
-              disabled={testConn.isPending}
-              className="gap-1.5"
-            >
-              {testConn.isPending
-                ? <Loader2 size={13} className="animate-spin" />
-                : testResult === 'ok'
-                  ? <Wifi size={13} className="text-green-600" />
-                  : testResult === 'fail'
-                    ? <WifiOff size={13} className="text-red-500" />
-                    : <Wifi size={13} />
-              }
-              Test Connection
-            </Button>
+            {isAdmin && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleTest}
+                disabled={testConn.isPending}
+                className="gap-1.5"
+              >
+                {testConn.isPending
+                  ? <Loader2 size={13} className="animate-spin" />
+                  : testResult === 'ok'
+                    ? <Wifi size={13} className="text-green-600" />
+                    : testResult === 'fail'
+                      ? <WifiOff size={13} className="text-red-500" />
+                      : <Wifi size={13} />
+                }
+                Test Connection
+              </Button>
+            )}
             {testResult === 'ok' && (
               <span className="text-xs text-green-700 font-medium flex items-center gap-1">
                 <CheckCircle2 size={12} />Connected successfully
@@ -263,9 +269,7 @@ function ConfigCard() {
   )
 }
 
-// ── Submission row ─────────────────────────────────────────────────────────────
-
-function SubmissionRow({ sub }: { sub: ApiEtimsSubmission }) {
+function SubmissionRow({ sub, isAdmin }: { sub: ApiEtimsSubmission; isAdmin: boolean }) {
   const retry = useRetryEtimsSubmission()
 
   const handleRetry = async () => {
@@ -304,7 +308,7 @@ function SubmissionRow({ sub }: { sub: ApiEtimsSubmission }) {
         {sub.attempt_count > 0 && (
           <div className="text-[11px] text-gray-400">{sub.attempt_count} attempt{sub.attempt_count !== 1 ? 's' : ''}</div>
         )}
-        {sub.status === 'failed' && (
+        {sub.status === 'failed' && isAdmin && (
           <Button
             size="sm"
             variant="outline"
@@ -331,12 +335,12 @@ function SubmissionRow({ sub }: { sub: ApiEtimsSubmission }) {
   )
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
-
 const STATUS_FILTERS = ['all', 'pending', 'submitted', 'failed'] as const
 type StatusFilter = typeof STATUS_FILTERS[number]
 
-export function EtimsPage() {
+export function EtimsTab() {
+  const { user } = useAuthStore()
+  const isAdmin = user?.role === 'admin'
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
 
   const { data: submissions = [], isLoading } = useEtimsSubmissions(statusFilter === 'all' ? undefined : statusFilter)
@@ -348,74 +352,77 @@ export function EtimsPage() {
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5">
-        {/* Header */}
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">eTIMS</h1>
-          <p className="text-sm text-gray-500 mt-0.5">KRA tax invoice submissions</p>
-        </div>
+    <div className="p-4 sm:p-6 max-w-2xl space-y-5">
+      <ConfigCard isAdmin={isAdmin} />
 
-        {/* Config card */}
-        <ConfigCard />
-
-        {/* Summary chips */}
-        {(counts.pending > 0 || counts.failed > 0) && (
-          <div className="flex gap-2 flex-wrap">
-            {counts.pending > 0 && (
-              <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold px-3 py-1.5 rounded-full">
-                <Clock size={12} />{counts.pending} pending
-              </div>
-            )}
-            {counts.failed > 0 && (
-              <div className="flex items-center gap-1.5 bg-red-50 border border-red-200 text-red-700 text-xs font-semibold px-3 py-1.5 rounded-full">
-                <XCircle size={12} />{counts.failed} failed — needs retry
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Submissions */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-bold text-gray-900">Submissions</h2>
-            <div className="flex gap-1.5">
-              {STATUS_FILTERS.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setStatusFilter(s)}
-                  className={cn(
-                    'px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all border',
-                    statusFilter === s
-                      ? 'bg-gray-900 text-white border-gray-900'
-                      : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
-                  )}
-                >
-                  {s.charAt(0).toUpperCase() + s.slice(1)}
-                </button>
-              ))}
+      {/* Summary chips */}
+      {(counts.pending > 0 || counts.failed > 0) && (
+        <div className="flex gap-2 flex-wrap">
+          {counts.pending > 0 && (
+            <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold px-3 py-1.5 rounded-full">
+              <Clock size={12} />{counts.pending} pending
             </div>
-          </div>
-
-          {isLoading ? (
-            <div className="flex items-center justify-center h-32">
-              <Loader2 size={20} className="animate-spin text-gray-400" />
-            </div>
-          ) : submissions.length === 0 ? (
-            <div className="text-center py-16 text-gray-400 bg-white border border-gray-200 rounded-xl">
-              <FileCheck size={32} className="mx-auto mb-3 opacity-30" />
-              <p className="text-sm">
-                {statusFilter !== 'all' ? `No ${statusFilter} submissions` : 'No submissions yet — complete a sale to generate your first invoice'}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {submissions.map((sub) => (
-                <SubmissionRow key={sub.id} sub={sub} />
-              ))}
+          )}
+          {counts.failed > 0 && (
+            <div className="flex items-center gap-1.5 bg-red-50 border border-red-200 text-red-700 text-xs font-semibold px-3 py-1.5 rounded-full">
+              <XCircle size={12} />{counts.failed} failed{isAdmin ? ' — needs retry' : ''}
             </div>
           )}
         </div>
+      )}
+
+      {/* Submissions */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-bold text-gray-900">Submissions</h2>
+          <div className="flex gap-1.5">
+            {STATUS_FILTERS.map((s) => (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(s)}
+                className={cn(
+                  'px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all border',
+                  statusFilter === s
+                    ? 'bg-gray-900 text-white border-gray-900'
+                    : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+                )}
+              >
+                {s.charAt(0).toUpperCase() + s.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {isLoading ? (
+          <div className="flex items-center justify-center h-32">
+            <Loader2 size={20} className="animate-spin text-gray-400" />
+          </div>
+        ) : submissions.length === 0 ? (
+          <div className="text-center py-16 text-gray-400 bg-white border border-gray-200 rounded-xl">
+            <FileCheck size={32} className="mx-auto mb-3 opacity-30" />
+            <p className="text-sm">
+              {statusFilter !== 'all' ? `No ${statusFilter} submissions` : 'No submissions yet — complete a sale to generate your first invoice'}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {submissions.map((sub) => (
+              <SubmissionRow key={sub.id} sub={sub} isAdmin={isAdmin} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Setup checklist */}
+      <div className="bg-white border border-gray-200 rounded-xl p-5">
+        <h2 className="text-sm font-bold text-gray-900 mb-3">Setup Checklist</h2>
+        <ol className="text-sm text-gray-600 space-y-2 list-decimal list-inside">
+          <li>Apply to KRA as a certified Third Party Vendor (submit eTIMS Bio Data Form once for Fazi POS).</li>
+          <li>Your tenant selects <strong>VSCU/OSCU</strong> on the KRA eTIMS portal and associates their PIN with Fazi POS.</li>
+          <li>Enter their KRA PIN + branch code above and save.</li>
+          <li>Toggle <strong>Sandbox mode</strong> on and run a few test sales — check the submissions list above.</li>
+          <li>When KRA approves production access, turn off Sandbox mode and enable <strong>Active</strong>.</li>
+        </ol>
       </div>
     </div>
   )

@@ -17,6 +17,11 @@ import { toast } from '@/lib/toast'
 import { cn } from '@/lib/utils'
 import type { ApiExpenditure } from '@/types/api'
 
+// Moved here from the standalone /expenditures page — content unchanged,
+// just dropped the page-level header since the Settings tab nav already
+// labels it. Keeps its own feature-flag check as a defensive fallback even
+// though the Settings TABS array already hides this tab when the flag is off.
+
 const CATEGORIES = ['rent', 'utilities', 'salaries', 'supplies', 'transport', 'marketing', 'maintenance', 'other']
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -42,8 +47,6 @@ function thisMonthRange() {
   const to = todayISO()
   return { from, to }
 }
-
-// ── Form Modal ────────────────────────────────────────────────────────────────
 
 function ExpenditureModal({
   initial, onClose,
@@ -161,9 +164,7 @@ function ExpenditureModal({
   )
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
-
-export function ExpendituresPage() {
+export function ExpendituresTab() {
   const hasExpenditure = useFeature('expenditure_tracking')
   const { user } = useAuthStore()
   const isAdmin = user?.role === 'admin' || user?.role === 'manager'
@@ -204,7 +205,7 @@ export function ExpendituresPage() {
     : null
 
   return (
-    <div className="p-4 sm:p-6 overflow-y-auto h-full">
+    <div className="p-4 sm:p-6">
       {modal !== null && (
         <ExpenditureModal
           initial={modal === 'create' ? null : modal}
@@ -212,18 +213,13 @@ export function ExpendituresPage() {
         />
       )}
 
-      {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Expenditures</h1>
-          <p className="text-sm text-gray-400 mt-0.5">Track and manage business expenses</p>
-        </div>
-        {isAdmin && (
+      {isAdmin && (
+        <div className="flex justify-end mb-5">
           <Button size="sm" onClick={() => setModal('create')} className="flex items-center gap-2">
             <Plus size={15} /> New Expenditure
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
