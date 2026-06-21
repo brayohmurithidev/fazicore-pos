@@ -306,6 +306,11 @@ async def c2b_confirm(
     except Exception:
         return {"ResultCode": "0", "ResultDesc": "Accepted"}
 
+    # Temporary: Safaricom's MSISDN format varies by shortcode (masked vs
+    # hashed vs something else entirely) — log the raw payload so we can see
+    # exactly what's arriving instead of guessing from how it renders in the UI.
+    logger.info("C2B confirm payload for org_slug=%s: %s", org_slug, payload)
+
     await _store_c2b_transaction(org_id, payload, session)
     await session.commit()
 
