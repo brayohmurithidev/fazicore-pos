@@ -282,7 +282,9 @@ function IncomingPaymentPicker({ amount, onSelect, onClose }: {
                   <div className="min-w-0">
                     <div className="text-sm font-semibold text-gray-900">{fmtKES(tx.amount)}</div>
                     {tx.sender_name && <div className="text-xs font-medium text-gray-700 truncate">{tx.sender_name}</div>}
-                    <div className="text-xs text-gray-400">{tx.phone} · {fmt(tx.created_at)}</div>
+                    {/* Some shortcodes have Safaricom send a hashed MSISDN (64 hex chars)
+                        instead of a masked phone number — not useful to show, so skip it. */}
+                    <div className="text-xs text-gray-400">{tx.phone && tx.phone.length <= 20 ? `${tx.phone} · ` : ''}{fmt(tx.created_at)}</div>
                   </div>
                   <div className="text-right shrink-0">
                     <div className="text-xs font-mono text-gray-700">{tx.mpesa_receipt_number}</div>
