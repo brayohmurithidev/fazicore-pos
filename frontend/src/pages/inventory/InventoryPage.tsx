@@ -3814,6 +3814,11 @@ type Tab = 'products' | 'categories' | 'orders' | 'transfers' | 'suppliers' | 'r
 export function InventoryPage() {
   const { user } = useAuthStore()
   const isAdmin = user?.role === 'admin'
+  // Purchase Orders / Transfers / Suppliers were admin+manager-only standalone
+  // pages before being folded into these tabs — keep that restriction now that
+  // STOCK can reach this page too, otherwise stock-takers would gain access
+  // they never had.
+  const isManagerOrAbove = user?.role === 'admin' || user?.role === 'manager'
   const hasSupplierMgmt = useFeature('supplier_management')
   const [tab, setTab] = useState<Tab>('products')
   const [selectedBranchId, setSelectedBranchId] = useState<number | null>(null)
@@ -3839,15 +3844,15 @@ export function InventoryPage() {
   const TABS: { id: Tab; label: string; count?: number }[] = [
     { id: 'products', label: 'Products', count: activeProducts.length },
     { id: 'categories', label: 'Categories', count: categories.length || undefined },
-    ...(hasSupplierMgmt ? [{ id: 'orders' as Tab, label: 'Purchase Orders', count: pendingPOs || undefined }] : []),
-    ...(isMultiBranch ? [{ id: 'transfers' as Tab, label: 'Transfers' }] : []),
-    ...(hasSupplierMgmt ? [{ id: 'suppliers' as Tab, label: 'Suppliers' }] : []),
+    ...(isManagerOrAbove && hasSupplierMgmt ? [{ id: 'orders' as Tab, label: 'Purchase Orders', count: pendingPOs || undefined }] : []),
+    ...(isManagerOrAbove && isMultiBranch ? [{ id: 'transfers' as Tab, label: 'Transfers' }] : []),
+    ...(isManagerOrAbove && hasSupplierMgmt ? [{ id: 'suppliers' as Tab, label: 'Suppliers' }] : []),
     { id: 'reports', label: 'Reports', count: lowCount + outCount || undefined },
   ]
 
   // Reset to products if active tab becomes hidden
-  if (tab === 'transfers' && !isMultiBranch) setTab('products')
-  if ((tab === 'orders' || tab === 'suppliers') && !hasSupplierMgmt) setTab('products')
+  if (tab === 'transfers' && (!isMultiBranch || !isManagerOrAbove)) setTab('products')
+  if ((tab === 'orders' || tab === 'suppliers') && (!hasSupplierMgmt || !isManagerOrAbove)) setTab('products')
 
   return (
     <div className="p-4 sm:p-6 overflow-y-auto h-full">
