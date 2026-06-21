@@ -307,9 +307,11 @@ async def c2b_confirm(
         return {"ResultCode": "0", "ResultDesc": "Accepted"}
 
     # Temporary: Safaricom's MSISDN format varies by shortcode (masked vs
-    # hashed vs something else entirely) — log the raw payload so we can see
+    # hashed vs something else entirely) — print (not logger.info — our app
+    # never configures Python logging, so logger calls are silently dropped
+    # under uvicorn's default root level) the raw payload so we can see
     # exactly what's arriving instead of guessing from how it renders in the UI.
-    logger.info("C2B confirm payload for org_slug=%s: %s", org_slug, payload)
+    print(f"C2B confirm payload for org_slug={org_slug}: {payload}", flush=True)
 
     await _store_c2b_transaction(org_id, payload, session)
     await session.commit()
