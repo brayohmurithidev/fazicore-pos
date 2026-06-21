@@ -120,11 +120,17 @@ class DarajaClient:
             return resp.json()
 
     async def register_c2b_urls(self, confirmation_url: str, validation_url: str) -> dict:
-        """Register C2B confirmation + validation URLs with Safaricom."""
+        """Register C2B confirmation + validation URLs with Safaricom.
+
+        v2, not v1 — v1 sends a SHA-256 hashed MSISDN to the confirmation
+        callback (e.g. "94c2c311d522da950619227b3361752a42042db7e1e699b26e628305c68a88"),
+        v2 sends the documented masked format ("2547 ***** 126") instead.
+        Same request/response shape, just a different path.
+        """
         token = await self.get_access_token()
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
-                f"{self.base_url}/mpesa/c2b/v1/registerurl",
+                f"{self.base_url}/mpesa/c2b/v2/registerurl",
                 json={
                     "ShortCode": self.shortcode,
                     "ResponseType": "Completed",
