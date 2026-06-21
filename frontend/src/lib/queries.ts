@@ -1223,6 +1223,23 @@ export function useSetLiveMpesaEnvironment() {
   })
 }
 
+export interface MpesaStatus {
+  has_live_credentials: boolean
+}
+
+// Lightweight, any-role status check — unlike useMpesaCredentials() (admin-only,
+// returns masked secrets + callback URLs), this only exposes a boolean so the
+// POS payment flow can ask "is Daraja actually configured?" without needing
+// admin access. Cashiers calling useMpesaCredentials() directly got a 403 and
+// silently fell back to "not configured", running every STK push in fake
+// simulation mode instead of contacting Safaricom.
+export function useMpesaStatus() {
+  return useQuery({
+    queryKey: ['mpesa-status'],
+    queryFn: () => api.get('/mpesa/status').then((r) => r.data as MpesaStatus),
+  })
+}
+
 export function useInitiateStkPush() {
   return useMutation({
     mutationFn: (data: { phone: string; amount: number; order_ref: string }) =>
@@ -1295,6 +1312,20 @@ export function useMpesaTransactions(unattachedOnly = false) {
     queryKey: ['mpesa-transactions', unattachedOnly],
     queryFn: () => api.get(`/mpesa/transactions?unattached_only=${unattachedOnly}`).then((r) => r.data as MpesaTransactionItem[]),
     refetchInterval: unattachedOnly ? 5000 : false,
+  })
+}
+
+// Links an existing M-Pesa transaction (picked via the "Select incoming
+// payment" picker) to the order it paid for, so it stops showing up as
+// unattached. Fire-and-forget from the caller's point of view — a missed
+// attach just means the transaction surfaces in the picker again, it's not
+// destructive.
+export function useAttachMpesaTransaction() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ txId, orderId }: { txId: number; orderId: number }) =>
+      api.post(`/mpesa/transactions/${txId}/attach`, { order_id: orderId }).then((r) => r.data as { ok: boolean }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['mpesa-transactions'] }),
   })
 }
 

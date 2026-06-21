@@ -14,7 +14,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import { isTauri } from '@tauri-apps/api/core'
 import { useQuery } from '@tanstack/react-query'
-import { useCategories, useCreateOrder, useBranches, usePermissions, useCustomers, useLoyaltySettings } from '@/lib/queries'
+import { useCategories, useCreateOrder, useBranches, usePermissions, useCustomers, useLoyaltySettings, useAttachMpesaTransaction } from '@/lib/queries'
 import type { ApiCustomer } from '@/types/api'
 import { isLocalMode } from '@/lib/local-mode'
 import { useBarcodeScanner } from '@/hooks/useBarcodeScanner'
@@ -528,6 +528,7 @@ export function POSPage() {
   const [variantProduct, setVariantProduct] = useState<Product | null>(null)
 
   const createOrder = useCreateOrder()
+  const attachMpesaTx = useAttachMpesaTransaction()
   const { isOnline, createOfflineOrder, setPosBranchOverride } = useOfflineStore()
   const isAdmin = user?.role === 'admin'
   const isCashier = user?.role === 'cashier'
@@ -981,9 +982,17 @@ export function POSPage() {
         .map((item) => [Number(item.id.split(':')[0]), Math.round(item.qty * item.selectedUnit.conversion_factor)])
       await createOfflineOrder(JSON.stringify(orderPayload), effectiveBranchId ?? null, stockItems)
     } else {
+      const pickedMpesaTxId = payInfo.mpesaTransactionId as number | undefined
       createOrder.mutate(orderPayload, {
-        onSuccess: (order) =>
-          setLastSale((prev) => (prev ? { ...prev, id: order.order_number } : prev)),
+        onSuccess: (order) => {
+          setLastSale((prev) => (prev ? { ...prev, id: order.order_number } : prev))
+          // Picked via "Select incoming payment" — link it now that the order exists,
+          // so it stops showing up as unattached. Best-effort: a missed attach just
+          // means it surfaces in the picker again, nothing is lost.
+          if (pickedMpesaTxId) {
+            attachMpesaTx.mutate({ txId: pickedMpesaTxId, orderId: order.id })
+          }
+        },
       })
     }
 

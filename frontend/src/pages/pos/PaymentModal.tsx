@@ -10,7 +10,7 @@ import { Numpad } from '@/components/shared/Numpad'
 import { useFeatureFlags } from '@/hooks/useFeature'
 import { fmtKES } from '@/lib/data'
 import {
-  useInitiateStkPush, useStkStatus, useMpesaCredentials,
+  useInitiateStkPush, useStkStatus, useMpesaStatus,
   useMpesaTransactions, useCustomers, type MpesaTransactionItem,
 } from '@/lib/queries'
 import type { PaymentMethod, Settings } from '@/types'
@@ -21,6 +21,7 @@ interface PaymentInfo {
   cashAmount?: number
   mpesaAmount?: number
   mpesaRef?: string
+  mpesaTransactionId?: number
   creditName?: string
   creditPhone?: string
 }
@@ -60,6 +61,15 @@ function StkFlow({
   const [stage, setStage]           = useState<'input' | 'waiting' | 'success' | 'failed'>('input')
   const [errMsg, setErrMsg]         = useState('')
 
+  // Manual fallback: the callback that resolves a PENDING transaction can be
+  // lost in transit (flaky network, Safaricom retry delay). Without this, a
+  // customer who paid and got their confirmation SMS has no way to complete
+  // the sale other than the cashier cancelling and asking them to pay again.
+  const [manualOpen, setManualOpen] = useState(false)
+  const [manualCode, setManualCode] = useState('')
+  const [manualErr, setManualErr]   = useState('')
+  const [showManualHint, setShowManualHint] = useState(false)
+
   const initStk = useInitiateStkPush()
   const { data: stkStatus } = useStkStatus(checkoutId, stage === 'waiting')
 
@@ -74,7 +84,19 @@ function StkFlow({
     }
   }, [stkStatus, stage]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Give the automatic confirmation a fair shot before suggesting the manual
+  // workaround — most STK pushes resolve within a few seconds.
+  useEffect(() => {
+    if (stage !== 'waiting') { setShowManualHint(false); return }
+    setShowManualHint(false)
+    const t = setTimeout(() => setShowManualHint(true), 20000)
+    return () => clearTimeout(t)
+  }, [stage, checkoutId])
+
+  const resetManual = () => { setManualOpen(false); setManualCode(''); setManualErr('') }
+
   const handleSend = async () => {
+    resetManual()
     if (!hasDaraja) {
       setStage('waiting')
       setTimeout(() => {
@@ -96,6 +118,41 @@ function StkFlow({
       setErrMsg(err?.response?.data?.detail ?? 'Could not send STK push. Check M-Pesa settings.')
     }
   }
+
+  const handleManualConfirm = () => {
+    const code = manualCode.trim().toUpperCase()
+    if (code.length < 6) { setManualErr('Enter the full M-Pesa code from the confirmation SMS'); return }
+    onConfirm(code)
+  }
+
+  const manualFallback = (
+    <div className="mt-5 pt-4 border-t border-gray-100 text-left">
+      {!manualOpen ? (
+        <button
+          onClick={() => setManualOpen(true)}
+          className="text-xs text-gray-500 hover:text-gray-700 underline block mx-auto"
+        >
+          Customer already got the confirmation SMS? Enter the code manually
+        </button>
+      ) : (
+        <div>
+          <Label className="mb-1.5 block text-xs">M-Pesa Confirmation Code</Label>
+          <div className="flex gap-2">
+            <Input
+              value={manualCode}
+              onChange={(e) => { setManualCode(e.target.value.toUpperCase()); setManualErr('') }}
+              placeholder="e.g. QH12AB3CD4"
+              className="font-mono tracking-widest"
+              autoFocus
+            />
+            <Button onClick={handleManualConfirm} className="shrink-0">Confirm</Button>
+          </div>
+          {manualErr && <p className="text-xs text-red-500 mt-1">{manualErr}</p>}
+          <p className="text-[11px] text-gray-400 mt-1">From the customer's M-Pesa confirmation SMS — use this if the prompt above never updates</p>
+        </div>
+      )}
+    </div>
+  )
 
   if (stage === 'input') return (
     <div>
@@ -128,6 +185,7 @@ function StkFlow({
       <div className="text-sm text-gray-500 mb-2">Prompt sent to <strong>{phone || 'customer'}</strong></div>
       <div className="text-xs text-gray-400 mb-5">This page will update automatically when payment is received</div>
       <Button variant="outline" onClick={onCancel}>Cancel</Button>
+      {showManualHint && manualFallback}
     </div>
   )
 
@@ -152,9 +210,10 @@ function StkFlow({
       <div className="font-bold text-lg text-red-900 mb-2">Payment Failed</div>
       <div className="text-sm text-gray-500 mb-5">{errMsg || 'Customer did not complete payment'}</div>
       <div className="flex gap-2">
-        <Button variant="outline" className="flex-1" onClick={() => { setStage('input'); setErrMsg('') }}>Try Again</Button>
+        <Button variant="outline" className="flex-1" onClick={() => { setStage('input'); setErrMsg(''); resetManual() }}>Try Again</Button>
         <Button variant="destructive" className="flex-1" onClick={onCancel}>Cancel</Button>
       </div>
+      {manualFallback}
     </div>
   )
 }
@@ -255,6 +314,7 @@ export function PaymentModal({ open, onClose, total, onComplete, settings }: Pro
   const [cashStr, setCashStr]       = useState('')
   const [mpesaCashStr, setMpesaCashStr] = useState('')
   const [mpesaRef, setMpesaRef]     = useState('')
+  const [pickedMpesaTxId, setPickedMpesaTxId] = useState<number | null>(null)
   const [mpesaMode, setMpesaMode]   = useState<'stk' | 'till'>('stk')
   const [creditName, setCreditName] = useState('')
   const [creditPhone, setCreditPhone] = useState('')
@@ -266,8 +326,8 @@ export function PaymentModal({ open, onClose, total, onComplete, settings }: Pro
   const { data: custMatches = [] } = useCustomers(
     method === 'credit' && creditName.trim().length > 0 ? creditName.trim() : undefined
   )
-  const { data: darajaConfigs = [] } = useMpesaCredentials()
-  const hasDaraja = !!(darajaConfigs.find((c) => c.is_live && c.is_active))
+  const { data: mpesaStatus } = useMpesaStatus()
+  const hasDaraja = !!mpesaStatus?.has_live_credentials
 
   const hasStk    = settings.mpesaStk    && flags.mpesa_stk    !== false
   const hasManual = settings.mpesaManual && flags.mpesa_manual !== false
@@ -275,7 +335,7 @@ export function PaymentModal({ open, onClose, total, onComplete, settings }: Pro
 
   useEffect(() => {
     if (open) {
-      setCashStr(''); setMpesaCashStr(''); setMpesaRef('')
+      setCashStr(''); setMpesaCashStr(''); setMpesaRef(''); setPickedMpesaTxId(null)
       setCreditName(''); setCreditPhone('')
       setCustOpen(false); setStkOpen(false); setShowPicker(false)
       setMethod('cash')
@@ -283,7 +343,7 @@ export function PaymentModal({ open, onClose, total, onComplete, settings }: Pro
     }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { setMpesaCashStr(''); setMpesaRef('') }, [mpesaMode])
+  useEffect(() => { setMpesaCashStr(''); setMpesaRef(''); setPickedMpesaTxId(null) }, [mpesaMode])
 
   const cash      = parseFloat(cashStr) || 0
   const change    = method === 'cash' ? Math.max(0, cash - total) : 0
@@ -308,8 +368,7 @@ export function PaymentModal({ open, onClose, total, onComplete, settings }: Pro
     },
     ...(hasMpesa ? [{
       id: 'mpesa' as PaymentMethod, label: 'M-Pesa',
-      icon: <img src="/assets/safaricom/M-PESA-logo.png" alt="M-Pesa" className="h-4 w-auto"
-              style={method === 'mpesa' ? { filter: 'brightness(0) invert(1)' } : undefined} />,
+      icon: <img src="/assets/safaricom/M-PESA-logo.png" alt="M-Pesa" className="h-4 w-auto rounded-sm" />,
     }] : []),
     ...(settings.credit && flags.credit_system !== false ? [{
       id: 'credit' as PaymentMethod, label: 'Credit',
@@ -320,7 +379,13 @@ export function PaymentModal({ open, onClose, total, onComplete, settings }: Pro
   const handleCharge = () => {
     if (method === 'mpesa') {
       if (mpesaMode === 'stk') { setStkOpen(true); return }
-      onComplete({ method: isSplit ? 'mpesa_cash' : 'mpesa', cashAmount: mpesaCash, mpesaAmount, mpesaRef: mpesaRef.trim() })
+      onComplete({
+        method: isSplit ? 'mpesa_cash' : 'mpesa',
+        cashAmount: mpesaCash,
+        mpesaAmount,
+        mpesaRef: mpesaRef.trim(),
+        mpesaTransactionId: pickedMpesaTxId ?? undefined,
+      })
       return
     }
     onComplete({ method, cashTendered: cash, cashAmount: 0, mpesaAmount: 0, creditName, creditPhone })
@@ -333,6 +398,7 @@ export function PaymentModal({ open, onClose, total, onComplete, settings }: Pro
 
   const handlePickerSelect = (tx: MpesaTransactionItem) => {
     setMpesaRef(tx.mpesa_receipt_number ?? '')
+    setPickedMpesaTxId(tx.id)
     if (tx.amount < total) setMpesaCashStr(String(total - tx.amount))
     setShowPicker(false)
   }
@@ -478,7 +544,7 @@ export function PaymentModal({ open, onClose, total, onComplete, settings }: Pro
                       <Label className="mb-1.5 block">M-Pesa Reference Code *</Label>
                       <Input
                         value={mpesaRef}
-                        onChange={(e) => setMpesaRef(e.target.value.toUpperCase())}
+                        onChange={(e) => { setMpesaRef(e.target.value.toUpperCase()); setPickedMpesaTxId(null) }}
                         placeholder="e.g. QH12AB3CD4"
                         className="font-mono tracking-widest mb-1"
                       />
