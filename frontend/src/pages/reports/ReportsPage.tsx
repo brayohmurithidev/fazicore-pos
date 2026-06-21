@@ -768,7 +768,10 @@ export function ReportsPage() {
   const { user } = useAuthStore()
   const hasReports = useFeature('advanced_reports')
   const flags = useFeatureFlags()
-  const [tab, setTab] = useState<ReportTab>('daily')
+  // Stock-takers can't see the Daily tab (manager+ only on the backend) — default
+  // them straight to the one report they actually have access to, instead of
+  // opening on a tab that 403s and spins forever.
+  const [tab, setTab] = useState<ReportTab>(() => (user?.role === 'stock' ? 'stock' : 'daily'))
   const [period, setPeriod] = useState<Period>('month')
 
   if (!hasReports) {
