@@ -68,7 +68,7 @@ class Settings(BaseSettings):
     SMTP_FROM_NAME: str = "Fazi POS"
 
     # Public URL of the POS web app (sent in welcome emails)
-    WEBAPP_URL: str = "https://pos.fazilabs.com"
+    WEBAPP_URL: str = "https://fazistore.fazilabs.com"
 
     # Central billing system webhook
     BILLING_ONBOARD_URL: str = ""
