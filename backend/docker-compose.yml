@@ -15,6 +15,11 @@ services:
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
       MINIO_SECURE: "false"
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   worker:
     image: ${API_IMAGE}
@@ -27,7 +32,12 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@shared-postgres:5432/${POSTGRES_DB}
       REDIS_URL: redis://shared-redis:6379/0
     restart: unless-stopped
-  
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 networks:
   default:
     external: true
