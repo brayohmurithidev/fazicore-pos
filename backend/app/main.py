@@ -1,4 +1,6 @@
 import asyncio
+import logging
+import sys
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -13,6 +15,22 @@ from app.core.config import settings
 from app.middleware.tenant import TenantMiddleware
 from app.services.etims_worker import start_worker
 from app.services.mpesa_reconciliation import start_worker as start_mpesa_reconciliation_worker
+
+# Nothing else in this app calls logging.basicConfig() — every logger.info()/
+# .warning() call (e.g. app/api/v1/hooks.py's callback-key rejection warnings)
+# was silently dropped, since an unconfigured root logger defaults to WARNING
+# with no handler beyond Python's bare stderr "last resort" fallback. uvicorn
+# configures its OWN loggers (uvicorn/uvicorn.access/uvicorn.error) directly —
+# that config has `disable_existing_loggers: False` and never touches root, so
+# it doesn't help our app's loggers either.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    stream=sys.stdout,
+    force=True,  # something in our import chain already attaches a root handler;
+                 # basicConfig() is a silent no-op against an already-handled root
+                 # without this, which is exactly why this was broken in the first place.
+)
 
 app = FastAPI(
     title="Fazi POS API",
