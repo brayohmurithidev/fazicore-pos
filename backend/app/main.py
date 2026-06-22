@@ -3,6 +3,7 @@ import logging
 import sys
 from pathlib import Path
 
+import sentry_sdk
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -31,6 +32,13 @@ logging.basicConfig(
                  # basicConfig() is a silent no-op against an already-handled root
                  # without this, which is exactly why this was broken in the first place.
 )
+
+# Captures unhandled exceptions automatically (e.g. the StringDataRightTruncationError
+# crash that taught us this app had no error monitoring) — no-op when unset, safe for
+# local dev. traces_sample_rate is left at 0 (errors only) to stay within free-tier
+# quota; bump it if request tracing/performance data becomes worth the cost.
+if settings.SENTRY_DSN:
+    sentry_sdk.init(dsn=settings.SENTRY_DSN, environment=settings.APP_ENV)
 
 app = FastAPI(
     title="Fazi POS API",
@@ -98,7 +106,13 @@ async def startup_event() -> None:
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    """Ensure CORS headers are present even when an unhandled exception produces a 500."""
+    """Ensure CORS headers are present even when an unhandled exception produces a 500.
+
+    Catching Exception ourselves means Sentry's auto-instrumentation never sees this
+    as "unhandled" — report it explicitly so crashes still reach Sentry.
+    """
+    if settings.SENTRY_DSN:
+        sentry_sdk.capture_exception(exc)
     origin = request.headers.get("origin", "")
     headers: dict[str, str] = {}
     if origin and (origin in settings.CORS_ORIGINS or "*" in settings.CORS_ORIGINS):

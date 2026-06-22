@@ -77,6 +77,9 @@ class Settings(BaseSettings):
     # Paystack webhook secret (from Paystack dashboard → Webhooks)
     PAYSTACK_WEBHOOK_SECRET: str = ""
 
+    # Sentry error tracking — leave blank to disable (safe for local dev).
+    SENTRY_DSN: str = ""
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def parse_cors(cls, v: str | list) -> list:
